@@ -237,6 +237,8 @@ A new scan of an existing page is compared with previous scans and classified as
 
 Basic search operates over local text indexes without an LLM. “Ask My Notes” retrieves a bounded set of pages and produces an answer with source-page citations through a configured model.
 
+“Ask My Notes” is a Search UI surface backed by a built-in, non-removable A2D Skill running through the same permissioned skill runtime as any other model-backed skill (§21). It is not a parallel, ungoverned LLM path: scope, effective permissions, provider/endpoint disclosure, prompt-injection separation, citations, and audit all apply exactly as they do to other skills.
+
 ### 7.11 Backup and restore
 
 Manual backup and restore are core features. Automatic cloud backup and cross-device synchronization are reserved for the future paid A2D Sync service.
@@ -373,11 +375,14 @@ a2d-smart-notebook/
 ├── tools/
 ├── docs/
 │   ├── A2D_SMART_NOTEBOOK_V01_SPEC.md
-│   └── A2D_SMART_NOTEBOOK_V01_TODO.md
+│   ├── A2D_SMART_NOTEBOOK_V01_TODO.md
+│   └── decisions/
 └── .github/workflows/
 ```
 
 Crates MAY be consolidated early if build overhead becomes excessive, but responsibility boundaries MUST remain explicit. The FFI crate MUST remain thin.
+
+`docs/decisions/` holds architecture decision records (ADRs) for choices this specification leaves open (QR wire encoding, native marker detector selection, and similar). Architecture decisions MUST be recorded there, not only in session notes or commit messages.
 
 ---
 
@@ -455,6 +460,8 @@ Generated pages exist in the database before scanning and use explicit states su
 
 All identifiers MUST be immutable and MUST never be reused.
 
+Every independently persisted entity that has its own row, can be referenced by another record, appears in provenance, or can cross the FFI boundary MUST use a dedicated opaque identifier type rather than a raw string or another entity's identifier type. Embedded value objects with no independent persistence or identity MUST NOT receive their own identifier type.
+
 Core types include:
 
 ```text
@@ -468,9 +475,14 @@ PhysicalCopyId
 ScanId
 AssetId
 OcrRunId
+TextRegionId
+TextCorrectionId
 CollectionId
+AnnotationId
+ReviewItemId
 SkillId
 SkillRunId
+AuditEventId
 BackupId
 ```
 

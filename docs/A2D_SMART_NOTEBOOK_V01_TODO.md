@@ -166,7 +166,7 @@ Acceptance:
 
 ## 2.1 Strongly typed identifiers
 
-Create opaque Rust newtypes for:
+Create opaque Rust newtypes for every independently persisted entity — one that has its own row, can be referenced by another record, appears in provenance, or can cross the FFI boundary. Do not add identifiers for embedded value objects with no independent persistence or identity.
 
 - [ ] `InstallationId`
 - [ ] `NotebookDesignId`
@@ -178,9 +178,14 @@ Create opaque Rust newtypes for:
 - [ ] `ScanId`
 - [ ] `AssetId`
 - [ ] `OcrRunId`
+- [ ] `TextRegionId`
+- [ ] `TextCorrectionId`
 - [ ] `CollectionId`
+- [ ] `AnnotationId`
+- [ ] `ReviewItemId`
 - [ ] `SkillId`
 - [ ] `SkillRunId`
+- [ ] `AuditEventId`
 - [ ] `BackupId`
 
 Example:
@@ -427,6 +432,12 @@ Acceptance:
 
 ## 4.2 QR payload model
 
+The v1 wire encoding and integrity check are governed by
+`docs/decisions/0001-qr-v1-encoding-and-integrity.md`. That ADR must reach **Accepted** status
+(spike-validated against a real Android QR decoder) before this task's golden fixtures (4.3) are
+committed. Do not invent an alternate encoding here — implement the ADR's canonical alphanumeric
+text payload, uppercase Crockford Base32 identifiers, and CRC-32C integrity field.
+
 Implement:
 
 ```rust
@@ -474,6 +485,7 @@ fixtures/qr/v1/
 - [ ] Render QR images for valid vectors.
 - [ ] Decode rendered images in integration tests.
 - [ ] Treat v1 vectors as permanent compatibility fixtures.
+- [ ] Do not commit these fixtures until `docs/decisions/0001-qr-v1-encoding-and-integrity.md` is Accepted. Once committed, changing the v1 wire format requires a new protocol version, not a fixture rewrite.
 
 ## 4.4 Notebook Design manifests
 
@@ -675,7 +687,10 @@ Acceptance:
 - [ ] Measure detection on representative grayscale fixtures.
 - [ ] Confirm future iOS build feasibility.
 - [ ] Compare a pure-Rust alternative only if it materially reduces packaging risk.
-- [ ] Commit an architecture decision record naming the selected implementation.
+- [ ] Accept `docs/decisions/0002-apriltag-detector-selection.md`, naming the selected
+      implementation and recording license review, Android ABI build results, desktop fixture
+      results, performance measurements, the memory-safety boundary, packaging strategy, and
+      future iOS feasibility.
 
 The spike must end with code and tests, not prose only.
 
@@ -1260,15 +1275,37 @@ Architecture supports:
 - [ ] On-device provider.
 - [ ] Local-network OpenAI-compatible endpoint.
 - [ ] User-provided cloud provider.
-- [ ] Future managed A2D provider.
+- [ ] Future managed A2D provider (not implemented in v0.1 — non-goal per spec §5).
 
-For v0.1, implement at least one practical configured text-generation path.
+**The required v0.1 provider is a user-configured local-network OpenAI-compatible endpoint**
+(compatible with llama.cpp, Ollama-compatible gateways, LM Studio, and similar user-controlled
+services). This is the practical text-generation path v0.1 must ship and test against — it fits
+the accountless, local-first product. The on-device and user-provided-cloud paths remain
+architecturally supported but are not required production implementations for v0.1.
 
-- [ ] Test connection.
-- [ ] Show provider/endpoint.
-- [ ] Require explicit permission before sending page data.
-- [ ] Restrict selected pages/images.
-- [ ] Handle timeout, rate limit, and authentication explicitly.
+Provider requirements:
+
+- [ ] User-configurable base URL.
+- [ ] User-configurable model name.
+- [ ] Optional bearer/API token stored only through an Android Keystore-backed secure-store handle.
+- [ ] Explicit connection-test action.
+- [ ] Display the exact host, model, and HTTP/HTTPS transport before sending note data.
+- [ ] Require explicit user approval before first use with note content and whenever scope materially changes.
+- [ ] Enforce timeouts, response-size limits, cancellation, authentication errors, rate-limit errors, malformed-response errors, and unreachable-host errors explicitly.
+- [ ] Do not silently fall back to a different provider or model.
+- [ ] Do not silently retry against a public endpoint.
+- [ ] Restrict requests to the selected pages and fields.
+
+Deterministic test infrastructure (required — CI MUST NOT depend on internet access, a real API
+key, or a live LLM):
+
+- [ ] In-process deterministic `MockModelProvider` in Rust for unit and skill-runtime tests.
+- [ ] Local fake OpenAI-compatible HTTP server fixture for request/response contract, timeout, cancellation, authentication, malformed-payload, rate-limit, and size-limit tests.
+- [ ] Mock providers are not selectable in production builds unless an explicit developer/debug feature is enabled.
+- [ ] Tests verify citations and permission enforcement independently of model quality.
+
+This task is not complete with only the mock provider working — it requires one real configurable
+local-network OpenAI-compatible implementation *plus* the deterministic test infrastructure above.
 
 ## 14.3 Skill manifest
 
@@ -1340,12 +1377,34 @@ Deterministic:
 
 - [ ] Export Selected Pages to Markdown with citations and explicit missing-OCR handling.
 
+Deterministic with optional model explanation:
+
+- [ ] Compare Two Scans of One Page. Deterministic image alignment, difference regions,
+      fingerprints, and scan metadata are the authoritative comparison output. A configured
+      model MAY optionally explain likely changes in user-friendly language, but MUST NOT
+      invent differences or replace the deterministic result. The result identifies:
+  - [ ] The two `ScanId` values.
+  - [ ] Alignment/registration status.
+  - [ ] Changed-region coordinates.
+  - [ ] Quality differences.
+  - [ ] Whether the comparison is complete, degraded, or inconclusive.
+  - [ ] Any model-generated interpretation, labeled as a separate derived result.
+  - [ ] Open the visual comparison from the page-version workflow (Milestone 9.5).
+  - [ ] Preserve both original scans regardless of comparison outcome.
+
 Configured-model skills:
 
 - [ ] Summarize selected pages.
 - [ ] Extract proposed action items.
 - [ ] Find related pages.
-- [ ] Ask My Notes with citations.
+- [ ] Ask My Notes with citations — a built-in, non-removable, read-only system skill backed by
+      the same permissioned skill runtime as any other model skill (spec §7.10/§21). Default
+      permissions are limited to the selected scope and normally only `pages.search`,
+      `pages.read_metadata`, `pages.read_text`, `model.generate_text`, plus `pages.read_image`/
+      `model.analyze_image` only when the user explicitly enables image use. It has no mutation
+      permission and does not itself produce a mutation proposal; any follow-up action (tags,
+      annotations, tasks, collections, exports, external actions) requires its own separately
+      permissioned proposal. Being built in MUST NOT bypass permission checks or auditing.
 
 Every model skill:
 
