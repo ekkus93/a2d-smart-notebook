@@ -228,3 +228,60 @@ delegation to `a2d-core`.
 **Milestone 2 (domain model, structured errors, and UniFFI) is now complete** modulo the two
 environment-blocked acceptance items above. Full workspace gate green throughout (28 tests total:
 4 a2d-core + 18 a2d-domain + 4 a2d-ffi unit + 2 a2d-ffi binding-generation).
+
+## 2026-07-26 — Ralph loop: Milestone 3.1 (database bootstrap and migrations)
+
+**Crate choice**: `rusqlite` with the `bundled` feature (compiles SQLite from source — matters
+for reproducible Android cross-compilation later, and keeps local dev independent of whatever
+system SQLite is installed) over `sqlx`, since nothing here needs async and a Tokio dependency
+for a synchronous single-connection mobile DB would be unjustified. **Had to downgrade from
+rusqlite 0.40 (the version `cargo add` picked) to `~0.32`** — 0.40's `libsqlite3-sys` build
+script uses the unstable `cfg_select!` macro, which doesn't compile on our pinned stable
+`1.94.1` toolchain. 0.32.1's `libsqlite3-sys` (0.30.1) predates that and builds cleanly. Worth
+revisiting if a future toolchain bump makes `cfg_select!` available, or if rusqlite backports a
+fix.
+
+**Journaling mode**: WAL + `synchronous = NORMAL` — resolves the "SQLite journaling mode" open
+item from CLAUDE.md with the standard modern pairing. Flagged for revisit once real device
+measurements exist, per spec §29.
+
+Full schema in one migration (`migrations/0001_initial.sql`, embedded via `include_str!`):
+18 tables covering every TODO 3.1-listed area (notebooks, notebook designs, pages, physical
+copies, scans, assets, page sets, collections, OCR runs, text regions, corrections, annotations,
+review items, skill definitions/runs, audit events, backup history, settings) plus
+`schema_migrations` for tracking. List/map-shaped columns (`marker_role_ids`, `warnings`,
+`details`, polygon coordinates, permission lists) are JSON-encoded `TEXT` rather than normalized
+into join tables — a deliberate v1 simplification, revisit if a query ever needs to filter inside
+one. `Provenance` is flattened into `provenance_*` columns per table rather than a shared table,
+matching that it's an embedded value object with no independent identity.
+
+**`backup_history` has no Rust entity behind it** — Milestone 2.3's entity list never included a
+`Backup` struct (real backup domain logic is Milestone 13's job), but TODO 3.1 explicitly lists
+"backup history" among the initial tables, so a minimal table exists now ahead of its owning
+Rust type. Flagging this asymmetry for whoever picks up Milestone 13.
+
+**Closed two invariant gaps deferred from Milestone 2.3**: `unique_smart_page_id` and
+`unique_physical_copy_index` are now real partial/composite unique indexes, tested here. Went
+back and ticked those two TODO 2.3 checkboxes. The other two 2.3 deferrals (verifying a
+referenced asset is actually immutable; the trash/permanent-delete lifecycle) still need the
+repository/write-path layer (Milestone 3.2/10), not just schema — left unchecked.
+
+Migration runner: `schema_migrations(version, name, applied_at_ms)` tracks not just a version
+number but each migration's name, and refuses to proceed if a previously-applied version's
+recorded name doesn't match the current code's name for it (tested) — catches a modified
+"immutable" migration file rather than silently re-trusting it. Each migration applies inside a
+transaction, so a failure can't leave a half-applied migration committed (rusqlite's `Transaction`
+rolls back on drop unless explicitly committed — a library guarantee, not something reimplemented
+here). `foreign_keys` and `journal_mode` are both re-queried after being set and `Storage::open`
+fails closed if SQLite doesn't confirm them, rather than trusting the `PRAGMA` calls silently
+succeeded.
+
+**Not attempted**: Milestone 3.2 (repository/transaction traits mapping all 18 tables to/from
+`a2d-domain` entities), 3.3 (asset commit protocol — temp write, hash, atomic rename), 3.4
+(interruption/failure-injection tests). Each is substantial on its own — 3.2 alone means writing
+and testing CRUD mapping for every entity — and this is a natural checkpoint to surface status
+rather than pushing further without any visibility, given how much ground Milestones 1.1–3.1
+already cover.
+
+Full workspace gate green throughout (34 tests total: 4 a2d-core + 18 a2d-domain + 4 a2d-ffi unit
++ 2 a2d-ffi binding-generation + 6 a2d-storage).

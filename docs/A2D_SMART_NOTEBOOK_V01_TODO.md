@@ -284,9 +284,9 @@ Enforce:
 
 - [x] Notebook Page requires notebook, design, and logical page number. (Compiler-enforced:
       `PageKind::NotebookPage` cannot be constructed without all three.)
-- [ ] Smart Page requires a **unique** Smart Page ID. (The "requires a Smart Page ID" half is
-      compiler-enforced the same way; *uniqueness* spans the whole table and belongs to the
-      storage layer's unique index, Milestone 3.1 — not checkable from a single `Page`.)
+- [x] Smart Page requires a **unique** Smart Page ID. (The "requires a Smart Page ID" half is
+      compiler-enforced; *uniqueness* is now enforced by `unique_smart_page_id`, a partial unique
+      index in `migrations/0001_initial.sql` — Milestone 3.1 — tested in `a2d-storage`.)
 - [x] Page identity cannot change after creation. (`Page::id` — and every other entity's `id` —
       is private with a getter and no setter.)
 - [x] Preferred scan belongs to the same page. (`Page::set_preferred_scan` rejects a scan
@@ -295,8 +295,8 @@ Enforce:
       required and `Asset.immutable` exists as a field, but nothing here checks that the
       *referenced* asset actually has `immutable = true` — that requires looking the asset up,
       which is the storage layer's job, Milestone 3.)
-- [ ] Physical-copy index is unique per page. (Cross-record uniqueness; storage-layer unique
-      index, Milestone 3.1, same as the Smart Page ID item above.)
+- [x] Physical-copy index is unique per page. (`unique_physical_copy_index` in
+      `migrations/0001_initial.sql` — Milestone 3.1, tested in `a2d-storage`.)
 - [x] Derived records identify source and producer. (`OcrRun`, `TextCorrection`, `Annotation`,
       and `SkillRun` all require a non-optional `Provenance`, which itself requires
       `producing_component`/`component_version`.)
@@ -358,13 +358,21 @@ Acceptance:
 
 ## 3.1 Database bootstrap and migrations
 
-- [ ] Open/create SQLite at an app-provided library path.
-- [ ] Enable and verify foreign keys.
-- [ ] Select and document journaling/synchronous settings.
-- [ ] Implement numbered immutable migrations.
-- [ ] Track schema version and migration identity.
-- [ ] Return blocking errors on migration failure.
-- [ ] Never recreate an empty database after migration failure.
+- [x] Open/create SQLite at an app-provided library path.
+- [x] Enable and verify foreign keys. (Verified, not just requested — `Storage::open` re-queries
+      `PRAGMA foreign_keys` after setting it and fails closed if SQLite doesn't confirm it's on.)
+- [x] Select and document journaling/synchronous settings. (WAL / NORMAL — reasoning in
+      `a2d-storage/src/lib.rs`'s module doc; also verified by re-querying, same as foreign keys.)
+- [x] Implement numbered immutable migrations. (`crates/a2d-storage/src/migrations/0001_initial.sql`,
+      applied inside a transaction so a failure can't leave a half-applied migration committed.)
+- [x] Track schema version and migration identity. (`schema_migrations(version, name,
+      applied_at_ms)`; reopening detects a version whose recorded `name` doesn't match the code's
+      name for it and fails closed rather than silently re-trusting a modified migration — tested.)
+- [x] Return blocking errors on migration failure. (Every failure path returns `Result::Err`,
+      propagated to the caller; nothing swallows a migration error.)
+- [x] Never recreate an empty database after migration failure. (`apply_migration` never
+      deletes/truncates the file; a failed migration's transaction rolls back on drop per
+      rusqlite's own contract, leaving the database at its last successfully committed state.)
 
 Initial tables must cover notebooks, notebook designs, pages, physical copies, scans, assets, page sets, collections, OCR runs, text regions, corrections, annotations, review items, skill definitions/runs, audit events, backup history, and settings.
 

@@ -1,0 +1,14 @@
+//! Numbered, immutable migrations (TODO 3.1). Once a migration ships, its SQL file MUST NOT
+//! change — fix forward with a new, higher-numbered migration.
+
+pub struct Migration {
+    pub version: i64,
+    pub name: &'static str,
+    pub sql: &'static str,
+}
+
+pub static MIGRATIONS: &[Migration] = &[Migration {
+    version: 1,
+    name: "initial",
+    sql: include_str!("migrations/0001_initial.sql"),
+}];
