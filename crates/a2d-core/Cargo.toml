@@ -10,3 +10,4 @@ workspace = true
 
 [dependencies]
 a2d-domain = { path = "../a2d-domain" }
+a2d-identity = { path = "../a2d-identity" }

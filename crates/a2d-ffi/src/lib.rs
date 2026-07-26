@@ -99,6 +99,26 @@ impl A2dClient {
         self.core.parse_page_id(&candidate).map_err(Into::into)
     }
 
+    /// Real (freshly random), not hardcoded, example v1 QR payloads (ADR 0001) for each code
+    /// type — for the ADR's own required Android decoder spike to render and decode.
+    pub fn generate_example_notebook_setup_qr_payload(&self) -> Result<String, A2dFfiError> {
+        self.core
+            .generate_example_notebook_setup_qr_payload()
+            .map_err(Into::into)
+    }
+
+    pub fn generate_example_notebook_page_qr_payload(&self) -> Result<String, A2dFfiError> {
+        self.core
+            .generate_example_notebook_page_qr_payload()
+            .map_err(Into::into)
+    }
+
+    pub fn generate_example_smart_page_qr_payload(&self) -> Result<String, A2dFfiError> {
+        self.core
+            .generate_example_smart_page_qr_payload()
+            .map_err(Into::into)
+    }
+
     /// Exists only so a test can demonstrate a Rust panic doesn't silently look like a
     /// successful FFI call (spec §27: "Panics MUST be treated as defects and MUST NOT cross FFI
     /// as success"). UniFFI's generated scaffolding catches unwinds at the `extern "C"`

@@ -9,3 +9,5 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+a2d-domain = { path = "../a2d-domain" }
+crc32c = "0.6"

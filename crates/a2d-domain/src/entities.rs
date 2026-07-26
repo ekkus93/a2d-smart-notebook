@@ -63,6 +63,12 @@ impl LayoutId {
     }
 }
 
+impl std::fmt::Display for LayoutId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// Metadata every derived (non-original) record MUST carry (TODO 2.3: "Derived records identify
 /// source and producer"; spec §15.10). An embedded value object, not independently persisted, so
 /// it gets no identifier of its own.
