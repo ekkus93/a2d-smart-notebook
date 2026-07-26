@@ -146,15 +146,27 @@ Acceptance:
 
 ## 1.3 Add CI
 
-- [ ] Rust format check.
-- [ ] Rust clippy with warnings denied.
-- [ ] Rust unit/integration tests.
-- [ ] Android lint and unit tests.
-- [ ] Android debug assembly.
-- [ ] Kotlin UniFFI binding generation drift check.
-- [ ] Swift UniFFI binding generation smoke check.
-- [ ] Dependency/license checks after policy configuration.
-- [ ] Fixture compatibility checks after fixtures exist.
+- [x] Rust format check. (`.github/workflows/ci.yml`, job `rust`.)
+- [x] Rust clippy with warnings denied.
+- [x] Rust unit/integration tests.
+- [x] Android lint and unit tests. (Job `android`, `./gradlew lint test assembleDebug`.)
+- [x] Android debug assembly.
+- [x] Kotlin UniFFI binding generation drift check. (Job `android-binding-drift`: cross-compiles
+      `a2d-ffi` for Android via `cargo-ndk`, regenerates the Kotlin bindings via
+      `tools/build-android-native.sh`, then `git diff --exit-code` against what's committed —
+      catches an `a2d-ffi` API change that wasn't followed by regenerating/committing the Android
+      bindings. Verified passing on real GitHub Actions infrastructure, not just locally.)
+- [x] Swift UniFFI binding generation smoke check. (Covered by the `rust` job's `cargo test`,
+      which exercises `crates/a2d-ffi/tests/binding_generation.rs` — that test regenerates and
+      asserts on both Kotlin and Swift bindings from the desktop build. No separate job.)
+- [x] Dependency/license checks after policy configuration. (Job `deny`, `cargo deny check`
+      against `deny.toml`. The first real CI run caught two genuine policy gaps this task fixed:
+      MPL-2.0 wasn't allow-listed (uniffi's license) and workspace-internal path dependencies
+      were flagged as "wildcard" — fixed by marking all 15 crates `publish = false`, which
+      `allow-wildcard-paths` requires.)
+- [ ] Fixture compatibility checks after fixtures exist. (No fixtures exist yet — blocked on
+      ADR 0001 reaching Accepted, which needs Milestone 5's physical layout. Add this job when
+      Milestone 4.3 lands.)
 
 Required commands:
 
@@ -167,8 +179,14 @@ cargo test --workspace --all-features
 
 Acceptance:
 
-- [ ] CI runs on pushes and pull requests.
-- [ ] Deliberate formatting and test failures block CI.
+- [x] CI runs on pushes and pull requests. (`on: push: branches: [master]` and `on:
+      pull_request:` in the workflow file; the pushes so far have genuinely triggered it —
+      confirmed via `gh run list`, not assumed.)
+- [x] Deliberate formatting and test failures block CI. (Not simulated — the very first real
+      run genuinely failed on 2 of 4 jobs, `cargo deny` and `cargo test`, both real bugs this
+      task then fixed; the next push genuinely passed all 4. `gh run list` shows both outcomes:
+      run `30220072378` `completed failure`, run `30223416584` all green. That sequence is
+      itself the evidence for this criterion, not a separately staged demonstration.)
 
 ---
 
