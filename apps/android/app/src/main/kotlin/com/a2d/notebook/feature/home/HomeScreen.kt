@@ -7,27 +7,37 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
+import com.a2d.notebook.rustbridge.A2dBridge
 
 /** Semantics test tags used by Compose UI tests (androidTest) to find nodes without brittle
  * text matching. */
 object HomeScreenTestTags {
     const val TITLE = "home_title"
+    const val RUST_GENERATED_ID = "home_rust_generated_id"
 }
 
 /**
  * Placeholder empty-state Home screen (TODO 1.2, spec section 7.1's first-launch empty state).
  * Real content (Scan a Page / Add a Notebook / Create Smart Pages / Import actions, recent
- * notebooks, Needs Review count) arrives with Milestone 10 -- this only proves the Compose +
- * navigation shell renders.
+ * notebooks, Needs Review count) arrives with Milestone 10.
+ *
+ * The Rust-generated-ID line exists to prove Milestone 2's still-open acceptance criterion,
+ * "Android calls Rust and renders a typed response" -- a real `PageId` generated in Rust
+ * (a2d-domain's Crockford Base32 encoder, crossing the UniFFI boundary), not a hardcoded string.
  */
 @Composable
 fun HomeScreen() {
+    val context = LocalContext.current
+    val rustGeneratedPageId = remember { A2dBridge.client(context).generatePageId() }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -43,6 +53,11 @@ fun HomeScreen() {
         Text(
             text = stringResource(R.string.home_placeholder),
             style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = stringResource(R.string.home_rust_generated_id_prefix, rustGeneratedPageId),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.testTag(HomeScreenTestTags.RUST_GENERATED_ID),
         )
     }
 }

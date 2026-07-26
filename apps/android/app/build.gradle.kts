@@ -58,6 +58,17 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.navigation:navigation-compose:2.8.4")
 
+    // UniFFI's generated Kotlin bindings (uniffi/a2d_ffi/a2d_ffi.kt) load the Rust cdylib
+    // (src/main/jniLibs/<abi>/liba2d_ffi.so) via JNA. The @aar classifier is the Android-packaged
+    // variant -- the plain desktop JNA jar doesn't work on-device.
+    implementation("net.java.dev.jna:jna:5.14.0@aar")
+
+    // ZXing: used only by the ADR 0001 QR decoder spike (androidTest) to encode and decode a
+    // real QR image round-trip against Rust-generated canonical payload text. Not a main-source
+    // dependency -- production QR rendering/decoding library choice is still open (Milestone
+    // 7.4/12's job), this is just the spike's proxy for "a real Android decoder."
+    androidTestImplementation("com.google.zxing:core:3.5.3")
+
     testImplementation("junit:junit:4.13.2")
 
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+    UniFFI's generated Kotlin bindings (uniffi/a2d_ffi/a2d_ffi.kt) reach java.lang.ref.Cleaner
+    (API 33+) behind a Class.forName("java.lang.ref.Cleaner") check that catches
+    ClassNotFoundException and falls back to a JNA-based cleaner on older API levels -- see
+    UniffiCleaner.Companion.create() in that file. This is a deliberate, safe reflection-based
+    compatibility shim; Android Lint's static NewApi check can't reason about it and flags the
+    guarded calls as if they were unconditional. Suppressed only for this generated path, not
+    for hand-written code elsewhere in the module.
+    -->
+    <issue id="NewApi">
+        <ignore path="src/main/kotlin/uniffi/**" />
+    </issue>
+</lint>

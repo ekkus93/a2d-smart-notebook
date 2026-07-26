@@ -424,3 +424,77 @@ QR decoder spike ADR 0001 needs (now genuinely reachable given a real emulator e
 natural next steps.
 
 TODO 1.2 fully checked, including both acceptance criteria.
+
+## 2026-07-26 — Ralph loop: UniFFI-Kotlin wiring + the real ADR 0001 QR decoder spike
+
+Both requested. Everything below ran for real on the `Medium_Phone_API_36.0` emulator, verified
+via actual JUnit XML reports, not just build-success exit codes.
+
+**UniFFI/Kotlin wiring** (closes Milestone 2's last open acceptance criterion, "Android calls
+Rust and renders a typed response"):
+- `rustup target add x86_64-linux-android` (+ aarch64/armv7/i686 for future devices) and
+  `cargo-ndk` (already installed) cross-compiled `a2d-ffi` to `liba2d_ffi.so` for x86_64 — matches
+  the emulator's actual ABI (confirmed from its boot log: `system-images/android-36/
+  google_apis_playstore/x86_64/`), copied straight into `app/src/main/jniLibs/x86_64/` via
+  `cargo ndk -o`.
+- Generated Kotlin bindings from that `.so` (not the desktop one) via the existing
+  `uniffi-bindgen` bin target, placed at `app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt` — package
+  path matches source path per Kotlin convention.
+- Added JNA (`net.java.dev.jna:jna:5.14.0@aar` — the Android-packaged variant; the plain desktop
+  jar doesn't work on-device) since the generated bindings load the native lib through it.
+- `com.a2d.notebook.rustbridge.A2dBridge` (spec §25's package) is the thin Kotlin façade feature
+  code calls instead of importing `uniffi.a2d_ffi` directly.
+- Home screen now renders a real `PageId` from `A2dClient.generatePageId()`; a new instrumented
+  test (`homeScreenRendersARealPageIdGeneratedByRust`) asserts the rendered text matches the
+  26-char canonical Crockford Base32 shape — proving the whole chain (Rust generate -> UniFFI/JNA
+  -> Compose render) rather than just that it compiles.
+- Lint caught a real issue, not noise: UniFFI's generated cleaner code calls
+  `java.lang.ref.Cleaner` (API 33+), tripping `NewApi` against our `minSdk 26`. Checked the actual
+  generated code before dismissing it — it's guarded by `Class.forName("java.lang.ref.Cleaner")`
+  + `catch (ClassNotFoundException)` falling back to a JNA-based cleaner, a deliberate safe
+  compatibility shim Lint's static analysis can't reason about. Added `app/lint.xml` suppressing
+  `NewApi` scoped only to `src/main/kotlin/uniffi/**`, not the whole module.
+
+**The real QR decoder spike** (ADR 0001's Validation Evidence):
+- Added a minimal QR payload **encoder** (not the parser/decoder or golden fixtures -- those stay
+  Milestone 4.2/4.3's job) implementing the ADR's exact grammar: `crates/a2d-identity/src/qr.rs`,
+  `PageCode::encode()`. Needed CRC-32C (`crc32c` crate) and a 7-char Crockford Base32 encoding for
+  it (32 bits -> 7 chars, same MSB-padding convention as the 128-bit id encoder, duplicated in
+  miniature rather than generalizing `a2d-domain::id`'s internals for a second bit-width).
+  8 new tests, all passing.
+- Found a real gap while wiring this up: `LayoutId` (added in Milestone 2.3) had `as_str()` but
+  no `Display` impl, so it couldn't be interpolated into `format!` strings. Fixed directly in
+  `a2d-domain`.
+- Exposed three `generate_example_*_qr_payload()` methods on `A2dClient` (one per code type:
+  NotebookSetup/NotebookPage/SmartPage), each generating a **fresh random** payload per call, not
+  a fixed fixture -- `a2d-core` -> `a2d-ffi` -> Kotlin, same pattern as `generate_page_id`.
+- `QrDecoderSpikeTest.kt` (androidTest): Rust generates the canonical text across the real FFI
+  boundary; ZXing (`com.google.zxing:core`, androidTestImplementation only -- explicitly not the
+  production decoder choice, Milestone 7.4/12 still owns that) renders it to an actual QR bitmap
+  and decodes it back; asserts byte-for-byte equality. Covers all three type-codes plus a
+  small-render-size variant for the worst-case (SmartPage) payload. 7/7 tests passing on the real
+  emulator (2 Home-screen tests + 5 QR spike tests).
+- **Updated ADR 0001's Validation Evidence**: checked off "prove the grammar survives a real
+  render/decode round trip" with a full account of what was and wasn't proven (ZXing isn't
+  necessarily identical to whatever decoder ships in production). Left the *second* checklist
+  item -- worst-case payload at the real physical layout's module size/damage tolerance -- open,
+  since that needs Milestone 5's actual layout to test against, not just a smaller render size as
+  a proxy. **ADR 0001's status stays Proposed, not Accepted** -- one of its two required items is
+  still open, and `fixtures/qr/v1/` still MUST NOT be committed yet.
+
+Full Rust gate green (63 tests total: 5 a2d-core + 18 a2d-domain + 4 a2d-ffi unit + 2 a2d-ffi
+binding-generation + 8 a2d-identity + 8 a2d-storage unit + 18 a2d-storage integration). Full
+Android gate green (`lint test assembleDebug`, 0 errors / 9 documented-tradeoff warnings) plus
+7/7 on the real emulator.
+
+**Build-artifact decision, made deliberately, not by default**: the cross-compiled `.so` stays
+gitignored (already covered by the existing native-build pattern) — a compiled binary in git is
+the wrong tradeoff when it's this cheap to rebuild. The generated Kotlin bindings
+(`app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt`), though, **are committed** — text, diffable, and
+nothing in the Gradle build regenerates them automatically (no Cargo/NDK Gradle integration
+exists yet, e.g. the `mozilla/rust-android-gradle` plugin or a custom task). Without committing
+it, a fresh clone's Android build would simply fail to find the source file. Formalized the
+regeneration step as `tools/build-android-native.sh` (cross-compiles + regenerates bindings in
+one command) rather than leaving it as unwritten-down manual steps — run it after any
+a2d-ffi/a2d-core/a2d-domain/a2d-identity change, before building the Android app. Wiring this into
+Gradle automatically is a real follow-up, not done here.

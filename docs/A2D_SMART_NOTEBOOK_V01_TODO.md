@@ -355,8 +355,12 @@ impl A2dClient {
 
 Acceptance:
 
-- [ ] Android calls Rust and renders a typed response. (Blocked on Milestone 1.2 — no Android
-      project exists in this environment; `gradle`/Android Studio aren't installed.)
+- [x] Android calls Rust and renders a typed response. (`com.a2d.notebook.rustbridge.A2dBridge`
+      calls `A2dClient.generatePageId()` across the real UniFFI/JNA boundary (Rust cross-compiled
+      for Android via `cargo-ndk`); the Home screen renders the typed `String` result. Verified
+      with an instrumented test asserting the rendered text is a real 26-char canonical
+      Crockford Base32 `PageId`, run on the actual emulator — `HomeScreenLaunchTest.
+      homeScreenRendersARealPageIdGeneratedByRust`.)
 - [ ] Swift bindings generate in CI. (Generation itself works, proven by
       `binding_generation.rs` — but there is no CI pipeline yet, Milestone 1.3, so "in CI"
       specifically is unmet.)
@@ -540,9 +544,16 @@ Acceptance:
 
 The v1 wire encoding and integrity check are governed by
 `docs/decisions/0001-qr-v1-encoding-and-integrity.md`. That ADR must reach **Accepted** status
-(spike-validated against a real Android QR decoder) before this task's golden fixtures (4.3) are
-committed. Do not invent an alternate encoding here — implement the ADR's canonical alphanumeric
-text payload, uppercase Crockford Base32 identifiers, and CRC-32C integrity field.
+before this task's golden fixtures (4.3) are committed — the Android decoder spike itself is done
+(that ADR's Validation Evidence), but the physical-layout module-size/damage-tolerance item is
+still open pending Milestone 5. Do not invent an alternate encoding here — implement the ADR's
+canonical alphanumeric text payload, uppercase Crockford Base32 identifiers, and CRC-32C
+integrity field.
+
+**A minimal encoder already exists** ahead of this task, in `crates/a2d-identity/src/qr.rs`
+(`PageCode::encode`) — built specifically to give the ADR's spike real payloads rather than
+hand-typed fixtures. It covers only encoding, not the strict parser/decoder below, and has no
+golden fixtures yet. Extend it rather than starting over.
 
 Implement:
 

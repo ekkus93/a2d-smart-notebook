@@ -35,7 +35,12 @@ apps/android/*.aab
 *.iml
 .idea/
 
-# Native builds (AprilTag / other C/C++ dependencies)
+# Native builds (AprilTag / other C/C++ dependencies, and the cross-compiled a2d-ffi cdylib
+# under apps/android/app/src/main/jniLibs/ -- rebuild with tools/build-android-native.sh).
+# The UniFFI-generated Kotlin bindings that script also produces
+# (apps/android/app/src/main/kotlin/uniffi/) are NOT excluded here and ARE committed, since
+# nothing in the Gradle build regenerates them automatically yet -- see that script's header
+# comment.
 apps/android/**/cmake-build-*/
 *.so
 *.dylib

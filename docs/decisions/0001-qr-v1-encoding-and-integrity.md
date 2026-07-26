@@ -193,25 +193,50 @@ after that point is fixed by incrementing `version`, not by editing v1 fixtures.
 
 ## Validation evidence
 
-**Not yet gathered.** This ADR requires, before it may be marked Accepted:
-
-- [ ] A small Android spike (once Milestone 1.2's Android project exists) proving a real Android
-      QR decoder library returns this exact canonical string from a rendered QR image, for at
-      least one vector of each `type-code`.
+- [x] Android spike proving a real Android QR decoder library returns this exact canonical
+      string from a rendered QR image, for at least one vector of each `type-code`. Done —
+      `apps/android/app/src/androidTest/kotlin/com/a2d/notebook/app/QrDecoderSpikeTest.kt`,
+      run on the real `Medium_Phone_API_36.0` emulator (not a unit test / not mocked). Rust
+      (`a2d-identity::qr::PageCode::encode`, called across the real UniFFI/JNA boundary — not a
+      hand-typed fixture) generates a fresh payload per call; ZXing (`com.google.zxing:core`,
+      standing in for "a real Android decoder" — not the final production library choice, that's
+      still Milestone 7.4/12's job) renders it to a QR bitmap and decodes it back; the test
+      asserts byte-for-byte equality. Covers all three `type-code`s (`S`/`B`/`M`), confirms each
+      call produces a fresh random id (not a cached/constant value), and confirms the grammar's
+      own shape (magic prefix, version, type code, canonical uppercase). 7/7 passing, verified
+      via the actual JUnit XML report, not just a build-success exit code.
+      **What this does NOT prove**: that ZXing's behavior matches whatever decoder the production
+      app eventually ships with (ML Kit's internal decoder isn't guaranteed byte-identical to
+      ZXing in every edge case) — treat this as strong evidence the grammar itself is sound, not
+      a substitute for testing the actual shipped decoder once one is chosen.
 - [ ] Confirmation that the worst-case (SmartPage, full-length layout id) payload renders at the
       smallest QR module size the physical layout (spec §11.4) requires, and still decodes
-      reliably.
+      reliably. **Partially addressed, not satisfied**: `smartPagePayloadRoundTripsAtASmallRenderSize`
+      renders the worst-case payload at 120px as a rough proxy and it still decodes correctly,
+      but this is not the same as testing against the *real* physical layout's module size and
+      print/scan damage tolerance — that layout doesn't exist yet (Milestone 5). This checklist
+      item stays open until Milestone 5 produces a real layout to test against.
 
-Until both are checked off and this ADR's Status line is updated to Accepted, Milestone 4.3 MUST
-NOT commit `fixtures/qr/v1/`.
+**Status stays Proposed.** The second item above is still open, so this ADR is not yet Accepted
+and Milestone 4.3 MUST NOT commit `fixtures/qr/v1/` yet — but the primary risk this ADR existed
+to de-risk (does the grammar survive a real render/decode round trip at all) is now backed by
+real evidence rather than a untested assumption.
 
 ## Follow-up tasks
 
-- Run the Android decoder spike above; record results here.
+- ~~Run the Android decoder spike above; record results here.~~ Done — see Validation evidence.
 - Confirm the `layout-id` registry format/location with Milestone 5 (layout engine) before this
   ADR is accepted, since layout ids are referenced here but owned by `a2d-layout`.
+- Re-test the worst-case payload against Milestone 5's real physical layout (module size, print/
+  scan damage tolerance) once that layout exists — the only remaining open Validation Evidence
+  item.
 - Update this ADR's Status to Accepted once validation evidence is complete, then proceed with
-  Milestone 4.2/4.3 implementation exactly as specified above.
+  Milestone 4.2/4.3 implementation exactly as specified above. Note that a minimal *encoder*
+  (not the strict parser/decoder, and not golden fixtures) already exists ahead of that --
+  `crates/a2d-identity/src/qr.rs` — built specifically to give this spike real payloads to test.
+  Milestone 4.2 should build on/extend it rather than starting from scratch, but still needs to
+  add the parser, full strict-validation rejection tests, and golden fixtures this ADR's grammar
+  describes.
 
 ## Superseding ADR reference
 

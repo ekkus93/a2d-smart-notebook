@@ -1,5 +1,7 @@
 package com.a2d.notebook.app
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsDisplayed
@@ -22,5 +24,25 @@ class HomeScreenLaunchTest {
     @Test
     fun homeScreenTitleIsDisplayedOnLaunch() {
         composeRule.onNodeWithTag(HomeScreenTestTags.TITLE).assertIsDisplayed()
+    }
+
+    /**
+     * Milestone 2's still-open acceptance criterion: "Android calls Rust and renders a typed
+     * response." Asserts the rendered text is a real 26-character canonical Crockford Base32
+     * PageId -- a2d-domain's actual encoder, crossing the UniFFI/JNA boundary -- not merely that
+     * some text is present.
+     */
+    @Test
+    fun homeScreenRendersARealPageIdGeneratedByRust() {
+        val node = composeRule.onNodeWithTag(HomeScreenTestTags.RUST_GENERATED_ID)
+        node.assertIsDisplayed()
+        val text = node.fetchSemanticsNode().config
+            .getOrNull(SemanticsProperties.Text)
+            ?.joinToString(separator = "") { it.text }
+            ?: error("Rust-generated-id node has no text")
+        val idPattern = Regex("Rust-generated Page ID: [0-9A-HJKMNP-TV-Z]{26}$")
+        assert(idPattern.containsMatchIn(text)) {
+            "expected a canonical 26-char Crockford Base32 PageId, got: $text"
+        }
     }
 }
