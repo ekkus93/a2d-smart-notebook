@@ -184,3 +184,47 @@ or need a lookup, so they're deferred to the storage layer (Milestone 3) and lef
 inline notes in the TODO rather than marked done.
 
 Full workspace gate green (18 tests total in a2d-domain now).
+
+## 2026-07-26 — Ralph loop: Milestone 2.4 (UniFFI boundary) — Milestone 2 complete
+
+`uniffi = "0.32"` (crates.io reachable, confirmed earlier this session). **Chose proc-macro mode
+over UDL** — TODO 2.4's open decision — because it keeps the interface next to the Rust code
+describing it rather than duplicated in a separate `.udl` file, and it's UniFFI's current
+recommended default. `#[uniffi::export]`/`#[derive(uniffi::Object/Record/Error)]` on the first
+try, no version-mismatch iteration needed.
+
+- **`a2d-core`**: new crate content. `A2dCore::open` genuinely validates/creates a library
+  directory (no storage dependency, so this is real, not a stub); `generate_page_id`/
+  `parse_page_id` re-expose Milestone 2.1's already-complete ID logic specifically so `a2d-ffi`
+  has a real operation to prove the round trip with, rather than a fabricated `list_notebooks`
+  stub returning an empty list before storage exists to back it.
+- **`a2d-ffi`**: `A2dClient` (open/library_path/generate_page_id/parse_page_id) over `A2dCore`,
+  `A2dFfiError` mapped from `A2dError` via `From`. Hit the same clippy `result_large_err` lint as
+  2.2's `A2dError` — fixed the same way, boxing the error's fields (`A2dFfiErrorDetails`) inside
+  the `A2dFfiError::Failed` variant.
+- **Kotlin and Swift bindings genuinely generate** — not just claimed. `[lib] crate-type =
+  ["lib", "cdylib"]` plus a `uniffi-bindgen` bin target; `tools/generate-bindings.sh` is the
+  canonical regeneration command. Verified manually first (inspected real `.kt`/`.swift` output
+  containing `A2dClient`, `OpenLibraryRequest`, etc.), then automated as
+  `crates/a2d-ffi/tests/binding_generation.rs`, which regenerates into a temp dir and asserts on
+  the output every `cargo test` run — this is the "drift test" TODO 2.4 asks for. Deliberately
+  not a golden-file diff against checked-in bindings: generated output isn't committed (it's
+  build output, `.gitignore`d via the existing `target` entry since it lands under
+  `target/bindings/` by default), and diffing full generated source would be brittle against
+  codegen formatting/version changes.
+- **"Panics MUST NOT cross FFI as success" left unverified end-to-end.** Added
+  `trigger_panic_for_testing` + a Rust `#[should_panic]` test, but that only proves Rust's own
+  panic semantics, not that UniFFI's generated `extern "C"` scaffolding actually catches the
+  unwind — there's no compiled Kotlin/Swift consumer to call through yet (needs Milestone 1.2's
+  Android project or Milestone 15's Swift harness). Left this TODO checkbox unchecked rather than
+  claim a guarantee I didn't verify.
+
+Milestone 2's own acceptance criteria: "Android calls Rust and renders a typed response" and
+"Swift bindings generate in CI" both stay unchecked (blocked on Milestone 1.2's Android project
+and Milestone 1.3's CI pipeline, neither of which exist in this environment); "`a2d-ffi` contains
+no SQL or business rules" is checked — true by construction, every exported method is a one-line
+delegation to `a2d-core`.
+
+**Milestone 2 (domain model, structured errors, and UniFFI) is now complete** modulo the two
+environment-blocked acceptance items above. Full workspace gate green throughout (28 tests total:
+4 a2d-core + 18 a2d-domain + 4 a2d-ffi unit + 2 a2d-ffi binding-generation).

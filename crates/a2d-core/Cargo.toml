@@ -9,3 +9,4 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+a2d-domain = { path = "../a2d-domain" }
