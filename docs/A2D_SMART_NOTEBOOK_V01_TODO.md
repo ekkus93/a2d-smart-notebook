@@ -168,25 +168,25 @@ Acceptance:
 
 Create opaque Rust newtypes for every independently persisted entity — one that has its own row, can be referenced by another record, appears in provenance, or can cross the FFI boundary. Do not add identifiers for embedded value objects with no independent persistence or identity.
 
-- [ ] `InstallationId`
-- [ ] `NotebookDesignId`
-- [ ] `NotebookId`
-- [ ] `PageId`
-- [ ] `PageSetId`
-- [ ] `SmartPageId`
-- [ ] `PhysicalCopyId`
-- [ ] `ScanId`
-- [ ] `AssetId`
-- [ ] `OcrRunId`
-- [ ] `TextRegionId`
-- [ ] `TextCorrectionId`
-- [ ] `CollectionId`
-- [ ] `AnnotationId`
-- [ ] `ReviewItemId`
-- [ ] `SkillId`
-- [ ] `SkillRunId`
-- [ ] `AuditEventId`
-- [ ] `BackupId`
+- [x] `InstallationId`
+- [x] `NotebookDesignId`
+- [x] `NotebookId`
+- [x] `PageId`
+- [x] `PageSetId`
+- [x] `SmartPageId`
+- [x] `PhysicalCopyId`
+- [x] `ScanId`
+- [x] `AssetId`
+- [x] `OcrRunId`
+- [x] `TextRegionId`
+- [x] `TextCorrectionId`
+- [x] `CollectionId`
+- [x] `AnnotationId`
+- [x] `ReviewItemId`
+- [x] `SkillId`
+- [x] `SkillRunId`
+- [x] `AuditEventId`
+- [x] `BackupId`
 
 Example:
 
@@ -197,12 +197,12 @@ pub struct PageId(String);
 
 Requirements:
 
-- [ ] Constructors validate format.
-- [ ] Display and serialization are canonical.
-- [ ] Parsing rejects invalid length/alphabet.
-- [ ] Production IDs use OS cryptographic randomness.
-- [ ] A deterministic RNG is available only through test interfaces.
-- [ ] Domain APIs do not pass raw identifier strings internally.
+- [x] Constructors validate format.
+- [x] Display and serialization are canonical.
+- [x] Parsing rejects invalid length/alphabet.
+- [x] Production IDs use OS cryptographic randomness.
+- [x] A deterministic RNG is available only through test interfaces.
+- [x] Domain APIs do not pass raw identifier strings internally.
 
 ## 2.2 Structured error model
 
@@ -221,12 +221,19 @@ pub struct A2dError {
 }
 ```
 
-- [ ] Implement all categories from the spec.
-- [ ] Redact secrets and raw note content from default diagnostics.
-- [ ] Map cancellation separately from failure.
-- [ ] Ban conversions that erase failures into `None`, empty collections, or `false`.
-- [ ] Add stable unknown-internal-error handling with correlation ID.
-- [ ] Add tests for FFI/serialization mapping and redaction.
+- [x] Implement all categories from the spec.
+- [ ] Redact secrets and raw note content from default diagnostics. (No concrete redaction
+      mechanism exists yet — `A2dError.details` is documented as MUST NOT carry secrets/note
+      content, enforced by each producing module, not by a generic filter. Revisit once a
+      producer actually needs to pass user content through, e.g. OCR or model-provider errors.)
+- [x] Map cancellation separately from failure.
+- [ ] Ban conversions that erase failures into `None`, empty collections, or `false`. (No
+      erasing conversion exists on `A2dError`/`Outcome` today, but "ban" implies an ongoing
+      project-wide discipline — no clippy lint enforces it yet. Tracked as a standing rule in
+      `CLAUDE.md`, not a one-time deliverable.)
+- [x] Add stable unknown-internal-error handling with correlation ID.
+- [ ] Add tests for FFI/serialization mapping and redaction. (No FFI/serde boundary exists yet;
+      deferred to Milestone 2.4.)
 
 ## 2.3 Domain entities and invariants
 

@@ -87,3 +87,48 @@ Not yet done: nothing else was requested. Milestones 2, 4, 7, and 14 can now pro
 another clarification round, per the responses file — except ADR 0001 needs the user's read-through
 and ADR 0001/0002 both need their respective spikes before their dependent milestones pass the
 fixture-commit / detector-selection checkpoints.
+
+## 2026-07-26 — Ralph loop: Milestone 2.2 + 2.1 (errors, identifiers)
+
+User said "Go for it. Continue on. Ralph loop it" — continuing autonomously through the TODO using
+`/a2d-task`'s workflow rather than the global `/ralph-loop` skill (still the wrong one for this
+repo — ESP32/Bluetooth rules). Implemented TODO 2.2 before 2.1 despite the TODO's ordering, because
+2.1's identifier parsing needs `A2dError` to return, and CLAUDE.md's "every fallible path returns
+the structured `A2dError` envelope" rule applies to `id.rs` too.
+
+Both landed in `a2d-domain` (chosen over `a2d-identity`, which owns registration/resolution
+*workflows* built on top of these types, per each crate's module doc).
+
+- **`error.rs`**: `A2dError`/`ErrorCategory`/`ErrorSeverity`/`ErrorCode` per TODO 2.2's shape, plus
+  `Outcome<T>` (`Completed`/`Cancelled`/`Failed(A2dError)`) so cancellable operations don't have to
+  build a full `A2dError` just to say "the user cancelled" — reconciles a real tension between spec
+  §27 (which lists "cancellation" as one of `ErrorCategory`'s values) and TODO 2.2 ("map
+  cancellation separately from failure"): kept `ErrorCategory::Cancellation` for completeness, but
+  `Outcome` is the intended path for actual cancellable call sites.
+  - clippy's `result_large_err` fired on the first pass (`A2dError` was >128 bytes). Fixed by
+    boxing the fields into a private `A2dErrorFields` behind `Deref`/`DerefMut`, so `A2dError` is
+    just a pointer and every `Result<T, A2dError>` in the codebase stays cheap, while `err.code`
+    etc. still work unchanged.
+  - **`ErrorSeverity`'s levels (`Info`/`Warning`/`Error`/`Critical`) are an assumption** — spec/TODO
+    never enumerate severity values. Flagged, not yet reviewed.
+  - Two TODO 2.2 checkboxes left unchecked on purpose: redaction has no enforcement mechanism yet
+    (nothing produces sensitive `details` values yet to enforce against), and "ban erasing
+    conversions" is an ongoing discipline (already in CLAUDE.md), not a one-time deliverable.
+    FFI/serialization tests deferred to 2.4, since no FFI boundary exists yet.
+- **`id.rs`**: all 19 opaque ID newtypes via one `define_id!` macro (19 hand-written copies would
+  have been the actual duplication). Canonical wire form is the **same** 26-char Crockford Base32
+  scheme ADR 0001 specifies for QR-embedded IDs — applied to every ID type, not just the three that
+  appear in QR codes, so the codebase has one ID format rather than two. This resolves TODO 4.1's
+  "encode using a compact canonical alphabet" ahead of time; when Milestone 4.1 is implemented it
+  should reuse this module and add QR-specific fixtures rather than re-deriving generation.
+  - Deterministic test-only construction (`from_raw_for_test`) is gated behind a `test-util` Cargo
+    feature (not bare `#[cfg(test)]`), since TODO 2.1 implies other crates' tests may need it too —
+    `#[cfg(test)]` wouldn't be visible outside the defining crate.
+  - `getrandom = "0.2"` added as `a2d-domain`'s first external dependency (Apache-2.0/MIT, allowed
+    by `deny.toml`); confirmed crates.io is reachable from this environment.
+  - Tests: round-trip, two known encoding vectors (all-zero, all-one), wrong length, invalid
+    alphabet (including `I`), lowercase rejection, non-canonical first-character padding,
+    generate-then-parse round trip, and a 10,000-sample uniqueness check.
+
+TODO 2.1 fully checked. TODO 2.2 checked except the two items above. Full workspace gate
+(`fmt --check`, `clippy -D warnings`, `test --all-features`) green throughout.
