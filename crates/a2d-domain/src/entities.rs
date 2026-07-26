@@ -112,6 +112,37 @@ pub struct NotebookDesign {
 }
 
 impl NotebookDesign {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: NotebookDesignId,
+        schema_version: u32,
+        name: String,
+        design_version: u32,
+        trim_size: TrimSizeMm,
+        logical_page_count: u32,
+        setup_layout_id: LayoutId,
+        page_layout_id: LayoutId,
+        marker_family: String,
+        marker_role_ids: Vec<String>,
+        manifest_hash: String,
+        trust_state: TrustState,
+    ) -> Self {
+        Self {
+            id,
+            schema_version,
+            name,
+            design_version,
+            trim_size,
+            logical_page_count,
+            setup_layout_id,
+            page_layout_id,
+            marker_family,
+            marker_role_ids,
+            manifest_hash,
+            trust_state,
+        }
+    }
+
     pub fn id(&self) -> &NotebookDesignId {
         &self.id
     }
@@ -133,6 +164,33 @@ pub struct Notebook {
 }
 
 impl Notebook {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: NotebookId,
+        design_id: NotebookDesignId,
+        display_name: String,
+        created_at_ms: i64,
+        updated_at_ms: i64,
+        archived_at_ms: Option<i64>,
+        active_scan_destination: bool,
+        optional_color: Option<String>,
+        optional_icon: Option<String>,
+        optional_user_notes: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            design_id,
+            display_name,
+            created_at_ms,
+            updated_at_ms,
+            archived_at_ms,
+            active_scan_destination,
+            optional_color,
+            optional_icon,
+            optional_user_notes,
+        }
+    }
+
     pub fn id(&self) -> &NotebookId {
         &self.id
     }
@@ -198,6 +256,32 @@ impl Page {
             preferred_scan_id: None,
             created_at_ms,
             updated_at_ms: created_at_ms,
+        }
+    }
+
+    /// Reconstructs a `Page` with every field explicit, including ones `new` defaults
+    /// (`preferred_scan_id`, `updated_at_ms`) — for the storage layer rebuilding a `Page` from a
+    /// database row, where those fields are already known rather than freshly defaulted.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_stored(
+        id: PageId,
+        kind: PageKind,
+        layout_id: LayoutId,
+        title: Option<String>,
+        state: PageState,
+        preferred_scan_id: Option<ScanId>,
+        created_at_ms: i64,
+        updated_at_ms: i64,
+    ) -> Self {
+        Self {
+            id,
+            kind,
+            layout_id,
+            title,
+            state,
+            preferred_scan_id,
+            created_at_ms,
+            updated_at_ms,
         }
     }
 
@@ -282,6 +366,43 @@ pub struct Scan {
 }
 
 impl Scan {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: ScanId,
+        page_id: PageId,
+        physical_copy_id: Option<PhysicalCopyId>,
+        capture_source: CaptureSource,
+        captured_at_ms: i64,
+        original_asset_id: AssetId,
+        corrected_asset_id: Option<AssetId>,
+        ocr_asset_id: Option<AssetId>,
+        thumbnail_asset_id: Option<AssetId>,
+        pipeline_version: String,
+        quality_status: QualityStatus,
+        warnings: Vec<String>,
+        preferred: bool,
+        supersedes_scan_id: Option<ScanId>,
+        content_fingerprint: String,
+    ) -> Self {
+        Self {
+            id,
+            page_id,
+            physical_copy_id,
+            capture_source,
+            captured_at_ms,
+            original_asset_id,
+            corrected_asset_id,
+            ocr_asset_id,
+            thumbnail_asset_id,
+            pipeline_version,
+            quality_status,
+            warnings,
+            preferred,
+            supersedes_scan_id,
+            content_fingerprint,
+        }
+    }
+
     pub fn id(&self) -> &ScanId {
         &self.id
     }
@@ -321,6 +442,31 @@ pub struct Asset {
 }
 
 impl Asset {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: AssetId,
+        kind: AssetKind,
+        relative_path: String,
+        media_type: String,
+        byte_length: u64,
+        sha256: String,
+        created_at_ms: i64,
+        immutable: bool,
+        encryption_state: EncryptionState,
+    ) -> Self {
+        Self {
+            id,
+            kind,
+            relative_path,
+            media_type,
+            byte_length,
+            sha256,
+            created_at_ms,
+            immutable,
+            encryption_state,
+        }
+    }
+
     pub fn id(&self) -> &AssetId {
         &self.id
     }
@@ -336,6 +482,14 @@ pub struct PageSet {
 }
 
 impl PageSet {
+    pub fn new(id: PageSetId, title: Option<String>, created_at_ms: i64) -> Self {
+        Self {
+            id,
+            title,
+            created_at_ms,
+        }
+    }
+
     pub fn id(&self) -> &PageSetId {
         &self.id
     }
@@ -419,6 +573,26 @@ pub struct OcrRun {
 }
 
 impl OcrRun {
+    pub fn new(
+        id: OcrRunId,
+        scan_id: ScanId,
+        provider: String,
+        provider_version: String,
+        full_text: String,
+        warnings: Vec<String>,
+        provenance: Provenance,
+    ) -> Self {
+        Self {
+            id,
+            scan_id,
+            provider,
+            provider_version,
+            full_text,
+            warnings,
+            provenance,
+        }
+    }
+
     pub fn id(&self) -> &OcrRunId {
         &self.id
     }
@@ -546,6 +720,26 @@ pub struct AuditEvent {
 }
 
 impl AuditEvent {
+    pub fn new(
+        id: AuditEventId,
+        occurred_at_ms: i64,
+        event_kind: String,
+        actor: String,
+        subject: Option<String>,
+        details: BTreeMap<String, String>,
+        correlation_id: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            occurred_at_ms,
+            event_kind,
+            actor,
+            subject,
+            details,
+            correlation_id,
+        }
+    }
+
     pub fn id(&self) -> &AuditEventId {
         &self.id
     }
