@@ -333,6 +333,87 @@ fn ocr_run_round_trips_with_provenance() {
     assert_eq!(storage.get_ocr_run(run.id()).unwrap().unwrap(), run);
 }
 
+fn sample_scan(page_id: PageId, original_asset_id: a2d_domain::AssetId) -> Scan {
+    Scan::new(
+        ScanId::generate(),
+        page_id,
+        None,
+        CaptureSource::Camera,
+        20,
+        original_asset_id,
+        None,
+        None,
+        None,
+        "v1".to_string(),
+        QualityStatus::Accepted,
+        vec![],
+        true,
+        None,
+        "fingerprint".to_string(),
+    )
+}
+
+/// TODO 2.3's "a scan always references an immutable original asset", closed now that storage
+/// exists to check it -- deferred at the time that invariant was written.
+#[test]
+fn insert_scan_rejects_an_original_asset_that_is_not_immutable() {
+    let storage = Storage::open_in_memory().unwrap();
+    let asset_store = AssetStore::open(&temp_dir("scan-not-immutable")).unwrap();
+    let page = Page::new(
+        PageId::generate(),
+        PageKind::SmartPage {
+            smart_page_id: SmartPageId::generate(),
+            page_set_id: None,
+            visible_page_number: None,
+        },
+        LayoutId::parse("PAGE-V1").unwrap(),
+        None,
+        PageState::GeneratedNotScanned,
+        0,
+    );
+    storage.insert_page(&page).unwrap();
+
+    // Corrected assets are not marked immutable -- using one as a scan's "original" is exactly
+    // the mistake this check exists to catch.
+    let not_original = asset_store
+        .commit(b"not an original", AssetKind::Corrected, "image/jpeg")
+        .unwrap();
+    storage.insert_asset(&not_original).unwrap();
+
+    let scan = sample_scan(page.id().clone(), not_original.id().clone());
+    let err = storage.insert_scan(&scan).unwrap_err();
+    assert_eq!(err.category, a2d_domain::ErrorCategory::Validation);
+    assert!(
+        err.code
+            .to_string()
+            .contains("ORIGINAL_ASSET_NOT_IMMUTABLE")
+    );
+    assert_eq!(storage.get_scan(scan.id()).unwrap(), None);
+}
+
+#[test]
+fn insert_scan_rejects_an_original_asset_that_does_not_exist() {
+    let storage = Storage::open_in_memory().unwrap();
+    let page = Page::new(
+        PageId::generate(),
+        PageKind::SmartPage {
+            smart_page_id: SmartPageId::generate(),
+            page_set_id: None,
+            visible_page_number: None,
+        },
+        LayoutId::parse("PAGE-V1").unwrap(),
+        None,
+        PageState::GeneratedNotScanned,
+        0,
+    );
+    storage.insert_page(&page).unwrap();
+
+    let scan = sample_scan(page.id().clone(), a2d_domain::AssetId::generate());
+    let err = storage.insert_scan(&scan).unwrap_err();
+    assert_eq!(err.category, a2d_domain::ErrorCategory::Validation);
+    assert!(err.code.to_string().contains("ORIGINAL_ASSET_MISSING"));
+}
+
 // --- AssetStore (TODO 3.3) ---------------------------------------------------------------
 #[test]
 fn commit_writes_a_durable_file_with_a_verified_hash() {

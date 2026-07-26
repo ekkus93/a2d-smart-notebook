@@ -677,6 +677,45 @@ pub trait ScanRepository {
 
 impl ScanRepository for Connection {
     fn insert_scan(&self, scan: &Scan) -> Result<(), A2dError> {
+        // TODO 2.3's "a scan always references an immutable original asset" -- the half of that
+        // invariant a2d-domain's Scan type couldn't check by itself (it only has the id, not the
+        // referenced row). Checked here, not at read time, so an unenforced invariant can never
+        // land in the database in the first place.
+        let original_immutable: Option<bool> = self
+            .query_row(
+                "SELECT immutable FROM assets WHERE id = ?1",
+                [scan.original_asset_id.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| map_sql_error("insert_scan (checking original asset)", e))?;
+        match original_immutable {
+            None => {
+                return Err(A2dError::new(
+                    ErrorCode::new("STORAGE_SCAN_ORIGINAL_ASSET_MISSING"),
+                    ErrorCategory::Validation,
+                    ErrorSeverity::Error,
+                    "error.storage.scan_original_asset_missing",
+                    "a scan's original_asset_id must reference an asset that already exists",
+                    false,
+                )
+                .with_detail("original_asset_id", scan.original_asset_id.to_string()));
+            }
+            Some(false) => {
+                return Err(A2dError::new(
+                    ErrorCode::new("STORAGE_SCAN_ORIGINAL_ASSET_NOT_IMMUTABLE"),
+                    ErrorCategory::Validation,
+                    ErrorSeverity::Error,
+                    "error.storage.scan_original_asset_not_immutable",
+                    "a scan's original_asset_id must reference an asset marked immutable \
+                     (spec sections 3.3 and 16.3)",
+                    false,
+                )
+                .with_detail("original_asset_id", scan.original_asset_id.to_string()));
+            }
+            Some(true) => {}
+        }
+
         let warnings = encode_json(&scan.warnings, "warnings")?;
         self.execute(
             "INSERT INTO scans (id, page_id, physical_copy_id, capture_source, captured_at_ms, \

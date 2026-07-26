@@ -550,3 +550,42 @@ CI" acceptance criterion; no separate demonstration was needed.
 
 **Milestone 1 (Repository, toolchain, Android shell, and CI) is now fully complete** — 1.1, 1.2,
 and 1.3 all done, all their acceptance criteria genuinely verified rather than assumed.
+
+## 2026-07-26 — Ralph loop: closed two Milestone 2 gaps
+
+User: "Close the small Milestone 2 gaps, then move into Milestone 4." Both gaps were left
+unchecked earlier specifically because they needed infrastructure that didn't exist yet at the
+time (storage, a real Android FFI consumer) — both now exist.
+
+**"A scan always references an immutable original asset"**: `ScanRepository::insert_scan` (a2d-
+storage) now looks up `original_asset_id` before inserting and rejects the scan -- never letting
+it reach the database -- if the asset doesn't exist (`STORAGE_SCAN_ORIGINAL_ASSET_MISSING`) or
+isn't marked immutable (`STORAGE_SCAN_ORIGINAL_ASSET_NOT_IMMUTABLE`). Two new tests. All existing
+tests that insert scans already used immutable originals via `AssetStore::commit(...,
+AssetKind::Original, ...)`, so nothing broke by accident -- which itself is a small positive
+signal that the existing test fixtures were already doing the right thing.
+
+**"Prevent panics from appearing as successful FFI results"** — the higher-stakes one, since
+getting this wrong could crash the whole test process, not just fail a test. Read the generated
+Kotlin bindings first (`uniffiCheckCallStatus` in `uniffi/a2d_ffi/a2d_ffi.kt`) before writing
+anything: confirmed UniFFI's scaffolding sets `UniffiRustCallStatus.code = CALL_UNEXPECTED_ERROR`
+on a caught panic, which the Kotlin wrapper turns into a thrown `InternalException` carrying the
+panic message -- not a silent return, not a process abort. Only after confirming that did we
+write `PanicPropagationTest.kt`, which calls `A2dClient.triggerPanicForTesting()` on the real
+emulator and asserts on both facts (an exception was thrown, and it carries the actual panic
+message, not a generic one). Genuinely ran on-device: 8/8 instrumented tests passed per the
+actual JUnit XML report (`aRustPanicSurfacesAsAKotlinExceptionRatherThanASilentSuccessOrACrash`,
+0.238s) -- the Gradle console's live progress line said "4/8 completed" at the moment the log was
+captured, which would have been alarming if trusted at face value; checked the XML report instead
+of assuming, and it was just a mid-run snapshot, not a real problem.
+
+Full gate green throughout: Rust (fmt, clippy, `cargo deny check`, 33 test binaries — now 20 in
+`a2d-storage`'s integration suite, up from 18), Android (`lint test assembleDebug`), 8/8
+instrumented tests on the real emulator.
+
+Both TODO 2.4/2.3 checkboxes ticked with the real evidence inline. Next: Milestone 4 (identity,
+QR protocol, Notebook Designs) proper — the encoder from the QR spike work already exists ahead
+of schedule (`a2d-identity::qr::PageCode::encode`); 4.2/4.3 (parser, strict validation, golden
+fixtures) are still blocked on ADR 0001 reaching Accepted, but 4.1 (random ID generation, already
+substantially covered by `a2d-domain::id`) and 4.4 (Notebook Design manifests) don't have that
+dependency.
