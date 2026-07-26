@@ -555,11 +555,28 @@ Acceptance:
 
 ## 4.1 Random ID generation
 
-- [ ] Generate 128-bit IDs from OS cryptographic randomness.
-- [ ] Encode using a compact canonical alphabet.
-- [ ] Detect persistence collisions as hard integrity events.
-- [ ] Add known encoding vectors and malformed-input tests.
-- [ ] Add a large sample uniqueness test.
+- [x] Generate 128-bit IDs from OS cryptographic randomness. Done in Milestone 2.1 —
+      `a2d_domain::id::random_128` via `getrandom`, used by every `define_id!`-generated
+      `::generate()`.
+- [x] Encode using a compact canonical alphabet. Done in Milestone 2.1 — 26-char uppercase
+      Crockford Base32 (`a2d_domain::id::encode_128`/`decode_128`), the same alphabet
+      `docs/decisions/0001-qr-v1-encoding-and-integrity.md` reuses for QR `id128` fields.
+- [x] Detect persistence collisions as hard integrity events. New this task —
+      `crates/a2d-storage/src/repository.rs::map_sql_error` now distinguishes SQLite's
+      `SQLITE_CONSTRAINT_PRIMARYKEY` (1555) from ordinary `SQLITE_CONSTRAINT_UNIQUE` (2067):
+      every `id` column is that table's primary key, so a 1555 collision means a freshly
+      generated 128-bit ID already exists — mapped to a dedicated `STORAGE_ID_COLLISION` /
+      `ErrorCategory::Integrity` / `ErrorSeverity::Critical` error instead of the everyday
+      `STORAGE_UNIQUE_CONSTRAINT_VIOLATION` / `Validation` used for business-rule unique indexes
+      (e.g. one logical page per notebook). Verified by
+      `reinserting_an_existing_id_is_reported_as_an_integrity_event_not_a_validation_error` and
+      the sibling test confirming ordinary unique-index violations still map to `Validation`
+      (`crates/a2d-storage/tests/repository_and_assets.rs`).
+- [x] Add known encoding vectors and malformed-input tests. Done in Milestone 2.1 —
+      `known_encoding_vector`, `rejects_wrong_length`, `rejects_invalid_alphabet`,
+      `rejects_non_canonical_padding`, `rejects_lowercase` in `crates/a2d-domain/src/id.rs`.
+- [x] Add a large sample uniqueness test. Done in Milestone 2.1 — `large_sample_is_unique`
+      (10,000 samples) in `crates/a2d-domain/src/id.rs`.
 
 ## 4.2 QR payload model
 
@@ -600,11 +617,37 @@ pub enum PageCode {
 }
 ```
 
-- [ ] Define canonical v1 encoding.
-- [ ] Define checksum/integrity bytes.
-- [ ] Define maximum length.
-- [ ] Reject unsupported versions, invalid lengths, invalid alphabet, out-of-range numbers, failed integrity, and trailing data.
-- [ ] Never open invalid A2D payloads as arbitrary URLs.
+- [x] Define canonical v1 encoding. `PageCode::encode` (pre-existing) plus new
+      `a2d_identity::qr::parse`, implementing the ADR's grammar in both directions. Deviation
+      from this task's illustrative `PageCode` sketch, recorded deliberately: the sketch gives
+      each variant a `version: u8` field, but the actual implementation has no such field —
+      `version` is a single ASCII digit fixed to `"1"` in the wire grammar itself (the ADR:
+      "v1 parsers understand `"1"` only"), so there is nothing for a per-value `version` field to
+      vary; the parser rejects any other digit as `QR_UNSUPPORTED_VERSION` rather than accepting
+      it into a struct field. A future v2 grammar gets its own parse function, not a runtime
+      version field on `PageCode`.
+- [x] Define checksum/integrity bytes. CRC-32C over the payload through the delimiter preceding
+      `crc`, encoded as 7 canonical Crockford Base32 characters (pre-existing `encode_crc`,
+      reused by `parse`'s recomputation check).
+- [x] Define maximum length. 128 characters, checked before tokenizing
+      (`MAX_PAYLOAD_LEN` in `crates/a2d-identity/src/qr.rs`).
+- [x] Reject unsupported versions, invalid lengths, invalid alphabet, out-of-range numbers, failed
+      integrity, and trailing data. `a2d_identity::qr::parse`, one rejection test per rule in the
+      ADR's "Strict-parser rules" list (lowercase/non-alphanumeric byte, wrong magic prefix,
+      unsupported version, unknown type-code, wrong field count/trailing data, `id128` wrong
+      length, `id128` containing I/L/O/U, numeric field with leading zero or sign, numeric field
+      out of range, unregistered `layout-id`, CRC mismatch, oversized payload) plus round-trip
+      tests for all three `type-code`s — 29 tests total in `crates/a2d-identity/src/qr.rs`,
+      `cargo test -p a2d-identity`. The `layout-id` registry check takes the registry as a
+      caller-supplied predicate (`impl Fn(&LayoutId) -> bool`) rather than depending on
+      `a2d-layout` directly, since that crate's real registry doesn't exist until Milestone 5;
+      wiring the real predicate through is `a2d-core`'s job once it does.
+- [x] Never open invalid A2D payloads as arbitrary URLs. Satisfied by construction: `parse`'s
+      signature only ever returns a typed `PageCode` or a typed `A2dError` — there is no code
+      path that hands a rejected payload's raw string back to a caller for reinterpretation as a
+      URL. The operational half of this rule (Android's scan-result handling never falling back
+      to "open as a link" on a parse failure) is Milestone 8's job once that UI exists; nothing to
+      verify there yet.
 
 ## 4.3 Golden fixtures
 
@@ -627,16 +670,42 @@ fixtures/qr/v1/
 
 ## 4.4 Notebook Design manifests
 
-- [ ] Define versioned manifests with physical dimensions, layout IDs, marker family/roles, logical page count, and hash.
-- [ ] Bundle initial official manifests.
-- [ ] Resolve them fully offline.
-- [ ] Track trust state.
-- [ ] Leave extension fields for signed official designs.
-- [ ] Reject unsupported required versions.
+- [x] Define versioned manifests with physical dimensions, layout IDs, marker family/roles,
+      logical page count, and hash. `crates/a2d-layout/src/manifest.rs`: a JSON `RawManifest`
+      wire shape, `parse_manifest` converting it into the existing `a2d_domain::NotebookDesign`
+      entity (Milestone 2.3) and computing `manifest_hash` as the SHA-256 of the manifest's exact
+      source bytes.
+- [ ] Bundle initial official manifests. **Not done, deliberately** — there is no real physical
+      Notebook Design yet (trim size, marker family, and real page layouts are all Milestone 5
+      decisions), so there is nothing "official" to bundle. What exists instead: one manifest
+      explicitly named and documented as a development placeholder
+      (`crates/a2d-layout/manifests/dev-placeholder.json`,
+      `ManifestRegistry::bundled_placeholder_registry`), proving the loading mechanism works
+      end-to-end without pretending it carries real product content. Milestone 5 replaces this
+      with the first real manifest; the registry mechanism itself does not need to change.
+- [x] Resolve them fully offline. `ManifestRegistry::resolve` is a synchronous in-memory
+      `HashMap` lookup — no I/O, no network, populated entirely up front from bundled strings.
+- [x] Track trust state. `TrustState` (Milestone 2.3) is assigned by the loader based on
+      provenance (bundled-with-a-reviewed-build → `Trusted` for v0.1), not read from the manifest
+      file itself.
+- [x] Leave extension fields for signed official designs. Trust is deliberately *not* a field
+      inside the manifest JSON — see the module doc comment in `manifest.rs` for why a
+      self-declared trust field would be meaningless (a hostile manifest could just claim
+      `"Trusted"`). A future signed-manifest extension supplies its own trust derivation (e.g.
+      signature verification) through the same `parse_manifest(json, trust_state)` call shape,
+      without changing the manifest wire format.
+- [x] Reject unsupported required versions. `CURRENT_SCHEMA_VERSION = 1`; `parse_manifest`
+      rejects `schema_version` greater than that (`MANIFEST_UNSUPPORTED_SCHEMA_VERSION`) and
+      rejects `schema_version: 0` outright. 11 tests in `crates/a2d-layout/src/manifest.rs`,
+      `cargo test -p a2d-layout`.
 
 Acceptance:
 
-- [ ] Setup and Page Codes round-trip through Rust, Kotlin, and rendered fixtures.
+- [ ] Setup and Page Codes round-trip through Rust, Kotlin, and rendered fixtures. Blocked on
+      Milestone 4.3, which is blocked on `docs/decisions/0001-qr-v1-encoding-and-integrity.md`
+      reaching Accepted (see 4.3). The Rust-only half of this (encode → parse round-trip) is
+      covered by `crates/a2d-identity/src/qr.rs`'s `round_trips_*` tests; the Kotlin/rendered-QR
+      half needs golden fixtures this milestone can't commit yet.
 
 ---
 

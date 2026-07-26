@@ -50,6 +50,12 @@ version = "0.1.0"
 [[package]]
 name = "a2d-layout"
 version = "0.1.0"
+dependencies = [
+ "a2d-domain",
+ "serde",
+ "serde_json",
+ "sha2",
+]
 
 [[package]]
 name = "a2d-model"

@@ -589,3 +589,79 @@ of schedule (`a2d-identity::qr::PageCode::encode`); 4.2/4.3 (parser, strict vali
 fixtures) are still blocked on ADR 0001 reaching Accepted, but 4.1 (random ID generation, already
 substantially covered by `a2d-domain::id`) and 4.4 (Notebook Design manifests) don't have that
 dependency.
+
+## 2026-07-26 — Ralph loop: Milestone 4.1, 4.2 (parser), and 4.4
+
+Confirmed CI green for the Milestone 2 gap-closure commit first (`gh run view 30224009752` — all
+4 jobs ✓) before starting new work, per this project's standing "verify for real" discipline.
+
+**4.1 Random ID generation**: four of five bullets were already satisfied by Milestone 2.1's
+`a2d_domain::id` and just needed ticking with a pointer to where. The one genuinely new piece:
+"detect persistence collisions as hard integrity events." Realized every `id` column in the
+schema is that table's primary key, so SQLite's extended error code already distinguishes the
+two cases precisely — 1555 (`SQLITE_CONSTRAINT_PRIMARYKEY`) means a freshly generated 128-bit ID
+already exists (should be near-impossible; an RNG failure or reused ID, a real integrity event),
+while 2067 (`SQLITE_CONSTRAINT_UNIQUE`) means an ordinary business-rule unique index fired (e.g.
+one logical page per notebook — caller/business error, not infrastructure). Split
+`map_sql_error` on that code: 1555 now maps to `STORAGE_ID_COLLISION` /
+`ErrorCategory::Integrity` / `ErrorSeverity::Critical`, distinct from
+`STORAGE_UNIQUE_CONSTRAINT_VIOLATION` / `Validation`. This *changed* the behavior of an existing
+test (`duplicate_insert_maps_to_a_validation_error...` was literally the ID-collision case, since
+it re-inserted the same `NotebookDesign` — same ID, same PK) — renamed and rewrote it to assert
+the new Integrity/Critical mapping, and added an explicit assertion to the sibling test that a
+genuine business-rule unique-index violation (fresh ID, same logical-page-number) still stays
+Validation, so the two paths don't silently drift back together later.
+
+**4.2 QR payload model (parser half)**: the encoder already existed (built ahead of schedule for
+the ADR 0001 Android spike); added `a2d_identity::qr::parse`, the strict decoder, directly against
+the ADR's own "Strict-parser rules" list — one test per rule (lowercase/bad-charset, wrong magic
+prefix, unsupported version, unknown type-code, wrong field count/trailing data, `id128` wrong
+length, `id128` with I/L/O/U, numeric field leading-zero/sign/out-of-range, unregistered
+`layout-id`, CRC mismatch, oversized payload), plus round-trip tests for all three `type-code`s
+and a test parsing the ADR's own illustrative `NotebookPage` example (which correctly fails on CRC
+mismatch, since that example's CRC was hand-illustrative, not computed against this
+implementation — good: proves the parser never trusts an unverified integrity field even when the
+rest of a payload looks legitimate). One real bug caught by the tests themselves: initially
+checked the CRC *before* decoding fields, which meant hand-corrupted test payloads (bad id128
+length, leading-zero numeric field, etc.) failed with a generic `CRC_MISMATCH` instead of their
+specific field error, since corrupting a field also invalidates the CRC computed over the original
+payload. Reordered to validate fields first, CRC last — matching the order the ADR's own rule list
+actually gives, not just fixing tests to match code. The `layout-id` registry-membership check
+takes the registry as a caller-supplied predicate (`impl Fn(&LayoutId) -> bool`) rather than
+`a2d-identity` depending on `a2d-layout` directly, since `a2d-layout`'s real registry doesn't
+exist until Milestone 5 — avoids a forward dependency that would need unwinding later. Golden
+fixtures (4.3) remain untouched — ADR 0001 is still Proposed, v1 fixtures are permanent once
+committed, and this parser's own thoroughness doesn't change that gate. Deviation recorded in the
+TODO: 4.2's illustrative `PageCode` code sample gives each variant a `version: u8` field, but the
+actual type has none — `version` is a fixed `"1"` literal in the wire grammar (the ADR: "v1
+parsers understand `"1"` only"), so there's no per-value version to store; a future v2 grammar
+gets its own parser function, not a runtime field.
+
+**4.4 Notebook Design manifests**: no real physical Notebook Design exists yet (trim size, marker
+family, real layouts are all Milestone 5 decisions), so this built the *mechanism* — a versioned
+JSON manifest shape (`crates/a2d-layout/src/manifest.rs`), `parse_manifest` converting it into the
+existing `NotebookDesign` entity (Milestone 2.3) and computing `manifest_hash` as the SHA-256 of
+the manifest's exact source bytes, `ManifestRegistry` as a fully-offline in-memory `HashMap`
+lookup (rejects two manifests sharing an id rather than letting the second silently shadow the
+first), and one manifest deliberately named and documented as a development placeholder
+(`manifests/dev-placeholder.json`, `bundled_placeholder_registry`) rather than pretending to bundle
+something official. Left "Bundle initial official manifests" unchecked in the TODO for exactly
+that reason — ticking it would overclaim; Milestone 5 supplies the real content, and this registry
+mechanism shouldn't need to change when it does. Trust state is deliberately *not* a field inside
+the manifest JSON itself — assigned by the loader from provenance (bundled-with-a-reviewed-build →
+`Trusted` for v0.1) rather than self-declared by the manifest, leaving room for a future
+signed-manifest extension (spec §14.4) to supply its own trust derivation through the same
+`parse_manifest(json, trust_state)` call shape without changing the wire format. `serde`,
+`serde_json`, `sha2` reused at the same versions `a2d-storage` already uses rather than picking
+new ones.
+
+Full gate green: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D
+warnings`, `cargo test --workspace --all-features` (33 test binaries, all passing — up from 20 in
+`a2d-storage` alone last session; `a2d-identity` now 29 tests, `a2d-layout` now 11), `cargo deny
+check` (clean after adding `a2d-layout`'s three new deps, no new license/wildcard findings).
+
+Milestone 4 remaining: 4.3 (golden fixtures) and the milestone's overall acceptance criterion stay
+blocked on ADR 0001 reaching Accepted, which itself is blocked on Milestone 5 producing a real
+physical layout to test the worst-case payload against (the ADR's one open Validation Evidence
+item). Next reasonable step once picked back up: Milestone 5 (layout engine and PDF generation) —
+starting it would also unblock ADR 0001's last open item and, transitively, Milestone 4.3.

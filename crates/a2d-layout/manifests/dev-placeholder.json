@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "6DE28E53DBKPXCWWNHPC8T7QJX",
+  "name": "Development Placeholder Notebook (not a released design)",
+  "design_version": 1,
+  "trim_width_mm": 210,
+  "trim_height_mm": 297,
+  "logical_page_count": 100,
+  "setup_layout_id": "DEV-SETUP-V1",
+  "page_layout_id": "DEV-PAGE-V1",
+  "marker_family": "apriltag-placeholder",
+  "marker_role_ids": ["TL", "TR", "BL", "BR"]
+}

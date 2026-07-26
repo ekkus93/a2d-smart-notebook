@@ -101,14 +101,18 @@ fn notebook_round_trips_and_requires_its_design_to_exist() {
     assert!(err.code.to_string().contains("FOREIGN_KEY_VIOLATION"));
 }
 
+/// TODO 4.1 "detect persistence collisions as hard integrity events": re-inserting a row under
+/// an ID that already exists collides on the table's primary key, not an ordinary unique index,
+/// so it must map to a distinct Integrity/Critical error rather than an everyday Validation one.
 #[test]
-fn duplicate_insert_maps_to_a_validation_error_not_a_generic_storage_error() {
+fn reinserting_an_existing_id_is_reported_as_an_integrity_event_not_a_validation_error() {
     let storage = Storage::open_in_memory().unwrap();
     let design = sample_design();
     storage.insert_notebook_design(&design).unwrap();
     let err = storage.insert_notebook_design(&design).unwrap_err();
-    assert_eq!(err.category, a2d_domain::ErrorCategory::Validation);
-    assert!(err.code.to_string().contains("UNIQUE_CONSTRAINT_VIOLATION"));
+    assert_eq!(err.category, a2d_domain::ErrorCategory::Integrity);
+    assert_eq!(err.severity, a2d_domain::ErrorSeverity::Critical);
+    assert!(err.code.to_string().contains("ID_COLLISION"));
 }
 
 #[test]
@@ -170,6 +174,9 @@ fn notebook_page_round_trips_and_enforces_unique_logical_page_number() {
         901,
     );
     let err = storage.insert_page(&duplicate).unwrap_err();
+    // A business-rule unique index (not the primary key -- `duplicate` has its own fresh
+    // `PageId`) stays a Validation error, distinct from the ID-collision Integrity case above.
+    assert_eq!(err.category, a2d_domain::ErrorCategory::Validation);
     assert!(err.code.to_string().contains("UNIQUE_CONSTRAINT_VIOLATION"));
 }
 

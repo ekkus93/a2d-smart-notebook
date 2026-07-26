@@ -25,10 +25,29 @@ fn map_sql_error(context: &str, err: rusqlite::Error) -> A2dError {
     if let rusqlite::Error::SqliteFailure(ffi_err, ref msg) = err
         && ffi_err.code == rusqlite::ErrorCode::ConstraintViolation
     {
+        // 1555 (SQLITE_CONSTRAINT_PRIMARYKEY) is split out from the generic unique-constraint
+        // case: every `id` column in this schema is the table's primary key (TODO 4.1 "detect
+        // persistence collisions as hard integrity events"), and every ID is a locally generated
+        // 128-bit value (`a2d_domain::id`). A primary-key collision therefore does not mean "the
+        // caller supplied a duplicate business value" (that's 2067, e.g.
+        // `unique_notebook_logical_page`) — it means a freshly generated ID already exists in the
+        // table, which should never happen at 128 bits of entropy and indicates either a broken
+        // RNG or a reused/replayed ID. That is an integrity event, not a validation error, so it
+        // gets its own code/category/severity rather than being folded into
+        // `STORAGE_UNIQUE_CONSTRAINT_VIOLATION`.
+        if ffi_err.extended_code == 1555 {
+            return A2dError::new(
+                ErrorCode::new("STORAGE_ID_COLLISION"),
+                ErrorCategory::Integrity,
+                ErrorSeverity::Critical,
+                "error.storage.id_collision",
+                format!("{context}: {}", msg.clone().unwrap_or_default()),
+                false,
+            )
+            .with_detail("context", context);
+        }
         let code = match ffi_err.extended_code {
-            2067 /* SQLITE_CONSTRAINT_UNIQUE */ | 1555 /* SQLITE_CONSTRAINT_PRIMARYKEY */ => {
-                "STORAGE_UNIQUE_CONSTRAINT_VIOLATION"
-            }
+            2067 /* SQLITE_CONSTRAINT_UNIQUE */ => "STORAGE_UNIQUE_CONSTRAINT_VIOLATION",
             787 /* SQLITE_CONSTRAINT_FOREIGNKEY */ => "STORAGE_FOREIGN_KEY_VIOLATION",
             1299 /* SQLITE_CONSTRAINT_NOTNULL */ => "STORAGE_NOT_NULL_VIOLATION",
             _ => "STORAGE_CONSTRAINT_VIOLATION",
