@@ -461,13 +461,14 @@ Core types include:
 InstallationId
 NotebookDesignId
 NotebookId
-LogicalNotebookPageId
+PageId
 PageSetId
 SmartPageId
 PhysicalCopyId
 ScanId
 AssetId
 OcrRunId
+CollectionId
 SkillId
 SkillRunId
 BackupId
