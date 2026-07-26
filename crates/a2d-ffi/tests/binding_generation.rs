@@ -8,7 +8,19 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn cdylib_path() -> PathBuf {
+/// Builds `a2d-ffi`'s cdylib and returns its path. Explicit, not assumed: `cargo test
+/// --workspace` alone does NOT reliably build the cdylib flavor of a `crate-type = ["lib",
+/// "cdylib"]` package (test binaries only need the rlib flavor to link against) — this test
+/// previously assumed the `.so` was already sitting in `target/debug/` from some earlier,
+/// unrelated `cargo build`/`cargo ndk` invocation, which happened to be true in local dev but
+/// not on a fresh CI checkout. Building it here makes the test self-sufficient.
+fn build_cdylib() -> PathBuf {
+    let status = Command::new(env!("CARGO"))
+        .args(["build", "-p", "a2d-ffi", "--lib"])
+        .status()
+        .expect("cargo must be runnable");
+    assert!(status.success(), "cargo build -p a2d-ffi --lib failed");
+
     let exe = std::env::current_exe().expect("test executable path must be available");
     let deps_dir = exe.parent().expect("deps dir");
     let profile_dir = deps_dir.parent().expect("profile dir");
@@ -19,16 +31,16 @@ fn cdylib_path() -> PathBuf {
     } else {
         "liba2d_ffi.so"
     };
-    profile_dir.join(name)
+    let library = profile_dir.join(name);
+    assert!(
+        library.exists(),
+        "cargo build reported success but {library:?} still doesn't exist"
+    );
+    library
 }
 
 fn generate(language: &str, out_dir: &Path) {
-    let library = cdylib_path();
-    assert!(
-        library.exists(),
-        "expected cdylib at {library:?} — run `cargo build -p a2d-ffi --lib` first \
-         (the crate's [lib] crate-type includes cdylib)"
-    );
+    let library = build_cdylib();
     let status = Command::new(env!("CARGO_BIN_EXE_uniffi-bindgen"))
         .arg("generate")
         .arg("--library")
@@ -73,11 +85,12 @@ fn temp_out_dir(label: &str) -> PathBuf {
     dir
 }
 
-const EXPECTED_API_SYMBOLS: [&str; 4] = [
+const EXPECTED_API_SYMBOLS: [&str; 5] = [
     "A2dClient",
     "OpenLibraryRequest",
     "generatePageId",
     "parsePageId",
+    "generateExampleSmartPageQrPayload",
 ];
 
 #[test]
