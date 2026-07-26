@@ -1,0 +1,8 @@
+<resources>
+    <!--
+    Minimal launch theme. Compose screens define their own Material3 theming in Kotlin
+    (feature.home.HomeScreen and friends); this XML theme only needs to cover the window
+    background shown before Compose's first frame.
+    -->
+    <style name="Theme.A2dNotebook" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

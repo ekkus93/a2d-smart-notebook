@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">A2D Smart Notebook</string>
+    <string name="home_title">A2D Smart Notebook</string>
+    <string name="home_placeholder">Local-first. No account required.</string>
+</resources>

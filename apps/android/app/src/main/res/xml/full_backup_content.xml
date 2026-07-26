@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-Android-12 counterpart to data_extraction_rules.xml. android:allowBackup="false"
+     already disables backup outright on these API levels too; this exists only because lint
+     asks for it explicitly whenever minSdkVersion is below 31. -->
+<full-backup-content>
+    <exclude domain="root" path="." />
+</full-backup-content>

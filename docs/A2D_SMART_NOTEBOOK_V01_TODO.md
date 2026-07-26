@@ -120,19 +120,29 @@ Acceptance:
 
 ## 1.2 Initialize Android
 
-- [ ] Create a Kotlin Android application in `apps/android`.
-- [ ] Use Jetpack Compose and Compose Navigation.
-- [ ] Use package namespace `com.a2d.notebook`.
-- [ ] Document the selected minimum Android API and why.
-- [ ] Add a placeholder Home screen and navigation shell.
-- [ ] Add unit and instrumentation test source sets.
-- [ ] Confirm debug installation on an emulator or device.
-- [ ] Do not add Room for canonical A2D data.
+- [x] Create a Kotlin Android application in `apps/android`.
+- [x] Use Jetpack Compose and Compose Navigation. (AGP 8.7.3 / Kotlin 2.0.21 / Compose BOM
+      2024.10.00 / navigation-compose 2.8.4 — cached Gradle wrapper distributions and a working
+      Android SDK + emulator were already present in this environment; verified end to end, not
+      just configured.)
+- [x] Use package namespace `com.a2d.notebook`.
+- [x] Document the selected minimum Android API and why. (`minSdk = 26`, reasoning in
+      `app/build.gradle.kts` — an open decision, spec/TODO leave it unspecified.)
+- [x] Add a placeholder Home screen and navigation shell. (`A2dNavHost` with a single `home`
+      route; more routes land as their screens do, spec §26.)
+- [x] Add unit and instrumentation test source sets. (`src/test` — JVM, `src/androidTest` —
+      Compose UI test that launches `MainActivity` for real.)
+- [x] Confirm debug installation on an emulator or device. (`./gradlew :app:installDebug`
+      against the pre-existing `Medium_Phone_API_36.0` AVD; confirmed independently via
+      `adb shell pm list packages`.)
+- [x] Do not add Room for canonical A2D data. (No Room dependency anywhere in this module.)
 
 Acceptance:
 
-- [ ] `./gradlew :app:assembleDebug` succeeds.
-- [ ] The placeholder application launches.
+- [x] `./gradlew :app:assembleDebug` succeeds.
+- [x] The placeholder application launches. (Proven, not just claimed: an instrumented test
+      launches `MainActivity` on the real emulator and asserts the Home screen's title is
+      displayed — `HomeScreenLaunchTest`, 0 failures.)
 
 ## 1.3 Add CI
 

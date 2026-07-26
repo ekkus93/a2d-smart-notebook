@@ -362,3 +362,65 @@ error path would catch a real ENOSPC, but that's untested against the real condi
 items above. Full workspace gate green throughout (54 tests total across the workspace: 4
 a2d-core + 18 a2d-domain + 4 a2d-ffi unit + 2 a2d-ffi binding-generation + 8 a2d-storage unit +
 18 a2d-storage integration).
+
+## 2026-07-26 — Correction: Android tooling is NOT blocked in this environment
+
+**The earlier "Milestone 1.2 not attempted: no gradle/Android Studio" note above was wrong.** I
+only checked `which gradle` (a system-wide binary), which is irrelevant — Android projects use
+the Gradle *wrapper*, not a system install. The user pointed out an emulator is available; on
+checking properly, this environment actually has: a full Android SDK (`~/Android/Sdk`, platforms
+33–37, build-tools up to 36.0.0), a pre-created AVD (`Medium_Phone_API_36.0`), working KVM access
+(`/home/phil/.../kvm` group membership confirmed), and **already-unpacked Gradle distributions**
+under `~/.gradle/wrapper/dists/` (8.7 through 9.6.0) — meaning gradle builds have run here
+successfully before. Bootstrapped `apps/android/gradlew` by invoking the unpacked
+`gradle-8.14.3/bin/gradle` binary directly (`gradle wrapper --gradle-version 8.14.3`), since there
+was no other way to generate the wrapper jar from scratch without either a system `gradle` or an
+existing wrapper to bootstrap from.
+
+**Lesson for future sessions in this repo: don't declare Android work blocked without checking
+for `~/Android/Sdk`, AVDs, and `~/.gradle/wrapper/dists` first** — updated CLAUDE.md accordingly.
+
+## 2026-07-26 — Ralph loop: Milestone 1.2 (initialize Android) — complete, verified on the emulator
+
+Built the full Kotlin + Compose Android app scaffold in `apps/android`, then proved every
+acceptance criterion against the real emulator rather than just configuring it and assuming it
+works — `assembleDebug`, `lint`, `test` (JVM unit test), `installDebug` (confirmed independently
+via `adb shell pm list packages`), and `connectedDebugAndroidTest` (a Compose UI test that
+launches `MainActivity` for real and asserts the Home screen title renders — 0 failures) all ran
+for real.
+
+**Version choices (open decisions, flagged)**:
+- AGP 8.7.3 / Kotlin 2.0.21 / Gradle 8.14.3 — picked from what was already cached locally rather
+  than the newest available, to avoid gambling on an untested combination.
+- `compileSdk`/`targetSdk` 35, not 36 — AGP 8.7.3 warns that it's only tested through
+  compileSdk 35 (36 was the platform/build-tools/AVD version otherwise available). The app runs
+  fine on the API 36 emulator regardless; compileSdk governs what the code compiles against, not
+  the device's own platform version. Bumping AGP instead of lowering compileSdk was the other
+  option; picked the lower-risk one since 8.7.3 was already a verified-working baseline.
+- `minSdk 26` (Android 8.0) — spec/TODO don't specify a floor. Picked as a modern-but-broad
+  default; reasoning is in `app/build.gradle.kts`.
+
+**Iteration notes**:
+- Renaming `mipmap-anydpi-v26` → `mipmap-anydpi` (lint: the `-v26` qualifier is redundant when
+  minSdk is already 26) broke the *incremental* build with a stale "resource not found" error
+  that a `clean` build didn't reproduce — Gradle's incremental resource merge didn't notice the
+  directory rename. Not a real bug, just a reminder that a resource-directory rename needs a
+  clean build to trust the result.
+- Fixed the two real lint findings (not just noise): added a placeholder adaptive icon (background
+  + foreground + monochrome layers, since `MonochromeLauncherIcon` wants all three) and
+  `android:dataExtractionRules`/`fullBackupContent` — the modern/legacy replacements for
+  `allowBackup`, which strengthens rather than duplicates the security reasoning already in the
+  manifest (Android's own backup must never carry the canonical SQLite library, since that would
+  bypass the app's own encrypted `.atnb` backup path).
+- Left 8 lint warnings deliberately unaddressed: 1 `OldTargetApi` (the compileSdk 35 tradeoff
+  above) and 7 `GradleDependency` (newer versions of core-ktx/activity-compose/compose-bom/
+  navigation-compose/test.ext:junit/espresso-core exist) — chasing every dependency bump risked
+  destabilizing an already-verified-working version set for no functional benefit at this stage.
+
+**Not done**: no UniFFI/Kotlin binding wiring into this Android project yet, so Milestone 2's
+"Android calls Rust and renders a typed response" acceptance criterion is still open — this
+milestone only proves the Compose/navigation/test scaffold itself. That wiring, plus the actual
+QR decoder spike ADR 0001 needs (now genuinely reachable given a real emulator exists), are the
+natural next steps.
+
+TODO 1.2 fully checked, including both acceptance criteria.

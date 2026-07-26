@@ -11,7 +11,7 @@ Two documents govern all work here:
 
 **MUST / MUST NOT / SHOULD / MAY in these documents are normative** (spec §29), not stylistic emphasis. Before implementing anything, read the relevant spec section and the matching TODO milestone. If the spec and TODO disagree, the spec wins — flag the discrepancy rather than silently picking one.
 
-The Rust workspace exists (Milestone 1.1 complete: 15 crate skeletons, `rust-toolchain.toml` pinned to `1.94.1`, `deny.toml`). Android (`apps/android`) and CI (`.github/workflows`) do not exist yet — Milestones 1.2 and 1.3.
+The Rust workspace exists (Milestone 1.1 complete: 15 crate skeletons, `rust-toolchain.toml` pinned to `1.94.1`, `deny.toml`). The Android app exists (Milestone 1.2 complete: Kotlin + Compose in `apps/android`, package `com.a2d.notebook`, `minSdk 26`) — a full Android SDK, a pre-built `Medium_Phone_API_36.0` emulator AVD, and cached Gradle wrapper distributions are available in this environment; use them rather than assuming Android work is blocked. CI (`.github/workflows`) does not exist yet — Milestone 1.3.
 
 ## Architecture: Rust is authoritative
 

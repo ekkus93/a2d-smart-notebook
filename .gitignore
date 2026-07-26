@@ -22,6 +22,7 @@ target
 
 # Android / Gradle
 apps/android/.gradle/
+apps/android/.kotlin/
 apps/android/build/
 apps/android/*/build/
 apps/android/local.properties
