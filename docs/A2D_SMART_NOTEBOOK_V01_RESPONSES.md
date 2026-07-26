@@ -1,8 +1,13 @@
 # Responses — A2D Smart Notebook v0.1 spec/TODO review
 
-**Status:** Answered and ready to apply  
+**Status:** Applied — 2026-07-26  
 **Date:** 2026-07-26  
 **Applies to:** `docs/A2D_SMART_NOTEBOOK_V01_SPEC.md` and `docs/A2D_SMART_NOTEBOOK_V01_TODO.md`
+
+All seven required edits below have been applied to the spec, TODO, and `docs/decisions/`. See
+`memory.md` for a session summary. ADR 0001 (QR encoding) and ADR 0002 (AprilTag) are both
+`Proposed`, not `Accepted` — each still requires the validation evidence its own file describes
+before the milestones that depend on it (4 and 7 respectively) may proceed past that point.
 
 These answers are authoritative for v0.1 implementation. Update the specification and TODO where directed below before beginning the affected work. Do not leave contradictory requirements in the documents.
 

@@ -48,3 +48,42 @@ Android tooling available, or for the user to confirm how they want the Gradle w
 
 TODO 1.1 checkboxes (tasks + acceptance) are ticked. Milestone 1.1 is otherwise complete per the
 "Definition of done" in `CLAUDE.md` (compiles, tests pass, no placeholders, checks green).
+
+## 2026-07-26 — /spec-todo review + applied responses
+
+Ran `/spec-todo` against the spec/TODO pair, then `/responses` to capture six open questions in
+`docs/A2D_SMART_NOTEBOOK_V01_RESPONSES.md`. The user answered all six directly in that file (via a
+separate push, pulled in here) with authoritative, detailed direction. Applied all seven required
+edits:
+
+1. **Identifier gap** — added `TextRegionId`, `TextCorrectionId`, `AnnotationId`, `ReviewItemId`,
+   `AuditEventId` to spec §13 and TODO 2.1, plus a general rule: every independently persisted,
+   referenceable, or FFI-crossing entity gets an opaque ID; embedded value objects don't.
+2. **`docs/decisions/` ADR process established** — `README.md` (process + index), `ADR_TEMPLATE.md`,
+   and two ADRs:
+   - **0001 — QR v1 wire encoding and integrity**: drafted a full concrete grammar (canonical
+     uppercase QR-alphanumeric text payload, `A2D:1:<type>:...:<crc>`, 128-bit IDs as 26-char
+     Crockford Base32 with no alias-normalization, CRC-32C as 7-char Crockford Base32, 128-char
+     max length, full strict-parser rejection list, golden-vector JSON schema). **Status:
+     Proposed, not Accepted** — the response required a real Android-decoder spike (doesn't exist
+     yet, no Android project) before acceptance; TODO 4.2/4.3 now block fixture commits on this
+     ADR reaching Accepted. **This grammar is my draft implementing the user's stated
+     requirements — it has not been reviewed by the user line-by-line and deserves a read before
+     Milestone 4 starts.**
+   - **0002 — AprilTag detector selection**: placeholder only (Milestone 7.1 hasn't run); pre-filled
+     with the required validation-evidence checklist so the spike has a predetermined home.
+   - Spec §10's repo tree and TODO Milestones 4.2/4.3/7.1 now reference the ADR directory.
+3. **Built-in skills** — added "Compare Two Scans of One Page" to TODO 14.7 (deterministic
+   alignment/diff, optional model explanation only, never inventing differences), matching spec
+   §21.2. `Ask My Notes` clarified in both spec §7.10 and TODO 14.7 as a Search-UI surface backed
+   by the same permissioned skill runtime as any other model skill — not a parallel ungoverned path.
+4. **Model provider** — TODO 14.2 now names the user-configured local-network OpenAI-compatible
+   endpoint as the required v0.1 provider (on-device/user-cloud remain architecturally supported
+   but not required; the future managed A2D provider is explicitly out of scope, a non-goal).
+   Added required deterministic test infrastructure (in-process `MockModelProvider`, fake
+   OpenAI-compatible HTTP fixture server) so CI never needs live network/API keys.
+
+Not yet done: nothing else was requested. Milestones 2, 4, 7, and 14 can now proceed without
+another clarification round, per the responses file — except ADR 0001 needs the user's read-through
+and ADR 0001/0002 both need their respective spikes before their dependent milestones pass the
+fixture-commit / detector-selection checkpoints.
