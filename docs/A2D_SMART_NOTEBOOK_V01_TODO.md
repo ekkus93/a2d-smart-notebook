@@ -81,13 +81,13 @@ crates/a2d-ffi
 
 Tasks:
 
-- [ ] Create the Rust workspace with resolver 2.
-- [ ] Pin a stable Rust toolchain.
-- [ ] Set workspace-wide edition, license, repository metadata, and lint policy.
-- [ ] Add `.gitignore` entries for Rust, Gradle, Android Studio, native builds, test output, local libraries, generated PDFs, and secrets.
-- [ ] Add a `README.md` describing A2D, local-first/accountless operation, Android-first delivery, and the authoritative Rust core.
-- [ ] Add `apps/ios/README.md` explaining that iOS UI is deferred but Swift binding generation is mandatory.
-- [ ] Verify `cargo metadata` and `cargo build --workspace`.
+- [x] Create the Rust workspace with resolver 2.
+- [x] Pin a stable Rust toolchain.
+- [x] Set workspace-wide edition, license, repository metadata, and lint policy.
+- [x] Add `.gitignore` entries for Rust, Gradle, Android Studio, native builds, test output, local libraries, generated PDFs, and secrets.
+- [x] Add a `README.md` describing A2D, local-first/accountless operation, Android-first delivery, and the authoritative Rust core.
+- [x] Add `apps/ios/README.md` explaining that iOS UI is deferred but Swift binding generation is mandatory.
+- [x] Verify `cargo metadata` and `cargo build --workspace`.
 
 Suggested skeleton:
 
@@ -115,8 +115,8 @@ members = [
 
 Acceptance:
 
-- [ ] A fresh clone builds the Rust workspace.
-- [ ] Responsibility boundaries are documented in crate-level READMEs or module docs.
+- [x] A fresh clone builds the Rust workspace.
+- [x] Responsibility boundaries are documented in crate-level READMEs or module docs.
 
 ## 1.2 Initialize Android
 

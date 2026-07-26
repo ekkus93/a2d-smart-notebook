@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/a2d-domain",
+  "crates/a2d-identity",
+  "crates/a2d-layout",
+  "crates/a2d-storage",
+  "crates/a2d-image",
+  "crates/a2d-pdf",
+  "crates/a2d-search",
+  "crates/a2d-ocr",
+  "crates/a2d-model",
+  "crates/a2d-skills",
+  "crates/a2d-backup",
+  "crates/a2d-export",
+  "crates/a2d-sync-model",
+  "crates/a2d-core",
+  "crates/a2d-ffi",
+]
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/ekkus93/a2d-smart-notebook"
+
+[workspace.lints.clippy]
+all = "warn"

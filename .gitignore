@@ -19,3 +19,43 @@ target
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Android / Gradle
+apps/android/.gradle/
+apps/android/build/
+apps/android/*/build/
+apps/android/local.properties
+apps/android/.cxx/
+apps/android/captures/
+apps/android/*.apk
+apps/android/*.aab
+
+# Android Studio
+*.iml
+.idea/
+
+# Native builds (AprilTag / other C/C++ dependencies)
+apps/android/**/cmake-build-*/
+*.so
+*.dylib
+*.dll
+
+# Test output
+*.profraw
+coverage/
+lcov.info
+
+# Local libraries / SDK paths
+local.properties
+.gradle/
+
+# Generated PDFs (Smart Pages, Notebook Designs) — not source, regenerated from layouts
+*.generated.pdf
+/tmp-pdf/
+
+# Secrets — must never be committed; model API keys live only in platform keystores
+*.env
+.env.*
+*.keystore
+*.jks
+secrets.*
