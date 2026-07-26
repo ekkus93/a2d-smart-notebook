@@ -415,11 +415,27 @@ WHERE notebook_id IS NOT NULL;
 
 ## 3.2 Repository and transaction layer
 
-- [ ] Define repository traits inside Rust.
-- [ ] Keep SQL implementations private to `a2d-storage`.
-- [ ] Add explicit transaction APIs.
-- [ ] Require transactions for notebook creation, generated page sets, scan registration, OCR replacement, and restore merge.
-- [ ] Map constraints into typed errors.
+- [x] Define repository traits inside Rust. (8 traits — `NotebookDesign`/`Notebook`/`PageSet`/
+      `Page`/`Asset`/`Scan`/`OcrRun`/`AuditEvent`Repository — scoped to what this milestone's
+      example and Milestone 3.3's asset protocol need; the other 10 tables get a repository when
+      the milestone that needs them, e.g. 11/12/13/14, arrives.)
+- [x] Keep SQL implementations private to `a2d-storage`. (All SQL strings live in
+      `repository.rs`/`lib.rs`; the traits' public signatures only ever take/return typed
+      `a2d_domain` values.)
+- [x] Add explicit transaction APIs. (`Storage::transaction`, tested.)
+- [ ] Require transactions for notebook creation, generated page sets, scan registration, OCR
+      replacement, and restore merge. (Only "scan registration" is actually demonstrated composed
+      through `Storage::transaction`, matching this section's own example almost verbatim —
+      `scan_registration_composes_through_one_transaction_matching_the_todo_example`. Notebook
+      creation and page-set generation are currently single-row inserts with nothing else to
+      compose transactionally yet — that composition is Milestone 6's job. "OCR replacement" and
+      "restore merge" aren't implemented at all: OCR runs are append-only here (each attempt is
+      its own row, no in-place replace semantics defined), and restore merge needs the backup
+      format, Milestone 13, which doesn't exist yet. Nothing here *prevents* calling a repository
+      method outside a transaction, either — there's no enforcement mechanism, only the API.)
+- [x] Map constraints into typed errors. (UNIQUE/PRIMARY KEY → `STORAGE_UNIQUE_CONSTRAINT_VIOLATION`,
+      FOREIGN KEY → `STORAGE_FOREIGN_KEY_VIOLATION`, NOT NULL → `STORAGE_NOT_NULL_VIOLATION`, all
+      `ErrorCategory::Validation` rather than a generic storage error; tested.)
 
 Example:
 
@@ -449,27 +465,54 @@ library/
 └── tmp/
 ```
 
-- [ ] Store relative paths in the database.
-- [ ] Validate paths remain inside library root.
-- [ ] Write temporary files first.
-- [ ] Flush/close, compute SHA-256, then atomically rename.
-- [ ] Mark originals immutable.
-- [ ] Detect orphan temporary files without deleting unknown files silently.
-- [ ] Commit references only after durable file creation.
+- [x] Store relative paths in the database. (`Asset.relative_path`, e.g. `assets/originals/<id>`.)
+- [x] Validate paths remain inside library root. (`AssetStore::resolve`, tested against a real
+      traversal-shaped path.)
+- [x] Write temporary files first. (`tmp/<AssetId>.tmp`.)
+- [x] Flush/close, compute SHA-256, then atomically rename. (Also re-reads the temp file after
+      flush and re-hashes it to *verify* against the in-memory hash, not just compute once and
+      trust it.)
+- [x] Mark originals immutable. (Read-only file permission bit + `Asset.immutable = true`;
+      tested.)
+- [x] Detect orphan temporary files without deleting unknown files silently.
+      (`AssetStore::list_orphaned_temp_files`; tested that it reports without deleting.)
+- [x] Commit references only after durable file creation. (`commit` only returns an `Asset` value
+      after the atomic rename succeeds; there is no code path that could construct one, and
+      therefore no path that could insert its DB row, before the rename happens.)
 
 ## 3.4 Integrity and interruption tests
 
-- [ ] Interrupt after temp write.
-- [ ] Interrupt after rename but before DB commit.
-- [ ] Force transaction rollback.
-- [ ] Detect missing assets and hash mismatches.
-- [ ] Test foreign-key failures and DB lock/busy handling.
-- [ ] Map disk-full behavior explicitly.
+- [x] Interrupt after temp write. (Simulated by writing directly into `tmp/` without going
+      through `commit`, then confirming `list_orphaned_temp_files` finds it and does not delete
+      it.)
+- [ ] Interrupt after rename but before DB commit. (Not separately tested. Structurally this
+      failure mode is already safe — `commit` never touches the database, so a process dying
+      between a successful `commit` and the caller's `insert_asset` just leaves an unreferenced
+      but durably-written file, not a dangling DB reference or corruption — but there's no
+      dedicated test proving that specific window.)
+- [x] Force transaction rollback. (`a_failing_step_rolls_back_every_earlier_write_in_the_same_transaction`.)
+- [x] Detect missing assets and hash mismatches. (`AssetStore::verify` — added during this task;
+      re-checks a previously committed asset's file against its recorded hash. Tested for both a
+      deleted file and a tampered one.)
+- [x] Test foreign-key failures and DB lock/busy handling. (FK failures: tested. Lock/busy:
+      `Storage::open`/`open_in_memory` now set and verify `PRAGMA busy_timeout` — added during
+      this task, since it wasn't set at all before, meaning any concurrent writer would have
+      failed immediately with `SQLITE_BUSY` rather than waiting; proven with a real two-thread
+      test where a second writer blocks on a held write lock and then succeeds rather than
+      erroring immediately.)
+- [ ] Map disk-full behavior explicitly. (Not tested — a genuine disk-full condition needs
+      environment-specific setup, e.g. a size-limited filesystem, not portably available here.
+      The I/O error path (`map_io_error`) already handles an arbitrary `std::io::Error` from a
+      failed write generically, which is what a real `ENOSPC` would surface through, but that's
+      untested against the real condition specifically.)
 
 Acceptance:
 
-- [ ] A committed scan can never reference an original file that was never durably written.
-- [ ] Recovery never deletes user data silently.
+- [x] A committed scan can never reference an original file that was never durably written.
+      (`asset_row_is_only_insertable_after_the_file_is_durably_renamed_into_place` — proven
+      structurally, not just asserted, per that test's own comment.)
+- [x] Recovery never deletes user data silently. (True by omission: no code in this crate deletes
+      anything automatically — `list_orphaned_temp_files` only reports, migrations only add.)
 
 ---
 

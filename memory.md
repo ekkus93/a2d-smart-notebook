@@ -285,3 +285,80 @@ already cover.
 
 Full workspace gate green throughout (34 tests total: 4 a2d-core + 18 a2d-domain + 4 a2d-ffi unit
 + 2 a2d-ffi binding-generation + 6 a2d-storage).
+
+## 2026-07-26 — Ralph loop: Milestone 3.2, 3.3, 3.4 — Milestone 3 complete
+
+User said "Continue with Milestone 3.2, 3.3 and 3.4" after the checkpoint above.
+
+**Found and fixed a real gap from Milestone 2.3 first**: every entity except `Page` only had an
+`id()` getter, no public constructor — fine for enforcing "identity cannot change after
+creation," but it meant nothing outside `a2d-domain` (including the repository layer this task
+needed to write) could reconstruct an entity from a database row. Added `new()` to
+`NotebookDesign`, `Notebook`, `Asset`, `Scan`, `PageSet`, `OcrRun`, `AuditEvent`, and a
+`Page::from_stored` alongside the existing `Page::new` (which defaults `preferred_scan_id`/
+`updated_at_ms` — the storage layer needs to set those explicitly when reading a row back, not
+default them). Committed this separately since it's a standalone, separable correction to 2.3,
+not new 3.2 work.
+
+**3.2 — repository layer**: 8 traits (`NotebookDesign`/`Notebook`/`PageSet`/`Page`/`Asset`/`Scan`/
+`OcrRun`/`AuditEvent`Repository), implemented directly on `rusqlite::Connection` rather than a
+custom wrapper — `Transaction` derefs to `Connection`, so the exact same method call
+(`tx.insert_page(...)`) works both inside and outside a transaction without a second
+implementation. `Storage` re-implements each trait by delegating to its own connection (via a
+small macro, `delegate_repository!`, to avoid hand-copying 8 near-identical delegation blocks).
+Scoped to what this milestone's own transaction example and 3.3's asset protocol actually need
+(7 entities) rather than all 18 tables — the rest arrive with the milestone that needs them.
+
+List/map-shaped columns round-trip through `serde_json` (`json_columns.rs`), fallibly in both
+directions — a corrupt JSON column or an unrecognized enum string reads back as an `Integrity`
+error, never silently defaults to empty (tested: `a_corrupt_enum_column_fails_closed_instead_of_defaulting`).
+SQLite constraint violations (UNIQUE/PRIMARY KEY/FOREIGN KEY/NOT NULL) map to specific
+`STORAGE_*_VIOLATION` codes under `ErrorCategory::Validation`, not a generic storage error,
+by reading `rusqlite`'s extended result codes.
+
+**TODO 3.2's "require transactions for X" bullet is only partially honest-checked** — only "scan
+registration" is actually demonstrated composed through `Storage::transaction` (mirrors the
+TODO's own example almost verbatim). Notebook creation and page-set generation are single-row
+inserts right now with nothing else yet to compose transactionally (that composition is
+Milestone 6's job); "OCR replacement" and "restore merge" aren't implemented at all — OCR runs
+are append-only here (no replace semantics defined), and restore merge needs the backup format,
+Milestone 13. Left that checkbox unchecked with this explanation rather than claim more than what
+exists.
+
+**3.3 — asset commit protocol** (`assets.rs`, spec §16.3): temp write → flush/close → compute
+*and verify* SHA-256 (re-reads the temp file after flush and re-hashes it, rather than trusting
+the in-memory bytes were what actually landed on disk) → atomic rename → caller commits the DB
+row separately. Deliberately does NOT touch the database itself — kept `AssetStore` (filesystem)
+and the DB repository separate on purpose, so a caller composing a larger transaction (e.g. a
+future scan registration: asset + scan + page update, all one commit) calls `AssetStore::commit`
+first, then folds `Storage::transaction`'s repository calls around its result.
+`sha2` added as a new dependency (RustCrypto, small, permissively licensed). Originals get marked
+read-only on disk via `std::fs::Permissions::set_readonly` (portable, not Unix-specific) in
+addition to the `immutable` DB flag. `resolve()` defends against a corrupted/tampered
+`relative_path` value by canonicalizing and checking containment against the library root before
+ever returning a path — writes don't need this (paths are always self-generated from an
+`AssetId`), but reads do, defensively.
+
+**3.4 — integrity/interruption tests surfaced two real gaps I fixed as part of this task**,
+not just tested existing behavior:
+1. No way to re-verify a previously committed asset against the filesystem later (only checked at
+   write time). Added `AssetStore::verify` — checks the file still exists and still hashes to the
+   recorded value, both `Integrity`-category errors, not silently accepted.
+2. `Storage::open`/`open_in_memory` never set `PRAGMA busy_timeout` (rusqlite's default is 0ms),
+   meaning any second writer would have failed immediately with `SQLITE_BUSY` instead of waiting
+   for the lock to clear. Set to 5000ms (a starting default, not a measured threshold, flagged
+   inline like the journaling-mode choice) and verified by re-querying, same pattern as
+   foreign_keys/journal_mode. Proved with a real two-thread test: one thread holds a write
+   transaction for 300ms, the other's write blocks and then succeeds rather than erroring
+   immediately (asserts elapsed time, not just success).
+
+Two 3.4 bullets left honestly unchecked: "interrupt after rename but before DB commit" (this
+failure mode is already structurally safe by the `AssetStore`/`Storage` split, but has no
+dedicated test proving that specific window) and "map disk-full behavior explicitly" (needs a
+genuine size-limited filesystem to test against, not portably available here — the generic I/O
+error path would catch a real ENOSPC, but that's untested against the real condition).
+
+**Milestone 3 (Rust-owned SQLite and assets) is now complete**, modulo the honestly-unchecked
+items above. Full workspace gate green throughout (54 tests total across the workspace: 4
+a2d-core + 18 a2d-domain + 4 a2d-ffi unit + 2 a2d-ffi binding-generation + 8 a2d-storage unit +
+18 a2d-storage integration).

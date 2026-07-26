@@ -17,9 +17,17 @@ use std::path::Path;
 
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
+mod assets;
+mod json_columns;
 mod migrations;
+mod repository;
 
+pub use assets::AssetStore;
 pub use migrations::{MIGRATIONS, Migration};
+pub use repository::{
+    AssetRepository, AuditEventRepository, NotebookDesignRepository, NotebookRepository,
+    OcrRunRepository, PageRepository, PageSetRepository, ScanRepository,
+};
 
 /// An open library database. Owns a single `rusqlite::Connection` — no connection pool in v1;
 /// this crate is not yet responsible for concurrent multi-threaded access (TODO 3.2 will decide
@@ -50,6 +58,29 @@ fn map_io_error(context: &str, err: std::io::Error) -> A2dError {
         true,
     )
     .with_detail("context", context)
+}
+
+/// 5 seconds — a starting default, not a measured threshold (CLAUDE.md: "don't invent
+/// thresholds"). Governs how long a writer waits on `SQLITE_BUSY` from a concurrent connection
+/// before failing (TODO 3.4: "test foreign-key failures and DB lock/busy handling") rather than
+/// failing immediately, which rusqlite's default (0ms) would do.
+const BUSY_TIMEOUT_MS: u32 = 5_000;
+
+fn set_busy_timeout(conn: &rusqlite::Connection) -> Result<(), A2dError> {
+    let applied: i64 = conn
+        .pragma_update_and_check(None, "busy_timeout", BUSY_TIMEOUT_MS, |row| row.get(0))
+        .map_err(|e| map_rusqlite_error("setting busy_timeout", e))?;
+    if applied != BUSY_TIMEOUT_MS as i64 {
+        return Err(A2dError::new(
+            ErrorCode::new("STORAGE_BUSY_TIMEOUT_NOT_SET"),
+            ErrorCategory::Integrity,
+            ErrorSeverity::Critical,
+            "error.storage.busy_timeout_not_set",
+            format!("SQLite reported busy_timeout={applied}, expected {BUSY_TIMEOUT_MS}"),
+            false,
+        ));
+    }
+    Ok(())
 }
 
 impl Storage {
@@ -100,6 +131,8 @@ impl Storage {
         conn.pragma_update(None, "synchronous", "NORMAL")
             .map_err(|e| map_rusqlite_error("setting synchronous=NORMAL", e))?;
 
+        set_busy_timeout(&conn)?;
+
         let mut storage = Self { conn };
         storage.migrate()?;
         Ok(storage)
@@ -112,6 +145,7 @@ impl Storage {
             .map_err(|e| map_rusqlite_error("opening an in-memory database", e))?;
         conn.pragma_update(None, "foreign_keys", true)
             .map_err(|e| map_rusqlite_error("enabling foreign_keys", e))?;
+        set_busy_timeout(&conn)?;
         let mut storage = Self { conn };
         storage.migrate()?;
         Ok(storage)
@@ -189,7 +223,92 @@ impl Storage {
             )
             .map_err(|e| map_rusqlite_error("reading schema_version", e))
     }
+
+    /// Runs `f` inside a transaction, committing only if `f` returns `Ok`. TODO 3.2 requires
+    /// transactions for notebook creation, generated page sets, scan registration, OCR
+    /// replacement, and restore merge — none of those are single-repository-call operations, so
+    /// this is the API each of them composes multiple repository calls through, e.g.:
+    ///
+    /// ```ignore
+    /// storage.transaction(|tx| {
+    ///     tx.insert_page(&page)?;
+    ///     tx.insert_scan(&scan)?;
+    ///     tx.set_preferred_scan(page.id(), scan.id())?;
+    ///     tx.insert_audit_event(&event)?;
+    ///     Ok(())
+    /// })
+    /// ```
+    ///
+    /// `f` returning `Err` (including a repository call failing) rolls the transaction back —
+    /// `rusqlite::Transaction` rolls back on drop unless explicitly committed, so an early `?`
+    /// return is enough; nothing here has to reimplement rollback.
+    pub fn transaction<T>(
+        &mut self,
+        f: impl FnOnce(&rusqlite::Transaction) -> Result<T, A2dError>,
+    ) -> Result<T, A2dError> {
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| map_rusqlite_error("starting transaction", e))?;
+        let result = f(&tx)?;
+        tx.commit()
+            .map_err(|e| map_rusqlite_error("committing transaction", e))?;
+        Ok(result)
+    }
 }
+
+macro_rules! delegate_repository {
+    ($trait_name:ident { $(fn $method:ident(&self $(, $arg:ident : $arg_ty:ty)*) -> Result<$ret:ty, A2dError>;)+ }) => {
+        impl repository::$trait_name for Storage {
+            $(
+                fn $method(&self $(, $arg: $arg_ty)*) -> Result<$ret, A2dError> {
+                    repository::$trait_name::$method(&self.conn $(, $arg)*)
+                }
+            )+
+        }
+    };
+}
+
+delegate_repository!(NotebookDesignRepository {
+    fn insert_notebook_design(&self, design: &a2d_domain::NotebookDesign) -> Result<(), A2dError>;
+    fn get_notebook_design(&self, id: &a2d_domain::NotebookDesignId) -> Result<Option<a2d_domain::NotebookDesign>, A2dError>;
+});
+
+delegate_repository!(NotebookRepository {
+    fn insert_notebook(&self, notebook: &a2d_domain::Notebook) -> Result<(), A2dError>;
+    fn get_notebook(&self, id: &a2d_domain::NotebookId) -> Result<Option<a2d_domain::Notebook>, A2dError>;
+});
+
+delegate_repository!(PageSetRepository {
+    fn insert_page_set(&self, page_set: &a2d_domain::PageSet) -> Result<(), A2dError>;
+    fn get_page_set(&self, id: &a2d_domain::PageSetId) -> Result<Option<a2d_domain::PageSet>, A2dError>;
+});
+
+delegate_repository!(PageRepository {
+    fn insert_page(&self, page: &a2d_domain::Page) -> Result<(), A2dError>;
+    fn get_page(&self, id: &a2d_domain::PageId) -> Result<Option<a2d_domain::Page>, A2dError>;
+    fn set_preferred_scan(&self, page_id: &a2d_domain::PageId, scan_id: &a2d_domain::ScanId) -> Result<(), A2dError>;
+});
+
+delegate_repository!(AssetRepository {
+    fn insert_asset(&self, asset: &a2d_domain::Asset) -> Result<(), A2dError>;
+    fn get_asset(&self, id: &a2d_domain::AssetId) -> Result<Option<a2d_domain::Asset>, A2dError>;
+});
+
+delegate_repository!(ScanRepository {
+    fn insert_scan(&self, scan: &a2d_domain::Scan) -> Result<(), A2dError>;
+    fn get_scan(&self, id: &a2d_domain::ScanId) -> Result<Option<a2d_domain::Scan>, A2dError>;
+});
+
+delegate_repository!(OcrRunRepository {
+    fn insert_ocr_run(&self, run: &a2d_domain::OcrRun) -> Result<(), A2dError>;
+    fn get_ocr_run(&self, id: &a2d_domain::OcrRunId) -> Result<Option<a2d_domain::OcrRun>, A2dError>;
+});
+
+delegate_repository!(AuditEventRepository {
+    fn insert_audit_event(&self, event: &a2d_domain::AuditEvent) -> Result<(), A2dError>;
+    fn get_audit_event(&self, id: &a2d_domain::AuditEventId) -> Result<Option<a2d_domain::AuditEvent>, A2dError>;
+});
 
 impl fmt::Debug for Storage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -320,6 +439,84 @@ mod tests {
         }
         let err = Storage::open(&db_path).unwrap_err();
         assert!(err.code.to_string().contains("MIGRATION_IDENTITY_MISMATCH"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_corrupt_enum_column_fails_closed_instead_of_defaulting() {
+        use crate::PageRepository;
+
+        let storage = Storage::open_in_memory().unwrap();
+        let page_id = a2d_domain::PageId::generate();
+        let smart_page_id = a2d_domain::SmartPageId::generate();
+        // Bypass the repository layer entirely to write a `state` value its enum mapper doesn't
+        // recognize -- simulates the kind of corruption a disk fault or a bug in a future writer
+        // could cause. A real Page can never carry this value; a raw statement can.
+        storage
+            .conn
+            .execute(
+                "INSERT INTO pages (id, kind, smart_page_id, layout_id, state, created_at_ms, \
+                 updated_at_ms) VALUES (?1, 'smart_page', ?2, 'PAGE', 'NotARealState', 0, 0)",
+                rusqlite::params![page_id.to_string(), smart_page_id.to_string()],
+            )
+            .unwrap();
+
+        let err = storage.get_page(&page_id).unwrap_err();
+        assert_eq!(err.category, a2d_domain::ErrorCategory::Integrity);
+        assert!(err.code.to_string().contains("CORRUPT_ENUM_COLUMN"));
+    }
+
+    #[test]
+    fn a_second_writer_waits_for_busy_timeout_instead_of_failing_immediately() {
+        let dir = std::env::temp_dir().join(format!(
+            "a2d-storage-test-{}",
+            a2d_domain::PageId::generate()
+        ));
+        let db_path = dir.join("library.sqlite");
+        {
+            // Ensure the schema/file exist before the two threads race to open it.
+            Storage::open(&db_path).unwrap();
+        }
+
+        let holder_path = db_path.clone();
+        let holder = std::thread::spawn(move || {
+            let mut storage = Storage::open(&holder_path).unwrap();
+            storage
+                .transaction(|tx| {
+                    tx.execute(
+                        "INSERT INTO settings (key, value, updated_at_ms) VALUES ('holder', 'v', 0)",
+                        [],
+                    )
+                    .expect("holder insert must succeed");
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    Ok(())
+                })
+                .unwrap();
+        });
+
+        // Give the holder thread time to acquire the write lock before this thread tries too.
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        let mut writer = Storage::open(&db_path).unwrap();
+        let start = std::time::Instant::now();
+        writer
+            .transaction(|tx| {
+                tx.execute(
+                    "INSERT INTO settings (key, value, updated_at_ms) VALUES ('other', 'v', 0)",
+                    [],
+                )
+                .expect("second writer insert must eventually succeed, not fail immediately");
+                Ok(())
+            })
+            .unwrap();
+        let elapsed = start.elapsed();
+        holder.join().unwrap();
+
+        assert!(
+            elapsed >= std::time::Duration::from_millis(150),
+            "expected the second writer to block waiting for the lock rather than fail \
+             immediately with SQLITE_BUSY; elapsed={elapsed:?}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }
