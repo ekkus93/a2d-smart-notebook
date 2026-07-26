@@ -239,22 +239,29 @@ pub struct A2dError {
 
 Implement:
 
-- [ ] `NotebookDesign`
-- [ ] `Notebook`
-- [ ] `Page`
-- [ ] `PhysicalCopy`
-- [ ] `Scan`
-- [ ] `Asset`
-- [ ] `PageSet`
-- [ ] `Collection`
-- [ ] `ReviewItem`
-- [ ] `OcrRun`
-- [ ] `TextRegion`
-- [ ] `TextCorrection`
-- [ ] `Annotation`
-- [ ] `SkillDefinition`
-- [ ] `SkillRun`
-- [ ] `AuditEvent`
+- [x] `NotebookDesign`
+- [x] `Notebook`
+- [x] `Page`
+- [x] `PhysicalCopy`
+- [x] `Scan`
+- [x] `Asset`
+- [x] `PageSet`
+- [x] `Collection`
+- [x] `ReviewItem`
+- [x] `OcrRun`
+- [x] `TextRegion`
+- [x] `TextCorrection`
+- [x] `Annotation`
+- [x] `SkillDefinition`
+- [x] `SkillRun`
+- [x] `AuditEvent`
+
+Spec §15 gives full field lists only for `NotebookDesign`/`Notebook`/`Page`/`PhysicalCopy`/`Scan`/
+`Asset`; the rest (`PageSet`, `Collection`, `ReviewItem`'s field shape, `OcrRun`, `TextRegion`,
+`TextCorrection`, `Annotation`, `SkillDefinition`, `SkillRun`, `AuditEvent`) are described only in
+prose elsewhere in the spec/TODO. Their fields in `a2d-domain/src/entities.rs` are inferred and
+marked `INFERRED` in each doc comment — flagged in `memory.md` for review, since several will need
+revisiting once Milestones 5/7/14 pin down real requirements (layouts, markers, skill permissions).
 
 Suggested page kind:
 
@@ -275,14 +282,27 @@ pub enum PageKind {
 
 Enforce:
 
-- [ ] Notebook Page requires notebook, design, and logical page number.
-- [ ] Smart Page requires a unique Smart Page ID.
-- [ ] Page identity cannot change after creation.
-- [ ] Preferred scan belongs to the same page.
-- [ ] A scan always references an immutable original asset.
-- [ ] Physical-copy index is unique per page.
-- [ ] Derived records identify source and producer.
-- [ ] Trashed records retain identity until permanent deletion.
+- [x] Notebook Page requires notebook, design, and logical page number. (Compiler-enforced:
+      `PageKind::NotebookPage` cannot be constructed without all three.)
+- [ ] Smart Page requires a **unique** Smart Page ID. (The "requires a Smart Page ID" half is
+      compiler-enforced the same way; *uniqueness* spans the whole table and belongs to the
+      storage layer's unique index, Milestone 3.1 — not checkable from a single `Page`.)
+- [x] Page identity cannot change after creation. (`Page::id` — and every other entity's `id` —
+      is private with a getter and no setter.)
+- [x] Preferred scan belongs to the same page. (`Page::set_preferred_scan` rejects a scan
+      belonging to a different page; tested.)
+- [ ] A scan always references an immutable original asset. (`Scan.original_asset_id` is
+      required and `Asset.immutable` exists as a field, but nothing here checks that the
+      *referenced* asset actually has `immutable = true` — that requires looking the asset up,
+      which is the storage layer's job, Milestone 3.)
+- [ ] Physical-copy index is unique per page. (Cross-record uniqueness; storage-layer unique
+      index, Milestone 3.1, same as the Smart Page ID item above.)
+- [x] Derived records identify source and producer. (`OcrRun`, `TextCorrection`, `Annotation`,
+      and `SkillRun` all require a non-optional `Provenance`, which itself requires
+      `producing_component`/`component_version`.)
+- [ ] Trashed records retain identity until permanent deletion. (`PageState::Trashed` exists as
+      structural support, but the actual trash/restore/permanent-delete workflow that guarantees
+      this belongs to Milestones 3 and 10.)
 
 ## 2.4 UniFFI boundary
 

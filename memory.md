@@ -132,3 +132,55 @@ Both landed in `a2d-domain` (chosen over `a2d-identity`, which owns registration
 
 TODO 2.1 fully checked. TODO 2.2 checked except the two items above. Full workspace gate
 (`fmt --check`, `clippy -D warnings`, `test --all-features`) green throughout.
+
+## 2026-07-26 — Ralph loop: Milestone 2.3 (domain entities)
+
+All 16 entities in `a2d-domain/src/entities.rs`. This task had far more assumption surface than
+2.1/2.2: spec §15 gives complete field lists for only 6 of the 16 entities (`NotebookDesign`,
+`Notebook`, `Page`, `PhysicalCopy`, `Scan`, `Asset`); the other 10 (`PageSet`, `Collection`,
+`ReviewItem`, `OcrRun`, `TextRegion`, `TextCorrection`, `Annotation`, `SkillDefinition`,
+`SkillRun`, `AuditEvent`) are described only in prose. Every inferred entity is marked `INFERRED`
+in its doc comment with a citation to what prose it was drawn from. **These will need a real
+review pass once their owning milestones land** — most likely to shift: `SkillDefinition`/
+`SkillRun` (Milestone 14 owns the actual permission model; I deliberately kept permissions/
+network/mutation_policy as bare strings rather than guessing at enums, to avoid diverging from
+whatever 14 actually defines), and `NotebookDesign`'s marker-related fields (Milestone 7 hasn't
+picked AprilTag vs. pure-Rust yet).
+
+New supporting types added beyond spec's literal §15 field lists, each justified inline in the
+code:
+
+- **`LayoutId`** — spec references `layout_id`/`setup_layout_id`/`page_layout_id` throughout but
+  never lists it in §13's core-identifier list. Added as a distinct newtype (short registry
+  token, not a 128-bit random ID) because a raw `String` would violate the "opaque newtype, never
+  raw string" rule. Its validation shape (1-20 uppercase alphanumeric/hyphen) matches what ADR
+  0001 already specifies for layout ids embedded in QR payloads. **This is my own addition, not
+  something reviewed in the responses file — flagging explicitly**, unlike the
+  ReviewItemId/AnnotationId/AuditEventId additions, which the user directly requested.
+  `a2d-layout` (Milestone 5) will own the actual registry `LayoutId` values are validated against.
+- **`Provenance`** (embedded, no ID) — spec §15.10's "source page/scan IDs, producing component,
+  version, timestamp, warnings, approval state" as a struct, attached to `OcrRun`, `TextCorrection`,
+  `Annotation`, `SkillRun`.
+- **`TrimSizeMm`, `TrustState`, `PageState`, `QualityStatus`, `CaptureSource`, `AssetKind`,
+  `EncryptionState`, `ReviewItemKind`, `ReviewItemStatus`, `SkillRunStatus`** — small enums/structs
+  for fields spec names but doesn't give a value set for (or, for `PageState`/`QualityStatus`,
+  where spec gives an explicit example set). Deliberately did NOT add types for `manifest_hash`/
+  `sha256` (kept as plain `String` rather than a `Sha256Digest` newtype) or `marker_family`/
+  `marker_role_ids` (kept as `String`/`Vec<String>`) — these need real design work belonging to
+  Milestones 5/7/16, not 2.3, and inventing a representation now risked being wrong twice.
+
+Every entity's `id` field is private with a getter-only accessor (no setter anywhere in this
+crate), which is how "identity cannot change after creation" is actually enforced — applied to
+all 16 entities, not just `Page`, since spec states it for `Page` but the same reasoning holds
+everywhere.
+
+Of TODO 2.3's 8 "Enforce" bullets, 3 are checked as genuinely enforced here (compiler-enforced
+`PageKind` variants, `id` immutability, `Page::set_preferred_scan`'s same-page check — the one
+cross-record invariant a single call site can actually verify) and 1 more partially
+(`Provenance`'s non-optional fields for derived records). The remaining bullets — Smart Page ID
+*uniqueness*, physical-copy index uniqueness, "scan references an immutable asset" (requires
+looking the asset up), and the trash/permanent-delete lifecycle — all span more than one record
+or need a lookup, so they're deferred to the storage layer (Milestone 3) and left unchecked with
+inline notes in the TODO rather than marked done.
+
+Full workspace gate green (18 tests total in a2d-domain now).
