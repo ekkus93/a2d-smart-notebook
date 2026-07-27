@@ -38,6 +38,12 @@ jobs:
               row_loop = lines.index("        for row in 0..8 {")
               lines.insert(row_loop, "        let pivot_values = augmented[column];")
 
+              row_loop += 1
+              lines[row_loop] = "        for (row, target_row) in augmented.iter_mut().enumerate() {"
+
+              factor_line = lines.index("            let factor = augmented[row][column];")
+              lines[factor_line] = "            let factor = target_row[column];"
+
               indexed_loop = lines.index("            for item in column..9 {")
               expected = [
                   "            for item in column..9 {",
@@ -47,7 +53,7 @@ jobs:
               if lines[indexed_loop:indexed_loop + 3] != expected:
                   raise SystemExit("unexpected indexed elimination loop")
               lines[indexed_loop:indexed_loop + 3] = [
-                  "            for (target, pivot) in augmented[row][column..]",
+                  "            for (target, pivot) in target_row[column..]",
                   "                .iter_mut()",
                   "                .zip(&pivot_values[column..])",
                   "            {",
