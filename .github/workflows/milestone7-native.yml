@@ -15,25 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  resolution-snapshot:
-    name: Resolve lockfile and formatted Rust sources
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Apply canonical Rust formatting
-        run: cargo fmt --all
-      - name: Resolve dependency graph and compile image crate
-        run: cargo check -p a2d-image --all-features
-      - name: Upload resolution snapshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: milestone7-resolution-snapshot
-          path: |
-            Cargo.lock
-            crates/a2d-image/Cargo.toml
-            crates/a2d-image/src
-          if-no-files-found: error
-
   desktop-and-android:
     name: Desktop detector and Android native ABIs
     runs-on: ubuntu-24.04
