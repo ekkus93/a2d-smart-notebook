@@ -2,11 +2,11 @@ use a2d_domain::A2dError;
 
 use crate::error::validation_error;
 
-/// The only pixel format accepted by the initial shared detector boundary.
-/// Camera adapters must extract the luminance plane without Base64 or JSON.
+/// Pixel formats accepted or produced by the current shared image boundaries.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PixelFormat {
     Gray8,
+    Rgb8,
 }
 
 /// Clockwise rotation required to display the supplied pixels upright.
