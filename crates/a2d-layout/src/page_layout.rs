@@ -71,8 +71,13 @@ pub enum ContentStyle {
 pub struct PageLayout {
     pub id: LayoutId,
     pub physical_size: PhysicalSize,
-    /// Printer-safe margin, inset from every edge: nothing meaningful may be placed closer to
-    /// the edge than this (spec §11.4 "no critical content in printer trim-risk regions").
+    /// Printer-safe margin: the smallest inset used on any edge. `validate` checks every element
+    /// against a uniform inset of this size on all four sides, so a layout with one wider edge
+    /// margin than the others (e.g. a bound notebook's gutter exclusion, Milestone 5.3) still
+    /// validates correctly — that edge's elements simply sit further inside the uniform floor
+    /// than strictly required. The real per-edge insets are visible from the element positions
+    /// themselves, not from this one field (spec §11.4 "no critical content in printer
+    /// trim-risk regions").
     pub safe_margin_mm: f64,
     /// Required clear buffer around every machine-readable element (the four markers and the QR
     /// rect) — spec §11.4 "quiet zone around all machine-readable markers".

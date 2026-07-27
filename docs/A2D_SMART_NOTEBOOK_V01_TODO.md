@@ -776,13 +776,47 @@ them.
 
 ## 5.3 Bound-notebook layout
 
-- [ ] Record the first trim-size decision.
-- [ ] Define a larger left/gutter exclusion.
-- [ ] Define fixed recto orientation.
-- [ ] Define Setup Page and writable page layouts.
-- [ ] Define logical numbering independent of manuscript PDF page number.
-- [ ] Generate blank verso pages.
-- [ ] Generate a complete proof interior PDF.
+- [x] Record the first trim-size decision. `crates/a2d-layout/src/notebook.rs::NOTEBOOK_TRIM_SIZE_MM`
+      — 152mm x 229mm (6in x 9in), a common print-on-demand journal trim, recorded as a starting
+      assumption per CLAUDE.md's open-decisions policy (not measured/validated until Milestone
+      17). `crates/a2d-layout/manifests/dev-placeholder.json`'s `trim_width_mm`/`trim_height_mm`
+      updated to match, so the placeholder manifest and this layout module agree.
+- [x] Define a larger left/gutter exclusion. `GUTTER_MARGIN_MM = 20.0` vs. `OUTER_MARGIN_MM =
+      6.0` for the other three edges, threaded through `layout_builder::build_layout`'s
+      `left_margin_mm` parameter (shared with Milestone 5.2, `left_margin_mm == margin_mm` there
+      since Smart Pages have no gutter). Test:
+      `the_gutter_exclusion_is_wider_than_the_outer_margin`.
+- [x] Define fixed recto orientation. Structural, not a flag: this module defines only
+      `setup_page_layout`/`writable_page_layout` (both recto). There is no verso `PageLayout`
+      constructor at all — a verso page has no markers, no QR, no content geometry, so there is
+      nothing for one to return (spec: "Verso pages remain blank in v0.1"). See the module doc
+      comment for why this is enforced by omission rather than an enum variant.
+- [x] Define Setup Page and writable page layouts. `setup_page_layout()` (no visible page number)
+      and `writable_page_layout()` (has one), both built from the shared `build_layout` helper
+      introduced this task (extracted from Milestone 5.2's `smart_page_layout`, which now calls
+      it too rather than duplicating the geometry logic). Layout ids (`DEV-SETUP-V1`,
+      `DEV-PAGE-V1`) intentionally match the placeholder manifest's `setup_layout_id`/
+      `page_layout_id` from Milestone 4.4.
+- [x] Define logical numbering independent of manuscript PDF page number.
+      `pdf_page_number_for_logical_page`: logical page 1 → PDF page 3, logical page 2 → PDF page
+      5, and so on (PDF page 1 is the Setup Page, page 2 its blank verso, and every logical page
+      after that consumes one recto PDF page plus the blank verso immediately before it). Tests
+      confirm the mapping is deterministic, strictly increasing by 2, and never equal to the
+      logical page number itself.
+- [ ] Generate blank verso pages. Deferred to Milestone 5.4 (PDF renderer) — this task defines
+      layout geometry, not PDF bytes; there's nothing to "generate" yet without a renderer.
+- [ ] Generate a complete proof interior PDF. Same as above — Milestone 5.4's job once the PDF
+      renderer exists; this task's layouts are what it will render from.
+
+19 new tests in `crates/a2d-layout/src/notebook.rs`, 43 total in the crate now (up from 32),
+`cargo test -p a2d-layout`. One real geometry bug caught by the tests themselves: the original
+Milestone 5.2 number-placement formula (page number positioned a fixed horizontal offset right of
+the QR) assumed enough page width for that offset plus the number's own width before reaching the
+bottom-right marker's quiet zone — true for Letter/A4's ~210mm+ width, false for the notebook's
+152mm trim, where `writable_page_layout` initially failed `validate()` with a genuine quiet-zone
+violation. Fixed by moving the visible page number into its own reserved horizontal strip above
+the marker/QR row (works regardless of page width) rather than composing correctly only for the
+paper sizes it happened to be tested against first.
 
 ## 5.4 PDF renderer
 
