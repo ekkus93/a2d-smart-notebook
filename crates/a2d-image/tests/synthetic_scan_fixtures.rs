@@ -73,17 +73,26 @@ fn every_generated_png_runs_through_shared_decode_and_quality_measurement() {
         let metrics = measure_gray_quality(frame, measurement_config)
             .unwrap_or_else(|error| panic!("failed to measure {relative_path}: {error}"));
 
-        assert!(metrics.exposure.mean_luminance.is_finite(), "{relative_path}");
+        assert!(
+            metrics.exposure.mean_luminance.is_finite(),
+            "{relative_path}"
+        );
         assert!(
             metrics.exposure.luminance_standard_deviation.is_finite(),
             "{relative_path}"
         );
-        assert!(metrics.exposure.dark_fraction.is_finite(), "{relative_path}");
+        assert!(
+            metrics.exposure.dark_fraction.is_finite(),
+            "{relative_path}"
+        );
         assert!(
             metrics.exposure.highlight_fraction.is_finite(),
             "{relative_path}"
         );
-        assert!(metrics.glare.max_tile_highlight_fraction.is_finite(), "{relative_path}");
+        assert!(
+            metrics.glare.max_tile_highlight_fraction.is_finite(),
+            "{relative_path}"
+        );
         assert!(metrics.focus.is_some(), "{relative_path}");
     }
 }
@@ -97,7 +106,11 @@ fn canonical_page_detects_and_resolves_the_expected_official_markers() {
 
     let ids: BTreeSet<_> = detections.iter().map(|detection| detection.id).collect();
     assert_eq!(ids, BTreeSet::from([0, 1, 2, 3]));
-    assert!(detections.iter().all(|detection| detection.hamming_errors == 0));
+    assert!(
+        detections
+            .iter()
+            .all(|detection| detection.hamming_errors == 0)
+    );
 
     let layout = MarkerIdLayout::new([
         (0, MarkerRole::TopLeft),
