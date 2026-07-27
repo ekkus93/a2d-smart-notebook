@@ -71,8 +71,8 @@ jobs:
           git rm -f .github/workflows/milestone6-android-apply.yml
           git rm -f .github/workflows/milestone6-cleanup.yml
           git rm -f docs/MILESTONE6_VALIDATION_PASS.md
-          rm -f docs/MILESTONE6_FINAL_VALIDATION_FAILURE.md
-          git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md docs/MILESTONE6_FINAL_VALIDATION_FAILURE.md
+          git rm -f --ignore-unmatch docs/MILESTONE6_FINAL_VALIDATION_FAILURE.md
+          git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
