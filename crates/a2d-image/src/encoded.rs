@@ -268,23 +268,7 @@ impl<'a> EncodedImage<'a> {
             ));
         }
 
-        let row_stride = usize::try_from(width)
-            .ok()
-            .and_then(|value| value.checked_mul(3))
-            .ok_or_else(|| {
-                validation_error(
-                    "IMAGE_STRIDE_INVALID",
-                    format!("RGB row stride overflow for width {width}"),
-                )
-            })?;
-
-        Ok(OwnedRgbImage {
-            width,
-            height,
-            row_stride,
-            rotation: self.rotation,
-            bytes,
-        })
+        OwnedRgbImage::from_tight(width, height, self.rotation, bytes)
     }
 
     fn read_dimensions(self) -> Result<(u32, u32), A2dError> {
@@ -316,6 +300,52 @@ pub struct OwnedRgbImage {
 }
 
 impl OwnedRgbImage {
+    pub(crate) fn from_tight(
+        width: u32,
+        height: u32,
+        rotation: ImageRotation,
+        bytes: Vec<u8>,
+    ) -> Result<Self, A2dError> {
+        let pixel_count = checked_pixel_count(width, height)?;
+        let required_bytes = pixel_count.checked_mul(3).ok_or_else(|| {
+            validation_error(
+                "IMAGE_BUFFER_SIZE_OVERFLOW",
+                format!("RGB buffer size overflow for {width}x{height}"),
+            )
+        })?;
+        let required_bytes = usize::try_from(required_bytes).map_err(|_| {
+            validation_error(
+                "IMAGE_BUFFER_SIZE_UNSUPPORTED",
+                "RGB buffer does not fit this platform's address space",
+            )
+        })?;
+        if bytes.len() != required_bytes {
+            return Err(validation_error(
+                "IMAGE_RGB_BUFFER_LENGTH_INVALID",
+                format!(
+                    "RGB buffer has {} bytes but {required_bytes} are required",
+                    bytes.len()
+                ),
+            ));
+        }
+        let row_stride = usize::try_from(width)
+            .ok()
+            .and_then(|value| value.checked_mul(3))
+            .ok_or_else(|| {
+                validation_error(
+                    "IMAGE_STRIDE_INVALID",
+                    format!("RGB row stride overflow for width {width}"),
+                )
+            })?;
+        Ok(Self {
+            width,
+            height,
+            row_stride,
+            rotation,
+            bytes,
+        })
+    }
+
     pub const fn width(&self) -> u32 {
         self.width
     }
@@ -355,13 +385,12 @@ impl OwnedRgbImage {
             )
         })?;
         let gray = DynamicImage::ImageRgb8(rgb).into_luma8();
-        let image = OwnedGrayImage {
-            width: self.width,
-            height: self.height,
-            row_stride: self.width as usize,
-            rotation: self.rotation,
-            bytes: gray.into_raw(),
-        };
+        let image = OwnedGrayImage::from_tight(
+            self.width,
+            self.height,
+            self.rotation,
+            gray.into_raw(),
+        )?;
         image.as_frame(limits)?;
         Ok(image)
     }
@@ -378,6 +407,43 @@ pub struct OwnedGrayImage {
 }
 
 impl OwnedGrayImage {
+    pub(crate) fn from_tight(
+        width: u32,
+        height: u32,
+        rotation: ImageRotation,
+        bytes: Vec<u8>,
+    ) -> Result<Self, A2dError> {
+        let required_bytes = checked_pixel_count(width, height)?;
+        let required_bytes = usize::try_from(required_bytes).map_err(|_| {
+            validation_error(
+                "IMAGE_BUFFER_SIZE_UNSUPPORTED",
+                "Gray8 buffer does not fit this platform's address space",
+            )
+        })?;
+        if bytes.len() != required_bytes {
+            return Err(validation_error(
+                "IMAGE_GRAY_BUFFER_LENGTH_INVALID",
+                format!(
+                    "Gray8 buffer has {} bytes but {required_bytes} are required",
+                    bytes.len()
+                ),
+            ));
+        }
+        let row_stride = usize::try_from(width).map_err(|_| {
+            validation_error(
+                "IMAGE_STRIDE_INVALID",
+                format!("Gray8 row stride overflow for width {width}"),
+            )
+        })?;
+        Ok(Self {
+            width,
+            height,
+            row_stride,
+            rotation,
+            bytes,
+        })
+    }
+
     pub const fn width(&self) -> u32 {
         self.width
     }
