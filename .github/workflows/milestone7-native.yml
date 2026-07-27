@@ -10,103 +10,11 @@ on:
       - ".github/workflows/milestone7-native.yml"
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 concurrency:
   group: milestone7-native-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apply-rectification-formatting:
-    name: Validate and apply rectification formatting
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/milestone-7-native-validation' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-      - uses: Swatinem/rust-cache@v2
-      - name: Apply reviewed Gaussian-elimination iterator fix
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("crates/a2d-image/src/rectification.rs")
-          lines = path.read_text().splitlines()
-          if "        let pivot_values = augmented[column];" not in lines:
-              row_loop = lines.index("        for row in 0..8 {")
-              lines.insert(row_loop, "        let pivot_values = augmented[column];")
-
-              row_loop += 1
-              lines[row_loop] = "        for (row, target_row) in augmented.iter_mut().enumerate() {"
-
-              factor_line = lines.index("            let factor = augmented[row][column];")
-              lines[factor_line] = "            let factor = target_row[column];"
-
-              indexed_loop = lines.index("            for item in column..9 {")
-              expected = [
-                  "            for item in column..9 {",
-                  "                augmented[row][item] -= factor * augmented[column][item];",
-                  "            }",
-              ]
-              if lines[indexed_loop:indexed_loop + 3] != expected:
-                  raise SystemExit("unexpected indexed elimination loop")
-              lines[indexed_loop:indexed_loop + 3] = [
-                  "            for (target, pivot) in target_row[column..]",
-                  "                .iter_mut()",
-                  "                .zip(&pivot_values[column..])",
-                  "            {",
-                  "                *target -= factor * pivot;",
-                  "            }",
-              ]
-              path.write_text("\n".join(lines) + "\n")
-          PY
-      - name: Apply canonical formatting
-        run: cargo fmt --all
-      - name: Run clippy
-        id: clippy
-        continue-on-error: true
-        run: cargo clippy -p a2d-image --all-targets --all-features -- -D warnings > rectification-validation.log 2>&1
-      - name: Run a2d-image tests
-        id: tests
-        if: steps.clippy.outcome == 'success'
-        continue-on-error: true
-        run: cargo test -p a2d-image --all-features >> rectification-validation.log 2>&1
-      - name: Upload formatted sources and validation log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: milestone7-rectification-validation
-          path: |
-            crates/a2d-image/src
-            rectification-validation.log
-          if-no-files-found: error
-      - name: Report validation failure
-        if: steps.clippy.outcome == 'failure' || steps.tests.outcome == 'failure'
-        run: |
-          cat rectification-validation.log
-          exit 1
-      - name: Verify formatting touched only Rust source
-        run: |
-          unexpected=$(git diff --name-only | grep -v '^crates/a2d-image/src/.*\.rs$' || true)
-          test -z "$unexpected" || {
-            echo "Unexpected changed paths:" >&2
-            echo "$unexpected" >&2
-            exit 1
-          }
-      - name: Commit canonical formatting
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/a2d-image/src
-          if git diff --cached --quiet; then
-            echo "No formatting changes required"
-            exit 0
-          fi
-          git commit -m "Format and validate Milestone 7 rectification"
-          git push origin HEAD:${{ github.head_ref }}
-
   desktop-and-android:
     name: Desktop detector and Android native ABIs
     runs-on: ubuntu-24.04
