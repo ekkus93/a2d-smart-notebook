@@ -11,7 +11,7 @@
 //! touches [`marker_ops`]; every other rendering function and the layout geometry itself is
 //! unaffected.
 
-use a2d_domain::A2dError;
+use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 use a2d_layout::geometry::PhysicalRect;
 use a2d_layout::page_layout::{CalibrationMark, ContentStyle, PageLayout};
 use printpdf::{
@@ -144,64 +144,110 @@ fn qr_ops(page_height_mm: f64, qr_rect: &PhysicalRect, payload: &str) -> Result<
     Ok(ops)
 }
 
+/// Maximum number of procedural ruling elements one page may generate. This prevents a finite
+/// but pathologically small spacing value from exhausting memory or making PDF generation
+/// effectively unbounded.
+const MAX_RULING_ELEMENTS: usize = 100_000;
+
+fn ruling_limit_error(style: &str, requested: usize) -> A2dError {
+    A2dError::new(
+        ErrorCode::new("PDF_CONTENT_STYLE_ELEMENT_LIMIT_EXCEEDED"),
+        ErrorCategory::Validation,
+        ErrorSeverity::Error,
+        "error.pdf.content_style_too_dense",
+        format!(
+            "{style} ruling would create {requested} elements, exceeding the defensive limit of {MAX_RULING_ELEMENTS}"
+        ),
+        false,
+    )
+    .with_detail("style", style)
+    .with_detail("requested_elements", requested.to_string())
+    .with_detail("maximum_elements", MAX_RULING_ELEMENTS.to_string())
+}
+
+fn interior_step_count(length_mm: f64, spacing_mm: f64) -> usize {
+    ((length_mm / spacing_mm).ceil() - 1.0).max(0.0) as usize
+}
+
 /// Draws whatever `style` calls for inside `content_rect` (TODO 5.4 "render line/grid styles
 /// deterministically" — same inputs always produce the same ops, no randomness, no
 /// device-dependent layout).
+///
+/// The style is validated again here even when the layout builder already validated it. This is
+/// intentional defense in depth: `PageLayout` is a public value and a caller can construct or
+/// mutate one without calling `PageLayout::validate`. Integer-bounded iteration avoids the
+/// non-progressing floating-point loops that previously allowed zero/negative spacing to hang PDF
+/// generation, and the element ceiling prevents tiny positive spacing from exhausting memory.
 fn content_style_ops(
     page_height_mm: f64,
     content_rect: &PhysicalRect,
     style: ContentStyle,
-) -> Vec<Op> {
+) -> Result<Vec<Op>, A2dError> {
+    style.validate()?;
+
+    let width_mm = content_rect.size.width_mm;
+    let height_mm = content_rect.size.height_mm;
     let mut ops = match style {
-        ContentStyle::Blank => return Vec::new(),
+        ContentStyle::Blank => return Ok(Vec::new()),
         ContentStyle::Lined { line_spacing_mm } => {
-            let mut lines = Vec::new();
-            let mut y = content_rect.top() + line_spacing_mm;
-            while y < content_rect.bottom() {
-                lines.push(horizontal_line_ops(
-                    page_height_mm,
-                    content_rect.left(),
-                    content_rect.right(),
-                    y,
-                ));
-                y += line_spacing_mm;
+            let rows = interior_step_count(height_mm, line_spacing_mm);
+            if rows > MAX_RULING_ELEMENTS {
+                return Err(ruling_limit_error("lined", rows));
             }
-            lines
+            (1..=rows)
+                .map(|row| {
+                    horizontal_line_ops(
+                        page_height_mm,
+                        content_rect.left(),
+                        content_rect.right(),
+                        content_rect.top() + row as f64 * line_spacing_mm,
+                    )
+                })
+                .collect()
         }
         ContentStyle::Graph { spacing_mm } => {
-            let mut lines = Vec::new();
-            let mut y = content_rect.top() + spacing_mm;
-            while y < content_rect.bottom() {
-                lines.push(horizontal_line_ops(
+            let rows = interior_step_count(height_mm, spacing_mm);
+            let columns = interior_step_count(width_mm, spacing_mm);
+            let total = rows.saturating_add(columns);
+            if total > MAX_RULING_ELEMENTS {
+                return Err(ruling_limit_error("graph", total));
+            }
+            let mut lines = Vec::with_capacity(total);
+            lines.extend((1..=rows).map(|row| {
+                horizontal_line_ops(
                     page_height_mm,
                     content_rect.left(),
                     content_rect.right(),
-                    y,
-                ));
-                y += spacing_mm;
-            }
-            let mut x = content_rect.left() + spacing_mm;
-            while x < content_rect.right() {
-                lines.push(vertical_line_ops(
+                    content_rect.top() + row as f64 * spacing_mm,
+                )
+            }));
+            lines.extend((1..=columns).map(|column| {
+                vertical_line_ops(
                     page_height_mm,
                     content_rect.top(),
                     content_rect.bottom(),
-                    x,
-                ));
-                x += spacing_mm;
-            }
+                    content_rect.left() + column as f64 * spacing_mm,
+                )
+            }));
             lines
         }
         ContentStyle::DotGrid { spacing_mm } => {
+            let rows = interior_step_count(height_mm, spacing_mm);
+            let columns = interior_step_count(width_mm, spacing_mm);
+            let total = rows.saturating_mul(columns);
+            if total > MAX_RULING_ELEMENTS {
+                return Err(ruling_limit_error("dot-grid", total));
+            }
+
             // Rendered as small filled squares rather than true circles -- a deliberate
             // simplification for this first pass; revisit at Milestone 17's physical print
             // validation if a rounder dot matters visually.
             let dot_size_mm = 0.4;
-            let mut dots = Vec::new();
-            let mut y = content_rect.top() + spacing_mm;
-            while y < content_rect.bottom() {
-                let mut x = content_rect.left() + spacing_mm;
-                while x < content_rect.right() {
+            let mut dots = Vec::with_capacity(total.saturating_mul(4));
+            for row in 1..=rows {
+                let y = content_rect.top() + row as f64 * spacing_mm;
+                for column in 1..=columns {
+                    let x = content_rect.left() + column as f64 * spacing_mm;
                     let dot_rect = PhysicalRect::new(
                         x - dot_size_mm / 2.0,
                         y - dot_size_mm / 2.0,
@@ -209,11 +255,9 @@ fn content_style_ops(
                         dot_size_mm,
                     );
                     dots.extend(filled_rect_ops(page_height_mm, &dot_rect, ruling_gray()));
-                    x += spacing_mm;
                 }
-                y += spacing_mm;
             }
-            return dots; // already a complete, self-contained set of fill ops
+            return Ok(dots);
         }
     };
     let mut wrapped = vec![
@@ -223,7 +267,7 @@ fn content_style_ops(
     ];
     wrapped.append(&mut ops);
     wrapped.push(Op::RestoreGraphicsState);
-    wrapped
+    Ok(wrapped)
 }
 
 fn calibration_ops(page_height_mm: f64, mark: &CalibrationMark) -> Vec<Op> {
@@ -274,16 +318,16 @@ pub fn render_page_ops(
     visible_page_number: Option<u32>,
 ) -> Result<Vec<Op>, A2dError> {
     let h = layout.physical_size.height_mm;
+    // Validate and bound content-style work before doing any other rendering. This ensures a
+    // malformed hand-constructed layout fails immediately rather than allocating QR/marker ops
+    // first or entering an unbounded ruling loop.
+    let content_ops = content_style_ops(h, &layout.content_rect, layout.content_style)?;
     let mut ops = Vec::new();
     for marker in &layout.markers {
         ops.extend(marker_ops(h, &marker.rect));
     }
     ops.extend(qr_ops(h, &layout.qr_rect, qr_payload)?);
-    ops.extend(content_style_ops(
-        h,
-        &layout.content_rect,
-        layout.content_style,
-    ));
+    ops.extend(content_ops);
     ops.extend(calibration_ops(h, &layout.calibration));
     if let (Some(rect), Some(number)) = (layout.visible_page_number_rect, visible_page_number) {
         ops.extend(page_number_ops(h, &rect, number));
@@ -389,5 +433,29 @@ mod tests {
         let roles: std::collections::HashSet<MarkerRole> =
             layout.markers.iter().map(|m| m.role).collect();
         assert_eq!(roles.len(), 4);
+    }
+
+    #[test]
+    fn renderer_rejects_invalid_spacing_even_when_layout_validation_is_bypassed() {
+        for spacing in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
+            layout.content_style = ContentStyle::Lined {
+                line_spacing_mm: spacing,
+            };
+            let err = render_page_ops(&layout, "A2D:1:S:X:1234567", None).unwrap_err();
+            assert_eq!(err.code.to_string(), "LAYOUT_CONTENT_STYLE_SPACING_INVALID");
+        }
+    }
+
+    #[test]
+    fn renderer_rejects_pathologically_dense_ruling_before_allocating_it() {
+        let mut layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
+        layout.content_style = ContentStyle::DotGrid { spacing_mm: 0.001 };
+        let err = render_page_ops(&layout, "A2D:1:S:X:1234567", None).unwrap_err();
+        assert_eq!(
+            err.code.to_string(),
+            "PDF_CONTENT_STYLE_ELEMENT_LIMIT_EXCEEDED"
+        );
+        assert!(err.details.contains_key("requested_elements"));
     }
 }
