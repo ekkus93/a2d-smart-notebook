@@ -385,12 +385,8 @@ impl OwnedRgbImage {
             )
         })?;
         let gray = DynamicImage::ImageRgb8(rgb).into_luma8();
-        let image = OwnedGrayImage::from_tight(
-            self.width,
-            self.height,
-            self.rotation,
-            gray.into_raw(),
-        )?;
+        let image =
+            OwnedGrayImage::from_tight(self.width, self.height, self.rotation, gray.into_raw())?;
         image.as_frame(limits)?;
         Ok(image)
     }

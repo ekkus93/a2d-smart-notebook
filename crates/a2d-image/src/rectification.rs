@@ -164,11 +164,7 @@ pub struct RectifiedImageSize {
 }
 
 impl RectifiedImageSize {
-    pub fn new(
-        width: u32,
-        height: u32,
-        limits: RectificationLimits,
-    ) -> Result<Self, A2dError> {
+    pub fn new(width: u32, height: u32, limits: RectificationLimits) -> Result<Self, A2dError> {
         if width < 2 || height < 2 {
             return Err(validation_error(
                 "RECTIFICATION_DIMENSIONS_INVALID",
@@ -629,16 +625,17 @@ fn solve_homography(
         for value in &mut augmented[column][column..] {
             *value /= divisor;
         }
-        for row in 0..8 {
+        let pivot_values = augmented[column];
+        for (row, target_row) in augmented.iter_mut().enumerate() {
             if row == column {
                 continue;
             }
-            let factor = augmented[row][column];
+            let factor = target_row[column];
             if factor == 0.0 {
                 continue;
             }
-            for item in column..9 {
-                augmented[row][item] -= factor * augmented[column][item];
+            for (target, pivot) in target_row[column..].iter_mut().zip(&pivot_values[column..]) {
+                *target -= factor * pivot;
             }
         }
     }
@@ -683,8 +680,7 @@ fn normalize_matrix_scale(mut matrix: [[f64; 3]; 3]) -> Result<[[f64; 3]; 3], A2
 }
 
 fn invert_3x3(matrix: [[f64; 3]; 3]) -> Result<[[f64; 3]; 3], A2dError> {
-    let determinant = matrix[0][0]
-        * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+    let determinant = matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
         - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
         + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
     if !determinant.is_finite() || determinant.abs() <= GEOMETRY_EPSILON {
@@ -697,28 +693,19 @@ fn invert_3x3(matrix: [[f64; 3]; 3]) -> Result<[[f64; 3]; 3], A2dError> {
     let inverse_determinant = 1.0 / determinant;
     let inverse = [
         [
-            (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
-                * inverse_determinant,
-            (matrix[0][2] * matrix[2][1] - matrix[0][1] * matrix[2][2])
-                * inverse_determinant,
-            (matrix[0][1] * matrix[1][2] - matrix[0][2] * matrix[1][1])
-                * inverse_determinant,
+            (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) * inverse_determinant,
+            (matrix[0][2] * matrix[2][1] - matrix[0][1] * matrix[2][2]) * inverse_determinant,
+            (matrix[0][1] * matrix[1][2] - matrix[0][2] * matrix[1][1]) * inverse_determinant,
         ],
         [
-            (matrix[1][2] * matrix[2][0] - matrix[1][0] * matrix[2][2])
-                * inverse_determinant,
-            (matrix[0][0] * matrix[2][2] - matrix[0][2] * matrix[2][0])
-                * inverse_determinant,
-            (matrix[0][2] * matrix[1][0] - matrix[0][0] * matrix[1][2])
-                * inverse_determinant,
+            (matrix[1][2] * matrix[2][0] - matrix[1][0] * matrix[2][2]) * inverse_determinant,
+            (matrix[0][0] * matrix[2][2] - matrix[0][2] * matrix[2][0]) * inverse_determinant,
+            (matrix[0][2] * matrix[1][0] - matrix[0][0] * matrix[1][2]) * inverse_determinant,
         ],
         [
-            (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
-                * inverse_determinant,
-            (matrix[0][1] * matrix[2][0] - matrix[0][0] * matrix[2][1])
-                * inverse_determinant,
-            (matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0])
-                * inverse_determinant,
+            (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]) * inverse_determinant,
+            (matrix[0][1] * matrix[2][0] - matrix[0][0] * matrix[2][1]) * inverse_determinant,
+            (matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]) * inverse_determinant,
         ],
     ];
     if inverse
@@ -762,10 +749,8 @@ fn project(matrix: [[f64; 3]; 3], point: ImagePoint) -> Result<ImagePoint, A2dEr
             true,
         ));
     }
-    let x = (matrix[0][0] * point.x + matrix[0][1] * point.y + matrix[0][2])
-        / denominator;
-    let y = (matrix[1][0] * point.x + matrix[1][1] * point.y + matrix[1][2])
-        / denominator;
+    let x = (matrix[0][0] * point.x + matrix[0][1] * point.y + matrix[0][2]) / denominator;
+    let y = (matrix[1][0] * point.x + matrix[1][1] * point.y + matrix[1][2]) / denominator;
     if !x.is_finite() || !y.is_finite() {
         return Err(processing_error(
             "HOMOGRAPHY_PROJECTION_NON_FINITE",
@@ -864,11 +849,8 @@ fn validate_quad_within_image(
 }
 
 fn sample_gray8(source: GrayFrame<'_>, point: ImagePoint) -> Result<u8, A2dError> {
-    let (x0, y0, x1, y1, x_fraction, y_fraction) = sampling_coordinates(
-        point,
-        source.width(),
-        source.height(),
-    )?;
+    let (x0, y0, x1, y1, x_fraction, y_fraction) =
+        sampling_coordinates(point, source.width(), source.height())?;
     let bytes = source.bytes();
     let stride = source.row_stride();
     let value = bilinear(
@@ -883,11 +865,8 @@ fn sample_gray8(source: GrayFrame<'_>, point: ImagePoint) -> Result<u8, A2dError
 }
 
 fn sample_rgb8(source: &OwnedRgbImage, point: ImagePoint) -> Result<[u8; 3], A2dError> {
-    let (x0, y0, x1, y1, x_fraction, y_fraction) = sampling_coordinates(
-        point,
-        source.width(),
-        source.height(),
-    )?;
+    let (x0, y0, x1, y1, x_fraction, y_fraction) =
+        sampling_coordinates(point, source.width(), source.height())?;
     let bytes = source.bytes();
     let stride = source.row_stride();
     let pixel = |x: usize, y: usize, channel: usize| -> f64 {
@@ -954,8 +933,7 @@ fn bilinear(
 }
 
 fn cross_product(origin: ImagePoint, first: ImagePoint, second: ImagePoint) -> f64 {
-    (first.x - origin.x) * (second.y - origin.y)
-        - (first.y - origin.y) * (second.x - origin.x)
+    (first.x - origin.x) * (second.y - origin.y) - (first.y - origin.y) * (second.x - origin.x)
 }
 
 fn distance_squared(first: ImagePoint, second: ImagePoint) -> f64 {
@@ -986,8 +964,7 @@ mod tests {
     };
 
     use crate::{
-        MarkerDetection, MarkerFamily, PageOrientation, ResolvedMarker,
-        input::ImageLimits,
+        MarkerDetection, MarkerFamily, PageOrientation, ResolvedMarker, input::ImageLimits,
     };
 
     use super::*;
@@ -1102,13 +1079,8 @@ mod tests {
     #[test]
     fn identity_rgb_warp_matches_reference_bytes() {
         let bytes: Vec<u8> = (0_u8..48).collect();
-        let source = OwnedRgbImage::from_tight(
-            4,
-            4,
-            ImageRotation::Degrees180,
-            bytes.clone(),
-        )
-        .unwrap();
+        let source =
+            OwnedRgbImage::from_tight(4, 4, ImageRotation::Degrees180, bytes.clone()).unwrap();
         let plan = RectificationPlan::from_page_corners(
             4,
             4,
@@ -1171,12 +1143,9 @@ mod tests {
 
     #[test]
     fn enforces_output_memory_limits() {
-        let err = RectifiedImageSize::new(
-            100,
-            100,
-            RectificationLimits::new(10_000, 29_999).unwrap(),
-        )
-        .unwrap_err();
+        let err =
+            RectifiedImageSize::new(100, 100, RectificationLimits::new(10_000, 29_999).unwrap())
+                .unwrap_err();
         assert_eq!(err.code.to_string(), "RECTIFICATION_BYTE_LIMIT_EXCEEDED");
     }
 
@@ -1246,14 +1215,9 @@ mod tests {
             unexpected_tag_ids: Vec::new(),
         };
         let output_size = RectifiedImageSize::new(100, 200, limits()).unwrap();
-        let plan = RectificationPlan::from_page_markers(
-            201,
-            401,
-            &resolved,
-            &layout(),
-            output_size,
-        )
-        .unwrap();
+        let plan =
+            RectificationPlan::from_page_markers(201, 401, &resolved, &layout(), output_size)
+                .unwrap();
 
         let source_markers = plan.source_marker_centers().unwrap().points();
         let destination_markers = plan.destination_marker_centers().unwrap().points();
