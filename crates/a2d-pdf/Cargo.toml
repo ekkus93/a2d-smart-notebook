@@ -10,3 +10,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+a2d-domain = { version = "0.1.0", path = "../a2d-domain" }
+a2d-identity = { version = "0.1.0", path = "../a2d-identity" }
+a2d-layout = { version = "0.1.0", path = "../a2d-layout" }
+printpdf = { version = "0.12.4", default-features = false }
+qrcode = { version = "0.14.1", default-features = false }

@@ -822,27 +822,50 @@ paper sizes it happened to be tested against first.
 
 The PDF renderer must live in Rust.
 
-- [ ] Render vector Corner Markers without interpolation blur.
-- [ ] Render QR at an integral module scale.
-- [ ] Render line/grid styles deterministically.
-- [ ] Use legally distributable fonts or avoid embedding unlicensed fonts.
-- [ ] Generate single-page PDFs.
-- [ ] Generate multipage Page Sets.
-- [ ] Generate the bound-notebook proof interior.
-- [ ] Write to a temp path and verify before returning success.
+- [x] Render vector Corner Markers without interpolation blur. `crates/a2d-pdf/src/render.rs::marker_ops`
+      draws each marker as filled vector polygons (`Op::DrawPolygon`), never a raster image, so
+      there is no interpolation to blur. **Placeholder shape, not a real AprilTag bit pattern**:
+      a bordered black square (outer black square + inset white square). The real tag family
+      isn't decided until Milestone 7 accepts `docs/decisions/0002-apriltag-detector-selection.md`;
+      swapping in the real pattern only touches this one function, not the layout geometry or
+      anything else in this milestone. Documented prominently in the module doc comment so this
+      isn't mistaken for a finished, scannable marker.
+- [x] Render QR at an integral module scale. `render.rs::qr_ops`: encodes `qr_payload` via the
+      `qrcode` crate (EC level M), then draws one filled vector square per dark module at
+      `qr_rect.width / module_count` — vector fill, never a scaled raster QR image, so there's no
+      resampling blur regardless of output resolution.
+- [x] Render line/grid styles deterministically. `render.rs::content_style_ops`: pure functions of
+      `ContentStyle` and `content_rect`, no randomness, same inputs always produce the same ops
+      (`Lined`/`Graph` draw ruled lines at the style's spacing; `DotGrid` draws small filled
+      squares at grid intersections — a simplification versus true circles, noted inline;
+      `Blank` draws nothing).
+- [x] Use legally distributable fonts or avoid embedding unlicensed fonts. `render.rs::page_number_ops`
+      uses `printpdf::BuiltinFont::Helvetica` — one of the 14 standard PDF fonts every viewer/
+      printer already has. No font file is embedded at all, so there is no font license to clear.
+- [x] Generate single-page PDFs. `crates/a2d-pdf/src/generate.rs::generate_smart_page_pdf`
+      (spec §7.5): fresh `SmartPageId`, real encoded QR payload via `a2d_identity::qr::PageCode`,
+      single-page PDF.
+- [x] Generate multipage Page Sets. `generate.rs::generate_page_set_pdf` (spec §7.6): one
+      `PageSetId`, one fresh `SmartPageId` per page, ascending visible page numbers.
+- [x] Generate the bound-notebook proof interior. `generate.rs::generate_notebook_proof_interior_pdf`:
+      Setup Page + blank verso, then one writable-page + blank-verso pair per logical page, using
+      Milestone 5.3's `a2d_layout::notebook` layouts. A `debug_assert_eq!` inside the loop ties
+      this construction order to Milestone 5.3's independently defined
+      `pdf_page_number_for_logical_page`, catching drift between the two immediately rather than
+      only surfacing as a numbering bug once Milestone 6 wires up real scanning.
+- [x] Write to a temp path and verify before returning success. `generate.rs::write_and_verify`:
+      write → flush/close → re-read → re-parse with `PdfParseOptions { fail_on_error: true }` →
+      only then atomically rename into place — the same write-then-verify-then-commit discipline
+      spec §16.3 requires for asset commits, applied here to generated PDFs. Never leaves
+      `output_path` pointing at unverified content.
 
-Suggested request:
-
-```rust
-pub struct GeneratePageSetRequest {
-    pub title: Option<String>,
-    pub paper_size: PaperSize,
-    pub style: PageStyle,
-    pub page_count: u32,
-    pub starting_visible_page: u32,
-    pub output_path: String,
-}
-```
+Deviation from this task's suggested `GeneratePageSetRequest`/`PageStyle`: reuses
+`a2d_layout::PaperSize`/`SmartPageStyle` (Milestone 5.2) rather than defining a duplicate
+`PaperSize`/`PageStyle` pair, and omits `title`/`output_path: String` — no title-rendering region
+exists in `PageLayout` yet (nothing to render it into), and `output_path` is a `&Path` parameter
+rather than a struct field for this pass. 17 tests across
+`crates/a2d-pdf/src/{coordinates,render,generate}.rs` (a new crate this task), `cargo test -p
+a2d-pdf`.
 
 ## 5.5 Transactional generated-page registration
 
