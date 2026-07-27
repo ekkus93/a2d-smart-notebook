@@ -165,9 +165,8 @@ impl AprilTagDetector {
         // SAFETY: detector and image are live for the duration of the call.
         // The result is immediately wrapped in a guard and copied into owned
         // Rust values before native memory is destroyed.
-        let detections_ptr = unsafe {
-            sys::apriltag_detector_detect(self.detector.as_ptr(), image.as_mut_ptr())
-        };
+        let detections_ptr =
+            unsafe { sys::apriltag_detector_detect(self.detector.as_ptr(), image.as_mut_ptr()) };
         let detections = NativeDetections::new(detections_ptr)?;
 
         // SAFETY: the guard owns the native array for the remainder of this scope.
@@ -299,11 +298,7 @@ impl NativeGrayImage {
     fn copy_from(frame: GrayFrame<'_>) -> Result<Self, A2dError> {
         // SAFETY: validated dimensions and stride fit the C integer range.
         let image = unsafe {
-            sys::image_u8_create_stride(
-                frame.width(),
-                frame.height(),
-                frame.row_stride() as u32,
-            )
+            sys::image_u8_create_stride(frame.width(), frame.height(), frame.row_stride() as u32)
         };
         let image = NonNull::new(image).ok_or_else(|| {
             processing_error(
@@ -564,9 +559,6 @@ mod tests {
             ..DetectorConfig::default()
         };
         let err = AprilTagDetector::new(config).unwrap_err();
-        assert_eq!(
-            err.code.to_string(),
-            "MARKER_CONFIG_BITS_CORRECTED_INVALID"
-        );
+        assert_eq!(err.code.to_string(), "MARKER_CONFIG_BITS_CORRECTED_INVALID");
     }
 }
