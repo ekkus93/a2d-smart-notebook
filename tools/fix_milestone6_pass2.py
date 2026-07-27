@@ -75,5 +75,17 @@ replace_exact(
         assert_eq!(rows[2].1, "milestone6_notebook_workflows");
 ''',
 )
+replace_exact(
+    "crates/a2d-storage/tests/repository_and_assets.rs",
+    '''    let orphan = sample_notebook(&NotebookDesignId::generate());
+    let err = storage.insert_notebook(&orphan).unwrap_err();
+''',
+    '''    let mut orphan = sample_notebook(&NotebookDesignId::generate());
+    // Isolate the foreign-key behavior under test. Milestone 6 adds a separate invariant that
+    // only one notebook may be the active scan destination, and `notebook` above is already active.
+    orphan.active_scan_destination = false;
+    let err = storage.insert_notebook(&orphan).unwrap_err();
+''',
+)
 
 print("Milestone 6 pass-2 corrections applied")
