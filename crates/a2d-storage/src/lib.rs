@@ -21,6 +21,7 @@ mod assets;
 mod json_columns;
 mod migrations;
 mod repository;
+mod workflow;
 
 pub use assets::AssetStore;
 pub use migrations::{MIGRATIONS, Migration};
@@ -28,6 +29,7 @@ pub use repository::{
     AssetRepository, AuditEventRepository, NotebookDesignRepository, NotebookRepository,
     OcrRunRepository, PageRepository, PageSetRepository, ScanRepository,
 };
+pub use workflow::{NotebookWorkflowRepository, PageLookupRepository};
 
 /// An open library database. Owns a single `rusqlite::Connection` — no connection pool in v1;
 /// this crate is not yet responsible for concurrent multi-threaded access (TODO 3.2 will decide
@@ -429,7 +431,10 @@ mod tests {
         }
 
         let upgraded = Storage::open(&db_path).expect("partial database must upgrade in place");
-        assert_eq!(upgraded.schema_version().unwrap(), 2);
+        assert_eq!(
+            upgraded.schema_version().unwrap(),
+            MIGRATIONS.last().unwrap().version
+        );
         assert!(table_has_column(
             &upgraded.conn,
             "pages",
@@ -449,10 +454,12 @@ mod tests {
                 .collect::<Result<_, _>>()
                 .unwrap()
         };
-        assert_eq!(rows.len(), 2);
+        assert_eq!(rows.len(), 3);
         assert_eq!(rows[0], (1, "initial".to_string(), ORIGINAL_V1_APPLIED_AT));
         assert_eq!(rows[1].0, 2);
         assert_eq!(rows[1].1, "page_generated_pdf_asset");
+        assert_eq!(rows[2].0, 3);
+        assert_eq!(rows[2].1, "milestone6_notebook_workflows");
 
         // Exercise the new column through the real typed repositories, not merely PRAGMA output.
         let page = a2d_domain::Page::new(

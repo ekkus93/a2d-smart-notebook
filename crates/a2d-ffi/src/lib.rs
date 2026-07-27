@@ -14,6 +14,9 @@ use a2d_domain::A2dError;
 
 uniffi::setup_scaffolding!();
 
+mod milestone6;
+pub use milestone6::*;
+
 #[derive(uniffi::Record)]
 pub struct OpenLibraryRequest {
     pub library_path: String,

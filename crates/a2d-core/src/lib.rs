@@ -17,6 +17,9 @@ use a2d_domain::{
 use a2d_identity::PageCode;
 use a2d_storage::{AssetRepository, AssetStore, PageRepository, PageSetRepository, Storage};
 
+mod milestone6;
+pub use milestone6::*;
+
 pub struct OpenLibraryRequest {
     pub library_path: String,
 }

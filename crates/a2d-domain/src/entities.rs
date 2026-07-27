@@ -193,6 +193,32 @@ impl Notebook {
         }
     }
 
+    pub fn rename(&mut self, display_name: String, now_ms: i64) -> Result<(), A2dError> {
+        let normalized = display_name.trim();
+        if normalized.is_empty() || normalized.len() > 200 {
+            return Err(A2dError::new(
+                ErrorCode::new("NOTEBOOK_DISPLAY_NAME_INVALID"),
+                ErrorCategory::Validation,
+                ErrorSeverity::Error,
+                "error.notebook.display_name_invalid",
+                "notebook display name must contain 1-200 non-whitespace UTF-8 bytes",
+                false,
+            )
+            .with_detail("length", normalized.len().to_string()));
+        }
+        self.display_name = normalized.to_string();
+        self.updated_at_ms = now_ms;
+        Ok(())
+    }
+
+    pub fn archive(&mut self, now_ms: i64) {
+        if self.archived_at_ms.is_none() {
+            self.archived_at_ms = Some(now_ms);
+            self.active_scan_destination = false;
+            self.updated_at_ms = now_ms;
+        }
+    }
+
     pub fn id(&self) -> &NotebookId {
         &self.id
     }
@@ -220,6 +246,7 @@ pub enum PageKind {
 /// need extending later).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum PageState {
+    Unscanned,
     GeneratedNotScanned,
     Scanned,
     NeedsReview,

@@ -18,4 +18,9 @@ pub static MIGRATIONS: &[Migration] = &[
         name: "page_generated_pdf_asset",
         sql: include_str!("migrations/0002_page_generated_pdf_asset.sql"),
     },
+    Migration {
+        version: 3,
+        name: "milestone6_notebook_workflows",
+        sql: include_str!("migrations/0003_milestone6_notebook_workflows.sql"),
+    },
 ];

@@ -25,7 +25,7 @@ mod capture;
 
 pub use capture::{AssetRepository, AuditEventRepository, OcrRunRepository, ScanRepository};
 
-fn map_sql_error(context: &str, err: rusqlite::Error) -> A2dError {
+pub(crate) fn map_sql_error(context: &str, err: rusqlite::Error) -> A2dError {
     if let rusqlite::Error::SqliteFailure(ffi_err, ref msg) = err
         && ffi_err.code == rusqlite::ErrorCode::ConstraintViolation
     {
@@ -620,6 +620,7 @@ fn missing_column_error(column: &str) -> A2dError {
 
 fn page_state_to_str(state: PageState) -> &'static str {
     match state {
+        PageState::Unscanned => "Unscanned",
         PageState::GeneratedNotScanned => "GeneratedNotScanned",
         PageState::Scanned => "Scanned",
         PageState::NeedsReview => "NeedsReview",
@@ -630,6 +631,7 @@ fn page_state_to_str(state: PageState) -> &'static str {
 
 fn page_state_from_str(raw: &str) -> Result<PageState, A2dError> {
     match raw {
+        "Unscanned" => Ok(PageState::Unscanned),
         "GeneratedNotScanned" => Ok(PageState::GeneratedNotScanned),
         "Scanned" => Ok(PageState::Scanned),
         "NeedsReview" => Ok(PageState::NeedsReview),

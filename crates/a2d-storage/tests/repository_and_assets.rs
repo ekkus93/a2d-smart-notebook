@@ -95,7 +95,10 @@ fn notebook_round_trips_and_requires_its_design_to_exist() {
     // Foreign key: a notebook referencing a design that was never inserted must fail. Mapped as
     // a Validation error, same as other constraint violations -- a bad reference is caller
     // error, not an infrastructure failure.
-    let orphan = sample_notebook(&NotebookDesignId::generate());
+    let mut orphan = sample_notebook(&NotebookDesignId::generate());
+    // Isolate the foreign-key behavior under test. Milestone 6 adds a separate invariant that
+    // only one notebook may be the active scan destination, and `notebook` above is already active.
+    orphan.active_scan_destination = false;
     let err = storage.insert_notebook(&orphan).unwrap_err();
     assert_eq!(err.category, a2d_domain::ErrorCategory::Validation);
     assert!(err.code.to_string().contains("FOREIGN_KEY_VIOLATION"));
