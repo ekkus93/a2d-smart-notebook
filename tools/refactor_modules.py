@@ -61,7 +61,7 @@ def refactor_repository() -> None:
     capture = ROOT / 'crates/a2d-storage/src/repository/capture.rs'
     capture.parent.mkdir(parents=True, exist_ok=True)
     capture.write_text(
-        '''//! Asset, scan, OCR, and audit repository implementations.\n\nuse a2d_domain::{\n    A2dError, Asset, AssetId, AuditEvent, AuditEventId, ErrorCategory, ErrorCode, ErrorSeverity,\n    OcrRun, OcrRunId, PageId, PhysicalCopyId, Provenance, Scan, ScanId,\n};\nuse rusqlite::{params, Connection, OptionalExtension};\n\nuse crate::json_columns::{decode_json, encode_json};\n\nuse super::{corrupt_enum_error, map_sql_error};\n\n''' + moved
+        '''//! Asset, scan, OCR, and audit repository implementations.\n\nuse a2d_domain::{\n    A2dError, Asset, AssetId, AuditEvent, AuditEventId, ErrorCategory, ErrorCode, ErrorSeverity,\n    OcrRun, OcrRunId, PageId, Scan, ScanId,\n};\nuse rusqlite::{params, Connection, OptionalExtension};\n\nuse crate::json_columns::{decode_json, encode_json};\n\nuse super::{corrupt_enum_error, map_sql_error};\n\n''' + moved
     )
 
 
