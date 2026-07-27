@@ -7,6 +7,10 @@ on:
       - tools/apply_milestone6_android.py
       - .github/workflows/agent-source-snapshot.yml
 
+concurrency:
+  group: milestone6-android-apply
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -22,13 +26,6 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: android-actions/setup-android@v3
-      - name: Prepare Android native toolchain
-        shell: bash
-        run: |
-          rustup target add x86_64-linux-android
-          echo "ANDROID_SDK_ROOT=${ANDROID_HOME}" >> "$GITHUB_ENV"
-          sdkmanager --install "ndk;27.0.12077973"
-          cargo install cargo-ndk --locked
       - name: Apply Android UI and run full gates
         id: gates
         shell: bash
@@ -36,6 +33,12 @@ jobs:
           set +e
           LOG="$RUNNER_TEMP/milestone6-android.log"
           {
+            rustup target add x86_64-linux-android
+            export ANDROID_SDK_ROOT="${ANDROID_HOME}"
+            sdkmanager --install "ndk;27.0.12077973"
+            if ! command -v cargo-ndk >/dev/null 2>&1; then
+              cargo install cargo-ndk --locked
+            fi
             python3 tools/apply_milestone6_android.py
             cargo fmt --all
             cargo fmt --all --check
