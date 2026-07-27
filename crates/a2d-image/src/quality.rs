@@ -281,12 +281,18 @@ pub fn measure_framing(
     let max_x = f64::from(source_width - 1);
     let max_y = f64::from(source_height - 1);
     let points = page_quad.points();
-    let min_x = points.iter().map(|point| point.x).fold(f64::INFINITY, f64::min);
+    let min_x = points
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::INFINITY, f64::min);
     let max_page_x = points
         .iter()
         .map(|point| point.x)
         .fold(f64::NEG_INFINITY, f64::max);
-    let min_y = points.iter().map(|point| point.y).fold(f64::INFINITY, f64::min);
+    let min_y = points
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::INFINITY, f64::min);
     let max_page_y = points
         .iter()
         .map(|point| point.y)
@@ -387,13 +393,22 @@ pub fn measure_perspective(page_quad: ImageQuad) -> Result<PerspectiveMetrics, A
     ];
     let minimum_edge = edges.iter().copied().fold(f64::INFINITY, f64::min);
     let maximum_edge = edges.iter().copied().fold(0.0_f64, f64::max);
-    let diagonals = [distance(points[0], points[2]), distance(points[1], points[3])];
-    let min_x = points.iter().map(|point| point.x).fold(f64::INFINITY, f64::min);
+    let diagonals = [
+        distance(points[0], points[2]),
+        distance(points[1], points[3]),
+    ];
+    let min_x = points
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::INFINITY, f64::min);
     let max_x = points
         .iter()
         .map(|point| point.x)
         .fold(f64::NEG_INFINITY, f64::max);
-    let min_y = points.iter().map(|point| point.y).fold(f64::INFINITY, f64::min);
+    let min_y = points
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::INFINITY, f64::min);
     let max_y = points
         .iter()
         .map(|point| point.y)
@@ -448,12 +463,8 @@ pub fn measure_effective_resolution(
         f64::from(output_size.height() - 1) / page_height_mm,
     ];
     Ok(ResolutionMetrics {
-        source_minimum_pixels_per_mm: source_values
-            .into_iter()
-            .fold(f64::INFINITY, f64::min),
-        output_minimum_pixels_per_mm: output_values
-            .into_iter()
-            .fold(f64::INFINITY, f64::min),
+        source_minimum_pixels_per_mm: source_values.into_iter().fold(f64::INFINITY, f64::min),
+        output_minimum_pixels_per_mm: output_values.into_iter().fold(f64::INFINITY, f64::min),
     })
 }
 
@@ -706,15 +717,17 @@ impl BandThresholds {
                 "quality metric value must be finite",
             ));
         }
-        Ok(if (self.accepted_minimum..=self.accepted_maximum).contains(&value) {
-            MetricState::Accepted
-        } else if (self.warning_minimum..=self.warning_maximum).contains(&value) {
-            MetricState::Warning
-        } else if (self.review_minimum..=self.review_maximum).contains(&value) {
-            MetricState::NeedsReview
-        } else {
-            MetricState::Rejected
-        })
+        Ok(
+            if (self.accepted_minimum..=self.accepted_maximum).contains(&value) {
+                MetricState::Accepted
+            } else if (self.warning_minimum..=self.warning_maximum).contains(&value) {
+                MetricState::Warning
+            } else if (self.review_minimum..=self.review_maximum).contains(&value) {
+                MetricState::NeedsReview
+            } else {
+                MetricState::Rejected
+            },
+        )
     }
 }
 
@@ -820,10 +833,7 @@ impl MarkerConfidencePolicy {
         maximum_hamming_errors: ScalarThresholds,
         unexpected_tag_count: ScalarThresholds,
     ) -> Result<Self, A2dError> {
-        require_direction(
-            minimum_decision_margin,
-            ThresholdDirection::HigherIsBetter,
-        )?;
+        require_direction(minimum_decision_margin, ThresholdDirection::HigherIsBetter)?;
         require_direction(maximum_hamming_errors, ThresholdDirection::LowerIsBetter)?;
         require_direction(unexpected_tag_count, ThresholdDirection::LowerIsBetter)?;
         Ok(Self {
@@ -910,10 +920,7 @@ impl CurvaturePolicy {
             maximum_normalized_deviation,
             ThresholdDirection::LowerIsBetter,
         )?;
-        require_direction(
-            rms_normalized_deviation,
-            ThresholdDirection::LowerIsBetter,
-        )?;
+        require_direction(rms_normalized_deviation, ThresholdDirection::LowerIsBetter)?;
         Ok(Self {
             maximum_normalized_deviation,
             rms_normalized_deviation,
@@ -1300,7 +1307,9 @@ fn validate_source_and_quad(
     if source_width < 2 || source_height < 2 {
         return Err(validation_error(
             "QUALITY_SOURCE_DIMENSIONS_INVALID",
-            format!("quality source dimensions must be at least 2x2, got {source_width}x{source_height}"),
+            format!(
+                "quality source dimensions must be at least 2x2, got {source_width}x{source_height}"
+            ),
         ));
     }
     quad.validate("quality page")?;
@@ -1402,8 +1411,8 @@ mod tests {
     #[test]
     fn edge_pattern_has_nonzero_focus_variance() {
         let bytes = [
-            0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255,
-            0, 0, 0, 255, 255,
+            0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0,
+            255, 255,
         ];
         let metrics = measure_gray_quality(gray_frame(5, 5, &bytes), measurement_config()).unwrap();
         assert!(metrics.focus.unwrap().laplacian_variance > 0.0);
@@ -1514,7 +1523,8 @@ mod tests {
             crate::RectificationLimits::new(3_000_000, 9_000_000).unwrap(),
         )
         .unwrap();
-        let metrics = measure_effective_resolution(quad(500.0, 1_000.0), output, &layout()).unwrap();
+        let metrics =
+            measure_effective_resolution(quad(500.0, 1_000.0), output, &layout()).unwrap();
         assert_eq!(metrics.source_minimum_pixels_per_mm, 5.0);
         assert_eq!(metrics.output_minimum_pixels_per_mm, 10.0);
     }
