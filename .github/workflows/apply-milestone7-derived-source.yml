@@ -1,0 +1,51 @@
+name: Apply Milestone 7 Derived Image Source
+
+on:
+  push:
+    branches:
+      - agent/milestone-7-native-validation
+    paths:
+      - ".github/workflows/apply-milestone7-derived-source.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/milestone-7-native-validation
+      - uses: Swatinem/rust-cache@v2
+      - name: Narrow sharpening helper to a mutable slice
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("crates/a2d-image/src/derived.rs")
+          text = path.read_text()
+          text = text.replace("    bytes: &mut Vec<u8>,\n", "    bytes: &mut [u8],\n", 1)
+          text = text.replace("    let original = bytes.clone();\n", "    let original = bytes.to_vec();\n", 1)
+          if "    bytes: &mut Vec<u8>,\n" in text or "    let original = bytes.clone();\n" in text:
+              raise SystemExit("derived image slice fix was not applied completely")
+          path.write_text(text)
+          PY
+      - name: Format and validate derived images
+        run: |
+          cargo fmt --all
+          cargo clippy -p a2d-image --all-targets --all-features -- -D warnings
+          cargo test -p a2d-image --all-features
+      - name: Commit only validated Rust source
+        run: |
+          unexpected=$(git diff --name-only | grep -v '^crates/a2d-image/src/.*\.rs$' || true)
+          test -z "$unexpected" || {
+            echo "Unexpected changed paths:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/a2d-image/src
+          git diff --cached --quiet && exit 0
+          git commit -m "Format and validate Milestone 7 derived images"
+          git push origin HEAD:agent/milestone-7-native-validation
