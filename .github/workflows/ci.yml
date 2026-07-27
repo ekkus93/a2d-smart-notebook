@@ -3,9 +3,15 @@ name: One-shot Milestone 6 TODO reconciliation
 on:
   push:
     branches: [master]
+  schedule:
+    - cron: "*/5 * * * *"
 
 permissions:
   contents: write
+
+concurrency:
+  group: one-shot-milestone6-todo-reconciliation
+  cancel-in-progress: false
 
 jobs:
   reconcile:
