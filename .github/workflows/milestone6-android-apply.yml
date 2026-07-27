@@ -1,4 +1,4 @@
-name: Apply Milestone 6 Android v4
+name: Apply Milestone 6 Android v5
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: milestone6-android-apply-v4
+  group: milestone6-android-apply-v5
   cancel-in-progress: true
 
 permissions:
@@ -19,7 +19,6 @@ permissions:
 
 jobs:
   apply-and-validate:
-    if: ${{ !hashFiles('apps/android/app/src/main/kotlin/com/a2d/notebook/feature/notebook/NotebookSetupScreen.kt') && !hashFiles('docs/MILESTONE6_APPLY_STATUS.md') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +26,12 @@ jobs:
         id: gates
         shell: bash
         run: |
+          if [ -f apps/android/app/src/main/kotlin/com/a2d/notebook/feature/notebook/NotebookSetupScreen.kt ] || [ -f docs/MILESTONE6_APPLY_STATUS.md ]; then
+            echo "status=skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           set +e
-          LOG="$RUNNER_TEMP/milestone6-android-v4.log"
+          LOG="$RUNNER_TEMP/milestone6-android-v5.log"
           (
             set -euo pipefail
             java -version
@@ -69,7 +72,7 @@ jobs:
             git push origin HEAD:master
           fi
       - name: Publish failure diagnostics without broken source
-        if: steps.gates.outputs.status != '0'
+        if: steps.gates.outputs.status != '0' && steps.gates.outputs.status != 'skip'
         shell: bash
         run: |
           LOG="${{ steps.gates.outputs.log }}"
@@ -84,6 +87,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/MILESTONE6_APPLY_STATUS.md
-          git commit -m "Record Milestone 6 Android v4 failure"
+          git commit -m "Record Milestone 6 Android v5 failure"
           git push origin HEAD:master
           exit 1
