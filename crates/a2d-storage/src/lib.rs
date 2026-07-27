@@ -229,6 +229,14 @@ impl Storage {
     /// replacement, and restore merge — none of those are single-repository-call operations, so
     /// this is the API each of them composes multiple repository calls through, e.g.:
     ///
+    /// Illustrative shape only, not a compiling example (hence `ignore`, not `no_run`) —
+    /// `page`/`scan`/`event` would need a full valid `Page`/`Scan`/`AuditEvent`, and `Scan`
+    /// alone needs an already-committed immutable `Asset`, which would bloat this into a
+    /// multi-page setup rather than a quick illustration of the pattern. The real, fully
+    /// constructed version of exactly this composition is exercised for real by
+    /// `scan_registration_composes_through_one_transaction_matching_the_todo_example` in
+    /// `tests/repository_and_assets.rs`.
+    ///
     /// ```ignore
     /// storage.transaction(|tx| {
     ///     tx.insert_page(&page)?;
