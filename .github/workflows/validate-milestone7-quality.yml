@@ -1,0 +1,43 @@
+name: Validate Milestone 7 Quality Metrics
+
+on:
+  push:
+    branches:
+      - agent/milestone-7-native-validation
+    paths:
+      - ".github/workflows/validate-milestone7-quality.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: Apply canonical Rust formatting
+        run: cargo fmt --all
+      - name: Run clippy
+        id: clippy
+        continue-on-error: true
+        run: cargo clippy -p a2d-image --all-targets --all-features -- -D warnings > quality-validation.log 2>&1
+      - name: Run tests
+        id: tests
+        if: steps.clippy.outcome == 'success'
+        continue-on-error: true
+        run: cargo test -p a2d-image --all-features >> quality-validation.log 2>&1
+      - name: Upload formatted sources and validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone7-quality-validation
+          path: |
+            crates/a2d-image/src
+            quality-validation.log
+          if-no-files-found: error
+      - name: Report validation failure
+        if: steps.clippy.outcome == 'failure' || steps.tests.outcome == 'failure'
+        run: |
+          cat quality-validation.log
+          exit 1
