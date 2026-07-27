@@ -22,14 +22,15 @@ jobs:
           ref: agent/unit-test-coverage
           fetch-depth: 0
 
-      - name: Decode and apply implementation patches
+      - name: Decode and apply implementation patch
         run: |
-          base64 --decode tools/unit-test-coverage.patch.gz.b64 > "$RUNNER_TEMP/unit-test-coverage.patch.gz"
+          cat tools/unit-test-coverage.parts/* > "$RUNNER_TEMP/unit-test-coverage.patch.gz.b64"
+          test "$(wc -c < "$RUNNER_TEMP/unit-test-coverage.patch.gz.b64")" -eq 24084
+          base64 --decode "$RUNNER_TEMP/unit-test-coverage.patch.gz.b64" > "$RUNNER_TEMP/unit-test-coverage.patch.gz"
+          gzip -t "$RUNNER_TEMP/unit-test-coverage.patch.gz"
           gzip -dc "$RUNNER_TEMP/unit-test-coverage.patch.gz" > "$RUNNER_TEMP/unit-test-coverage.patch"
           git apply --check "$RUNNER_TEMP/unit-test-coverage.patch"
-          git apply --whitespace=fix "$RUNNER_TEMP/unit-test-coverage.patch"
-          git apply --check tools/unit-test-coverage-followup.patch
-          git apply tools/unit-test-coverage-followup.patch
+          git apply "$RUNNER_TEMP/unit-test-coverage.patch"
 
       - name: Format Rust code
         run: cargo fmt --all
@@ -48,9 +49,11 @@ jobs:
 
       - name: Commit validated implementation
         run: |
+          rm -rf tools/unit-test-coverage.parts
           rm -f tools/unit-test-coverage.patch.gz.b64
           rm -f tools/unit-test-coverage-followup.patch
           rm -f .github/workflows/apply-unit-test-coverage.yml
+          rm -f .github/workflows/patch-diagnostic.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
