@@ -2,8 +2,11 @@ package com.a2d.notebook.feature.home
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,31 +20,23 @@ import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
 import com.a2d.notebook.rustbridge.A2dBridge
 
-/** Semantics test tags used by Compose UI tests (androidTest) to find nodes without brittle
- * text matching. */
 object HomeScreenTestTags {
     const val TITLE = "home_title"
     const val RUST_GENERATED_ID = "home_rust_generated_id"
+    const val NOTEBOOKS = "home_notebooks"
+    const val SMART_PAGES = "home_smart_pages"
 }
 
-/**
- * Placeholder empty-state Home screen (TODO 1.2, spec section 7.1's first-launch empty state).
- * Real content (Scan a Page / Add a Notebook / Create Smart Pages / Import actions, recent
- * notebooks, Needs Review count) arrives with Milestone 10.
- *
- * The Rust-generated-ID line exists to prove Milestone 2's still-open acceptance criterion,
- * "Android calls Rust and renders a typed response" -- a real `PageId` generated in Rust
- * (a2d-domain's Crockford Base32 encoder, crossing the UniFFI boundary), not a hardcoded string.
- */
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onOpenNotebooks: () -> Unit,
+    onCreateSmartPages: () -> Unit,
+) {
     val context = LocalContext.current
     val rustGeneratedPageId = remember { A2dBridge.client(context).generatePageId() }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -50,10 +45,18 @@ fun HomeScreen() {
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.testTag(HomeScreenTestTags.TITLE),
         )
-        Text(
-            text = stringResource(R.string.home_placeholder),
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        Text(stringResource(R.string.home_placeholder), style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(24.dp))
+        Button(
+            onClick = onOpenNotebooks,
+            modifier = Modifier.testTag(HomeScreenTestTags.NOTEBOOKS),
+        ) { Text(stringResource(R.string.home_notebooks)) }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onCreateSmartPages,
+            modifier = Modifier.testTag(HomeScreenTestTags.SMART_PAGES),
+        ) { Text(stringResource(R.string.home_smart_pages)) }
+        Spacer(Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.home_rust_generated_id_prefix, rustGeneratedPageId),
             style = MaterialTheme.typography.bodySmall,

@@ -3,4 +3,70 @@
     <string name="home_title">A2D Smart Notebook</string>
     <string name="home_placeholder">Local-first. No account required.</string>
     <string name="home_rust_generated_id_prefix">Rust-generated Page ID: %1$s</string>
+    <string name="home_notebooks">Notebooks</string>
+    <string name="home_smart_pages">Create Smart Pages</string>
+
+    <string name="common_back">Back</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_loading">Loading…</string>
+    <string name="common_error_prefix">Error: %1$s</string>
+
+    <string name="notebooks_title">Notebooks</string>
+    <string name="notebooks_add">Add Notebook</string>
+    <string name="notebooks_empty">No notebooks have been registered.</string>
+    <string name="notebooks_active">Active scan destination</string>
+    <string name="notebooks_make_active">Make active</string>
+    <string name="notebooks_clear_active">Clear active selection</string>
+    <string name="notebooks_rename">Rename</string>
+    <string name="notebooks_archive">Archive</string>
+    <string name="notebooks_name">Notebook name</string>
+    <string name="notebooks_design">Design: %1$s</string>
+
+    <string name="setup_title">Add a Notebook</string>
+    <string name="setup_scan">Photograph Setup Code</string>
+    <string name="setup_payload">Notebook Setup Code payload</string>
+    <string name="setup_recognize">Recognize Setup Code</string>
+    <string name="setup_recognized">Notebook Design recognized</string>
+    <string name="setup_design_version">Design version %1$d · %2$d logical pages</string>
+    <string name="setup_untrusted">This design is not trusted by the current build.</string>
+    <string name="setup_color">Optional color label</string>
+    <string name="setup_icon">Optional icon label</string>
+    <string name="setup_notes">Optional notes</string>
+    <string name="setup_multiple_copies">You may register multiple physical copies of the same Notebook Design. Each copy receives its own identity, so scans are never silently mixed.</string>
+    <string name="setup_create">Create Notebook</string>
+    <string name="setup_created">Notebook created</string>
+    <string name="setup_created_pages">Created %1$d persistent page slots.</string>
+    <string name="setup_resolve_first_page">Resolve First Page Code</string>
+    <string name="setup_add_another_copy">Add another copy</string>
+    <string name="setup_capture_failed">The camera did not return a Setup Code image.</string>
+
+    <string name="page_code_title">Resolve a Page Code</string>
+    <string name="page_code_destination">Confirmed Notebook: %1$s</string>
+    <string name="page_code_scan">Photograph Page Code</string>
+    <string name="page_code_payload">Page Code payload</string>
+    <string name="page_code_resolve">Resolve Page Code</string>
+    <string name="page_code_result">Rust resolution result</string>
+    <string name="page_code_explanation">This confirms identity and destination only. Full-page capture and durable scan registration arrive in Milestones 8 and 9.</string>
+
+    <string name="smart_pages_title">Create Smart Pages</string>
+    <string name="smart_pages_single">Single Page</string>
+    <string name="smart_pages_set">Page Set</string>
+    <string name="smart_pages_paper">Paper: %1$s</string>
+    <string name="smart_pages_style">Style: %1$s</string>
+    <string name="smart_pages_page_count">Page count</string>
+    <string name="smart_pages_start_number">Starting visible page number</string>
+    <string name="smart_pages_generate">Generate PDF</string>
+    <string name="smart_pages_invalid_count">Page count must be between 1 and 500.</string>
+    <string name="smart_pages_invalid_start">Starting page number must be at least 1.</string>
+    <string name="smart_pages_generated">Smart Pages generated</string>
+    <string name="smart_pages_set_id">Page Set: %1$s</string>
+    <string name="smart_pages_page_total">%1$d unique page identities</string>
+    <string name="smart_pages_save">Save a copy</string>
+    <string name="smart_pages_share">Share</string>
+    <string name="smart_pages_print">Print</string>
+    <string name="smart_pages_saved">PDF copy saved.</string>
+    <string name="smart_pages_save_failed">The PDF could not be copied to the selected destination.</string>
+    <string name="smart_pages_preview_unavailable">PDF preview unavailable.</string>
+    <string name="smart_pages_preview_description">Generated Smart Page preview</string>
 </resources>

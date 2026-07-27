@@ -1,43 +1,42 @@
-name: Apply Milestone 6 Android v6
+name: Validate Milestone 6 Android
 
 on:
   push:
     branches: [master]
     paths:
+      - apps/android/**
+      - crates/a2d-core/**
+      - crates/a2d-ffi/**
+      - crates/a2d-storage/**
       - .github/workflows/milestone6-android-apply.yml
-      - tools/apply_milestone6_android.py
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
 concurrency:
-  group: milestone6-android-apply-v6
+  group: milestone6-android-validation
   cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  apply-and-validate:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply source, regenerate Kotlin bindings, and validate
+      - name: Run fail-closed source and Android gates
         id: gates
         shell: bash
         run: |
-          if [ -f apps/android/app/src/main/kotlin/com/a2d/notebook/feature/notebook/NotebookSetupScreen.kt ] || [ -f docs/MILESTONE6_APPLY_STATUS.md ]; then
+          if [ -f docs/MILESTONE6_VALIDATION_PASS.md ] || [ -f docs/MILESTONE6_VALIDATION_FAILURE.md ]; then
             echo "status=skip" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           set +e
-          LOG="$RUNNER_TEMP/milestone6-android-v6.log"
+          LOG="$RUNNER_TEMP/milestone6-validation.log"
           (
             set -euo pipefail
-            java -version
-            cargo --version
-            python3 tools/apply_milestone6_android.py
-            cargo fmt --all
             cargo fmt --all --check
             cargo clippy --workspace --all-targets --all-features -- -D warnings
             cargo test --workspace --all-features
@@ -57,36 +56,44 @@ jobs:
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
           echo "log=$LOG" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Commit validated Android implementation
+      - name: Commit validated bindings and pass evidence
         if: steps.gates.outputs.status == '0'
         shell: bash
         run: |
-          rm -f docs/MILESTONE6_APPLY_STATUS.md
+          cat > docs/MILESTONE6_VALIDATION_PASS.md <<'EOF'
+          # Milestone 6 validation passed
+
+          The scheduled fail-closed validation completed successfully:
+
+          - `cargo fmt --all --check`
+          - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+          - `cargo test --workspace --all-features`
+          - Kotlin UniFFI binding regeneration
+          - Android lint
+          - Android unit tests
+          - Android debug assembly
+          EOF
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/android docs/MILESTONE6_APPLY_STATUS.md
-          if git diff --cached --quiet; then
-            echo "No Android changes to commit"
-          else
-            git commit -m "Implement Milestone 6 Android workflows"
-            git push origin HEAD:master
-          fi
-      - name: Publish failure diagnostics without broken source
+          git add apps/android/app/src/main/kotlin/uniffi docs/MILESTONE6_VALIDATION_PASS.md
+          git commit -m "Validate Milestone 6 Android workflows"
+          git push origin HEAD:master
+      - name: Commit diagnostics without broken generated output
         if: steps.gates.outputs.status != '0' && steps.gates.outputs.status != 'skip'
         shell: bash
         run: |
           LOG="${{ steps.gates.outputs.log }}"
           git reset --hard HEAD
           {
-            echo "# Milestone 6 Android apply failure"
+            echo "# Milestone 6 validation failure"
             echo
             echo '```text'
-            tail -n 1000 "$LOG"
+            tail -n 1200 "$LOG"
             echo '```'
-          } > docs/MILESTONE6_APPLY_STATUS.md
+          } > docs/MILESTONE6_VALIDATION_FAILURE.md
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/MILESTONE6_APPLY_STATUS.md
-          git commit -m "Record Milestone 6 Android v6 failure"
+          git add docs/MILESTONE6_VALIDATION_FAILURE.md
+          git commit -m "Record Milestone 6 validation failure"
           git push origin HEAD:master
           exit 1
