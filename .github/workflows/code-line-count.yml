@@ -1,0 +1,40 @@
+name: Code Line Count
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  count:
+    if: github.event.pull_request.head.ref == 'agent/code-line-count'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Count physical lines in handwritten code files
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -type f \
+            \( -name '*.rs' -o -name '*.kt' -o -name '*.kts' -o -name '*.java' -o -name '*.py' -o -name '*.sh' -o -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.swift' -o -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) \
+            ! -path './.git/*' \
+            ! -path './target/*' \
+            ! -path './build/*' \
+            ! -path './*/build/*' \
+            ! -path './node_modules/*' \
+            ! -path './*/node_modules/*' \
+            ! -path './apps/android/app/src/main/kotlin/uniffi/*' \
+            -print0 \
+          | xargs -0 wc -l \
+          | sed '/ total$/d' \
+          | sort -nr \
+          | head -n 10 \
+          | sed 's#^ *##' > top-10-code-files.txt
+          cat top-10-code-files.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: top-10-code-files
+          path: top-10-code-files.txt
+          retention-days: 1
