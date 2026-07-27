@@ -27,11 +27,31 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
       - uses: Swatinem/rust-cache@v2
-      - name: Format and validate a2d-image
+      - name: Apply canonical formatting
+        run: cargo fmt --all
+      - name: Run clippy
+        id: clippy
+        continue-on-error: true
+        run: cargo clippy -p a2d-image --all-targets --all-features -- -D warnings > rectification-validation.log 2>&1
+      - name: Run a2d-image tests
+        id: tests
+        if: steps.clippy.outcome == 'success'
+        continue-on-error: true
+        run: cargo test -p a2d-image --all-features >> rectification-validation.log 2>&1
+      - name: Upload formatted sources and validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone7-rectification-validation
+          path: |
+            crates/a2d-image/src
+            rectification-validation.log
+          if-no-files-found: error
+      - name: Report validation failure
+        if: steps.clippy.outcome == 'failure' || steps.tests.outcome == 'failure'
         run: |
-          cargo fmt --all
-          cargo clippy -p a2d-image --all-targets --all-features -- -D warnings
-          cargo test -p a2d-image --all-features
+          cat rectification-validation.log
+          exit 1
       - name: Verify formatting touched only Rust source
         run: |
           unexpected=$(git diff --name-only | grep -v '^crates/a2d-image/src/.*\.rs$' || true)
