@@ -25,3 +25,18 @@ pub(crate) fn processing_error(
         retryable,
     )
 }
+
+pub(crate) fn capture_quality_error(
+    code: &'static str,
+    message: impl Into<String>,
+    retryable: bool,
+) -> A2dError {
+    A2dError::new(
+        ErrorCode::new(code),
+        ErrorCategory::CaptureQuality,
+        ErrorSeverity::Warning,
+        "error.capture.quality",
+        message,
+        retryable,
+    )
+}
