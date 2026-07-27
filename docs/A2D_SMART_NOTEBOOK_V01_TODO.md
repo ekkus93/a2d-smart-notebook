@@ -747,14 +747,32 @@ pub struct PageLayout {
 
 Add US Letter and A4 portrait layouts for:
 
-- [ ] Blank.
-- [ ] Lined.
-- [ ] Dot grid.
-- [ ] Graph.
+- [x] Blank.
+- [x] Lined.
+- [x] Dot grid.
+- [x] Graph.
 
-- [ ] Test deterministic dimensions and spacing.
-- [ ] Test that markers and QR remain within printer-safe margins.
-- [ ] Test no overlap with the writable region.
+`crates/a2d-layout/src/smart_page.rs::smart_page_layout(PaperSize, SmartPageStyle)` builds all
+8 combinations (2 paper sizes × 4 styles). Every combination shares identical marker/QR/
+content-rect geometry within a paper size — only `ContentStyle` (line/dot/graph spacing) differs
+— but each still gets its own `LayoutId` (e.g. `SP-LETTER-LINED-V1`) per this task's own framing
+("US Letter and A4 portrait layouts for: Blank/Lined/Dot grid/Graph" as 8 distinct things, not 2).
+Physical constants (6mm safe margin, 3mm quiet zone, 18mm marker/QR size, 7mm line spacing, 5mm
+dot/graph spacing) are recorded starting assumptions per CLAUDE.md's open-decisions policy, not
+measured values — Milestone 17's physical print validation is what actually confirms or revises
+them.
+
+- [x] Test deterministic dimensions and spacing.
+      `dimensions_and_spacing_are_deterministic_across_calls`,
+      `letter_and_a4_layouts_use_their_respective_physical_dimensions`,
+      `each_style_carries_its_own_content_style_metadata`.
+- [x] Test that markers and QR remain within printer-safe margins.
+      `markers_and_qr_stay_within_the_printer_safe_margin`, checked for all 8 layouts.
+- [x] Test no overlap with the writable region. `content_rect_never_overlaps_any_marker_or_the_qr_code`
+      plus `every_paper_size_and_style_combination_produces_a_valid_layout`, which additionally
+      runs the full `PageLayout::validate` (marker-role uniqueness, safe-margin bounds, and every
+      machine-readable element's quiet zone) against all 8 layouts — 7 new tests, 32 total in the
+      crate, `cargo test -p a2d-layout`.
 
 ## 5.3 Bound-notebook layout
 

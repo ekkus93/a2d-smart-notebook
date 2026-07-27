@@ -52,6 +52,21 @@ pub struct CalibrationMark {
     pub reference_length_mm: f64,
 }
 
+/// What, if anything, is procedurally drawn inside `content_rect` (spec §12.1: "blank, lined,
+/// dot-grid, and graph styles"). Spacing is a physical measurement here, not a rendering
+/// concern, so `a2d-pdf` (Milestone 5.4) can draw deterministically from the layout alone.
+/// Doesn't change a layout's marker/QR/content-rect geometry — a paper size's four styles share
+/// identical machine-readable geometry and differ only in what's drawn inside the writable area
+/// — but each style still gets its own `LayoutId` (TODO 5.2), since the scanner and provenance
+/// records identify a page's layout without needing to visually infer its ruling.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ContentStyle {
+    Blank,
+    Lined { line_spacing_mm: f64 },
+    DotGrid { spacing_mm: f64 },
+    Graph { spacing_mm: f64 },
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PageLayout {
     pub id: LayoutId,
@@ -67,6 +82,7 @@ pub struct PageLayout {
     pub qr_rect: PhysicalRect,
     pub visible_page_number_rect: Option<PhysicalRect>,
     pub calibration: CalibrationMark,
+    pub content_style: ContentStyle,
 }
 
 fn layout_error(code: &'static str, message: impl Into<String>) -> A2dError {
@@ -265,6 +281,7 @@ mod tests {
                 rect: PhysicalRect::new(page.width_mm / 2.0 - 10.0, 6.0, 20.0, 2.0),
                 reference_length_mm: 20.0,
             },
+            content_style: ContentStyle::Blank,
         }
     }
 
