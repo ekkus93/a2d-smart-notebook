@@ -1,10 +1,9 @@
 name: Validate Milestone 7 Quality Metrics
 
 on:
-  push:
-    branches:
-      - agent/milestone-7-native-validation
+  pull_request:
     paths:
+      - "crates/a2d-image/**"
       - ".github/workflows/validate-milestone7-quality.yml"
 
 permissions:
