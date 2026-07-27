@@ -35,19 +35,35 @@ jobs:
           LOG="$RUNNER_TEMP/milestone6-android.log"
           (
             set -euo pipefail
+            python3 tools/apply_milestone6_android.py
+            cargo fmt --all
+            cargo fmt --all --check
+            cargo clippy --workspace --all-targets --all-features -- -D warnings
+            cargo test --workspace --all-features
+
+            # Generate the Kotlin interface from the desktop cdylib first. This catches Kotlin/API
+            # problems before spending time installing an Android NDK toolchain.
+            cargo build -p a2d-ffi --lib
+            rm -rf /tmp/a2d-m6-kotlin apps/android/app/src/main/kotlin/uniffi
+            cargo run -p a2d-ffi --bin uniffi-bindgen -- generate \
+              --library target/debug/liba2d_ffi.so \
+              --language kotlin \
+              --out-dir /tmp/a2d-m6-kotlin \
+              --no-format
+            mkdir -p apps/android/app/src/main/kotlin/uniffi/a2d_ffi
+            cp /tmp/a2d-m6-kotlin/uniffi/a2d_ffi/a2d_ffi.kt \
+              apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
+            (cd apps/android && ./gradlew lint test assembleDebug --no-daemon)
+
+            # Only a source tree that already passed Android lint/tests gets the slower native build.
             rustup target add x86_64-linux-android
             export ANDROID_SDK_ROOT="${ANDROID_HOME}"
             sdkmanager --install "ndk;27.0.12077973"
             if ! command -v cargo-ndk >/dev/null 2>&1; then
               cargo install cargo-ndk --locked
             fi
-            python3 tools/apply_milestone6_android.py
-            cargo fmt --all
-            cargo fmt --all --check
-            cargo clippy --workspace --all-targets --all-features -- -D warnings
-            cargo test --workspace --all-features
             ./tools/build-android-native.sh
-            (cd apps/android && ./gradlew lint test assembleDebug --no-daemon)
+            (cd apps/android && ./gradlew assembleDebug --no-daemon)
           ) >"$LOG" 2>&1
           STATUS=$?
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
