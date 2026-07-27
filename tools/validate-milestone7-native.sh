@@ -15,13 +15,42 @@ if ! cargo ndk --version >/dev/null 2>&1; then
   echo "cargo-ndk is required (cargo install cargo-ndk --locked)" >&2
   exit 2
 fi
+
 if [ -z "${ANDROID_NDK_HOME:-}" ]; then
+  if [ "${A2D_REQUIRE_EXPLICIT_NDK_HOME:-0}" = "1" ]; then
+    echo "ANDROID_NDK_HOME must be set explicitly for this validation" >&2
+    exit 2
+  fi
+
   sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
-  ANDROID_NDK_HOME=$(find "$sdk_root/ndk" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -1)
-  export ANDROID_NDK_HOME
+  if [ -d "$sdk_root/ndk" ]; then
+    ANDROID_NDK_HOME=$(find "$sdk_root/ndk" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -1)
+    export ANDROID_NDK_HOME
+  fi
 fi
 if [ -z "${ANDROID_NDK_HOME:-}" ] || [ ! -d "$ANDROID_NDK_HOME" ]; then
   echo "ANDROID_NDK_HOME does not identify an installed NDK" >&2
+  exit 2
+fi
+
+ndk_properties="$ANDROID_NDK_HOME/source.properties"
+if [ ! -f "$ndk_properties" ]; then
+  echo "Android NDK source.properties is missing: $ndk_properties" >&2
+  exit 2
+fi
+ndk_revision=$(awk -F ' = ' '/^Pkg.Revision = / { print $2; exit }' "$ndk_properties")
+if [ -z "$ndk_revision" ]; then
+  echo "Unable to read Pkg.Revision from $ndk_properties" >&2
+  exit 2
+fi
+if [ -n "${A2D_EXPECTED_NDK_VERSION:-}" ] && [ "$ndk_revision" != "$A2D_EXPECTED_NDK_VERSION" ]; then
+  echo "Expected Android NDK $A2D_EXPECTED_NDK_VERSION but resolved $ndk_revision" >&2
+  exit 2
+fi
+
+cargo_ndk_version=$(cargo ndk --version)
+if [ -n "${A2D_CARGO_NDK_VERSION:-}" ] && [ "$cargo_ndk_version" != "cargo-ndk $A2D_CARGO_NDK_VERSION" ]; then
+  echo "Expected cargo-ndk $A2D_CARGO_NDK_VERSION but resolved: $cargo_ndk_version" >&2
   exit 2
 fi
 
@@ -45,6 +74,8 @@ for abi in $abis; do
 done
 
 printf 'Using ANDROID_NDK_HOME=%s\n' "$ANDROID_NDK_HOME"
+printf 'Resolved Android NDK revision: %s\n' "$ndk_revision"
+printf 'Resolved cargo-ndk version: %s\n' "$cargo_ndk_version"
 printf 'Validating Android ABIs: %s\n' "$abis"
 rustup target add "${rust_targets[@]}"
 
