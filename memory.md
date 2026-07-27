@@ -737,3 +737,55 @@ requiring rasterization + marker/QR detection from rendered images — genuinely
 Milestone 7's detector existing; the TODO's own acceptance criterion "a generated page can be
 printed, photographed, identified, and rectified" cannot be satisfied without it). Milestone 5's
 overall acceptance is therefore blocked on Milestone 7 regardless of anything else done here.
+
+## 2026-07-26 — Ralph loop: Milestone 5 complete (5.5, partial 5.6)
+
+**5.5 (transactional generated-page registration)**: `A2dCore::open` finally does real I/O —
+previously it only created a bare directory (a deliberate Milestone 2.4 stub, since storage
+didn't exist yet); now it opens `Storage` and `AssetStore` for real. `Storage::transaction` needs
+`&mut Storage`, but `A2dCore` lives behind `Arc` with `&self` methods (matching `a2d-ffi`'s
+`A2dClient`), so `storage: Mutex<Storage>`, locked per call — `AssetStore` needs no such wrapper
+since its own methods only take `&self` (each commit uses a fresh temp filename). Added migration
+`0002_page_generated_pdf_asset.sql` (0001 stays untouched, per "migrations are immutable, fix
+forward") giving `Page` a `generated_pdf_asset_id: Option<AssetId>` field — a genuine domain-model
+gap the TODO's "attach the PDF asset" bullet implied but nothing before this task actually needed.
+Refactored `a2d-pdf`'s three `generate_*_pdf(..., output_path)` functions to split out
+byte-producing `render_*_bytes` cores (17 pre-existing a2d-pdf tests all still pass unmodified,
+confirming the refactor changed nothing observable) so `a2d-core` can commit the same bytes
+through `AssetStore`'s own asset-commit protocol instead of a2d-pdf's separate arbitrary-path
+write. `generate_and_register_page_set` commits the PDF first (durable, outside any transaction —
+matching how the asset commit protocol is meant to be used per its own doc comment), then inserts
+the `PageSet`, every `Page` (with `generated_pdf_asset_id` already set), and the `Asset` row
+together in one `Storage::transaction`. Documented, not hidden, one real gap: if the transaction
+fails *after* the asset is already durably committed, that file is orphaned with no automated
+cleanup — no review-item/audit infrastructure exists yet to build that against (Milestone 9.4/16).
+The returned error at least carries the orphaned `AssetId` in `details` rather than swallowing it.
+Verified via a genuine second, independent `Storage`/`AssetStore` handle reading back the same
+on-disk files a real second process/next-launch would use — not just re-querying the same
+in-process handle that wrote them.
+
+**5.6 (PDF tests)**: closed what's honestly closable without new infrastructure decisions —
+"check page counts and metadata" was already covered by 5.4/5.5's own tests; added
+"test truncated/corrupt output behavior" (truncate a real generated PDF's bytes, confirm
+`write_and_verify` rejects with `PDF_VERIFY_FAILED` and never creates `output_path`). Left
+"rasterize/decode/detect markers/verify positions/simulate print scaling" explicitly unchecked
+with reasons rather than faking partial coverage: rasterization needs a PDF-rasterizer dependency
+decision that hasn't been made (e.g. `pdfium-render` bundles a native library — a real
+license/packaging call, not something to pick casually inside a test-writing task), and marker
+detection is doubly blocked — no detector exists (Milestone 7 hasn't started) AND this build's
+Corner Markers are a documented placeholder shape, not a real AprilTag pattern, so there would be
+nothing genuine to detect even with a detector in hand.
+
+**Milestone 5 (layout engine and Rust PDF generation) is now fully worked through** — 5.1-5.5
+complete, 5.6 completed to the extent honestly possible without Milestone 7. The milestone's own
+acceptance criterion ("a generated page can be printed, photographed, identified, and rectified")
+stays explicitly blocked on Milestone 7, recorded as such rather than claimed.
+
+Full gate green throughout (fmt, clippy, full workspace test — 33 binaries, a2d-pdf 17->18,
+a2d-storage 20->22, a2d-core 5->8 — `cargo deny check`, `a2d-ffi` binding-drift test). Two more
+commits, two more real GitHub Actions runs confirmed green via `gh run watch`/`gh run view`.
+
+Next: Milestone 6 (Notebook and Smart Page workflows) — `resolve_notebook_setup_code`,
+`create_notebook`, page resolution from a parsed Page Code, and the first real Android UI screens
+consuming these use cases. Everything Milestone 6 needs from below (identity, QR, layouts, PDF
+generation, storage, asset commit) now genuinely exists.

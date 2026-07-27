@@ -294,6 +294,32 @@ mod tests {
         ))
     }
 
+    /// TODO 5.6 "test truncated/corrupt output behavior" -- the one bullet in that task
+    /// achievable without a PDF rasterizer or a real marker detector (both still blocked:
+    /// rasterization needs a dependency decision that hasn't been made, and marker detection
+    /// needs Milestone 7's ADR 0002, plus this build's Corner Markers are still a placeholder
+    /// shape, not a real decodable tag -- see `render.rs`'s module doc).
+    #[test]
+    fn write_and_verify_rejects_truncated_bytes_and_never_creates_the_output_path() {
+        let generated = render_smart_page_pdf_bytes(PaperSize::A4, SmartPageStyle::Blank).unwrap();
+        let truncated = &generated.pdf_bytes[..generated.pdf_bytes.len() / 2];
+
+        let path = temp_path("truncated");
+        let err = write_and_verify(truncated, &path).unwrap_err();
+        assert!(err.code.to_string().contains("VERIFY_FAILED"));
+        assert!(
+            !path.exists(),
+            "a failed verify must never leave a file at output_path"
+        );
+
+        // The temp file is deliberately left behind (matching this crate's simpler, ad-hoc
+        // protocol here -- not the full asset-commit-protocol orphan tracking a2d-storage's
+        // AssetStore has); clean it up so the test doesn't leak files.
+        let tmp_path = path.with_extension("pdf.tmp");
+        assert!(tmp_path.exists());
+        std::fs::remove_file(&tmp_path).ok();
+    }
+
     #[test]
     fn generate_smart_page_pdf_writes_a_single_page_pdf_that_re_parses() {
         let path = temp_path("single");
