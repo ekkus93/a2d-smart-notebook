@@ -31,7 +31,21 @@ jobs:
           sdkmanager --install "ndk;27.0.12077973"
           cargo install cargo-ndk --locked
       - name: Validate official AprilTag detector and Android builds
-        run: ./tools/validate-milestone7-native.sh
+        id: android-build
+        continue-on-error: true
+        run: ./tools/validate-milestone7-native.sh > milestone7-android.log 2>&1
+      - name: Upload compact Android build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone7-android-build-log
+          path: milestone7-android.log
+          if-no-files-found: error
+      - name: Report Android build failure
+        if: steps.android-build.outcome == 'failure'
+        run: |
+          cat milestone7-android.log || true
+          exit 1
 
   ios-feasibility:
     name: Future iOS native compile feasibility
