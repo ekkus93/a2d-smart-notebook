@@ -15,43 +15,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: milestone7-native-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  format-fixture-test:
-    name: Validate and format synthetic fixture integration test
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/milestone-7-native-validation' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-      - uses: Swatinem/rust-cache@v2
-      - name: Format and validate fixture test
-        run: |
-          cargo fmt --all
-          cargo clippy -p a2d-image --all-targets --all-features -- -D warnings
-          cargo test -p a2d-image --all-features
-      - name: Verify only the fixture test changed
-        run: |
-          changed=$(git diff --name-only)
-          test "$changed" = "crates/a2d-image/tests/synthetic_scan_fixtures.rs" || {
-            echo "Unexpected changed paths:" >&2
-            echo "$changed" >&2
-            exit 1
-          }
-      - name: Commit validated formatting
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/a2d-image/tests/synthetic_scan_fixtures.rs
-          git commit -m "Format synthetic scan fixture integration test"
-          git push origin HEAD:${{ github.head_ref }}
-
   synthetic-fixtures:
     name: Regenerate and verify synthetic scan fixtures
     runs-on: ubuntu-24.04
