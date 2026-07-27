@@ -92,14 +92,23 @@ fn save_document(title: &str, pages: Vec<PdfPage>) -> Vec<u8> {
     doc.save(&PdfSaveOptions::default(), &mut warnings)
 }
 
-/// Generates a single unique A2D Smart Page PDF (spec §7.5), writing it to `output_path`.
-/// Returns the freshly generated, globally unique `SmartPageId` -- generated entirely offline,
-/// no server allocation.
-pub fn generate_smart_page_pdf(
+/// A generated Smart Page's PDF bytes plus the identities generating it minted. Kept separate
+/// from disk I/O so a caller that owns its own asset-commit protocol (TODO 5.5, `a2d-core`'s
+/// `AssetStore`) can commit these bytes itself rather than going through [`write_and_verify`]'s
+/// arbitrary-output-path flow, which is for standalone/CLI-style generation instead.
+pub struct GeneratedSmartPageBytes {
+    pub smart_page_id: SmartPageId,
+    pub layout_id: LayoutId,
+    pub pdf_bytes: Vec<u8>,
+}
+
+/// Renders a single unique A2D Smart Page PDF (spec §7.5) to bytes, without writing anything to
+/// disk. Returns the freshly generated, globally unique `SmartPageId` -- generated entirely
+/// offline, no server allocation.
+pub fn render_smart_page_pdf_bytes(
     paper: PaperSize,
     style: SmartPageStyle,
-    output_path: &Path,
-) -> Result<SmartPageId, A2dError> {
+) -> Result<GeneratedSmartPageBytes, A2dError> {
     let layout = smart_page_layout(paper, style);
     let smart_page_id = SmartPageId::generate();
     let qr_payload = PageCode::SmartPage {
@@ -110,9 +119,24 @@ pub fn generate_smart_page_pdf(
     }
     .encode()?;
     let ops = render_page_ops(&layout, &qr_payload, None)?;
-    let bytes = save_document("A2D Smart Page", vec![pdf_page_for(&layout, ops)]);
-    write_and_verify(&bytes, output_path)?;
-    Ok(smart_page_id)
+    let pdf_bytes = save_document("A2D Smart Page", vec![pdf_page_for(&layout, ops)]);
+    Ok(GeneratedSmartPageBytes {
+        smart_page_id,
+        layout_id: layout.id,
+        pdf_bytes,
+    })
+}
+
+/// Generates a single unique A2D Smart Page PDF (spec §7.5), writing it to `output_path`.
+/// Returns the freshly generated, globally unique `SmartPageId`.
+pub fn generate_smart_page_pdf(
+    paper: PaperSize,
+    style: SmartPageStyle,
+    output_path: &Path,
+) -> Result<SmartPageId, A2dError> {
+    let generated = render_smart_page_pdf_bytes(paper, style)?;
+    write_and_verify(&generated.pdf_bytes, output_path)?;
+    Ok(generated.smart_page_id)
 }
 
 /// Mirrors TODO 5.4's suggested request shape.
@@ -130,12 +154,19 @@ pub struct GeneratedPageSet {
     pub smart_page_ids: Vec<SmartPageId>,
 }
 
-/// Generates a multipage Page Set PDF (spec §7.6): one `PageSetId`, one unique `SmartPageId` per
-/// page, ascending visible page numbers starting at `starting_visible_page`.
-pub fn generate_page_set_pdf(
+pub struct GeneratedPageSetBytes {
+    pub page_set_id: PageSetId,
+    pub layout_id: LayoutId,
+    pub smart_page_ids: Vec<SmartPageId>,
+    pub pdf_bytes: Vec<u8>,
+}
+
+/// Renders a multipage Page Set PDF (spec §7.6) to bytes, without writing anything to disk: one
+/// `PageSetId`, one unique `SmartPageId` per page, ascending visible page numbers starting at
+/// `starting_visible_page`.
+pub fn render_page_set_pdf_bytes(
     request: GeneratePageSetRequest,
-    output_path: &Path,
-) -> Result<GeneratedPageSet, A2dError> {
+) -> Result<GeneratedPageSetBytes, A2dError> {
     if request.page_count == 0 {
         return Err(validation_error(
             "PDF_PAGE_SET_EMPTY",
@@ -163,24 +194,38 @@ pub fn generate_page_set_pdf(
         smart_page_ids.push(smart_page_id);
     }
 
-    let bytes = save_document("A2D Smart Page Set", pdf_pages);
-    write_and_verify(&bytes, output_path)?;
-    Ok(GeneratedPageSet {
+    let pdf_bytes = save_document("A2D Smart Page Set", pdf_pages);
+    Ok(GeneratedPageSetBytes {
         page_set_id,
         layout_id: layout.id,
         smart_page_ids,
+        pdf_bytes,
     })
 }
 
-/// Generates the bound-notebook proof interior PDF (TODO 5.3/5.4): the Setup Page, then
-/// `logical_page_count` writable pages, each followed by a blank verso (spec §11.2's alternating
-/// recto/verso interior). Uses `a2d_layout::notebook`'s fixed development-placeholder layouts
-/// (Milestone 5.3) -- there is no real official Notebook Design to generate from yet.
-pub fn generate_notebook_proof_interior_pdf(
+/// Generates a multipage Page Set PDF (spec §7.6), writing it to `output_path`.
+pub fn generate_page_set_pdf(
+    request: GeneratePageSetRequest,
+    output_path: &Path,
+) -> Result<GeneratedPageSet, A2dError> {
+    let generated = render_page_set_pdf_bytes(request)?;
+    write_and_verify(&generated.pdf_bytes, output_path)?;
+    Ok(GeneratedPageSet {
+        page_set_id: generated.page_set_id,
+        layout_id: generated.layout_id,
+        smart_page_ids: generated.smart_page_ids,
+    })
+}
+
+/// Renders the bound-notebook proof interior PDF (TODO 5.3/5.4) to bytes, without writing
+/// anything to disk: the Setup Page, then `logical_page_count` writable pages, each followed by
+/// a blank verso (spec §11.2's alternating recto/verso interior). Uses `a2d_layout::notebook`'s
+/// fixed development-placeholder layouts (Milestone 5.3) -- there is no real official Notebook
+/// Design to generate from yet.
+pub fn render_notebook_proof_interior_pdf_bytes(
     design_id: &NotebookDesignId,
     logical_page_count: u32,
-    output_path: &Path,
-) -> Result<(), A2dError> {
+) -> Result<Vec<u8>, A2dError> {
     if logical_page_count == 0 {
         return Err(validation_error(
             "PDF_NOTEBOOK_INTERIOR_EMPTY",
@@ -221,7 +266,19 @@ pub fn generate_notebook_proof_interior_pdf(
         pdf_pages.push(blank_verso_page(&writable_layout));
     }
 
-    let bytes = save_document("A2D Smart Notebook Proof Interior", pdf_pages);
+    Ok(save_document(
+        "A2D Smart Notebook Proof Interior",
+        pdf_pages,
+    ))
+}
+
+/// Generates the bound-notebook proof interior PDF (TODO 5.3/5.4), writing it to `output_path`.
+pub fn generate_notebook_proof_interior_pdf(
+    design_id: &NotebookDesignId,
+    logical_page_count: u32,
+    output_path: &Path,
+) -> Result<(), A2dError> {
+    let bytes = render_notebook_proof_interior_pdf_bytes(design_id, logical_page_count)?;
     write_and_verify(&bytes, output_path)?;
     Ok(())
 }

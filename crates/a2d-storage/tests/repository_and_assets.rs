@@ -139,6 +139,59 @@ fn page_set_and_smart_page_round_trip() {
 }
 
 #[test]
+fn set_generated_pdf_asset_attaches_a_committed_asset_and_round_trips() {
+    let storage = Storage::open_in_memory().unwrap();
+    let asset_store = AssetStore::open(&temp_dir("generated-pdf-asset")).unwrap();
+    let page = Page::new(
+        PageId::generate(),
+        PageKind::SmartPage {
+            smart_page_id: SmartPageId::generate(),
+            page_set_id: None,
+            visible_page_number: None,
+        },
+        LayoutId::parse("PAGE-V1").unwrap(),
+        None,
+        PageState::GeneratedNotScanned,
+        500,
+    );
+    storage.insert_page(&page).unwrap();
+    assert_eq!(
+        storage
+            .get_page(page.id())
+            .unwrap()
+            .unwrap()
+            .generated_pdf_asset_id,
+        None
+    );
+
+    let asset = asset_store
+        .commit(b"%PDF-1.7 fake bytes", AssetKind::Export, "application/pdf")
+        .unwrap();
+    storage.insert_asset(&asset).unwrap();
+    storage
+        .set_generated_pdf_asset(page.id(), asset.id())
+        .unwrap();
+
+    let fetched = storage.get_page(page.id()).unwrap().unwrap();
+    assert_eq!(fetched.generated_pdf_asset_id, Some(asset.id().clone()));
+}
+
+#[test]
+fn set_generated_pdf_asset_rejects_an_unknown_page_id() {
+    let storage = Storage::open_in_memory().unwrap();
+    let asset_store = AssetStore::open(&temp_dir("generated-pdf-asset-missing-page")).unwrap();
+    let asset = asset_store
+        .commit(b"%PDF-1.7 fake bytes", AssetKind::Export, "application/pdf")
+        .unwrap();
+    storage.insert_asset(&asset).unwrap();
+
+    let err = storage
+        .set_generated_pdf_asset(&PageId::generate(), asset.id())
+        .unwrap_err();
+    assert!(err.code.to_string().contains("PAGE_NOT_FOUND"));
+}
+
+#[test]
 fn notebook_page_round_trips_and_enforces_unique_logical_page_number() {
     let storage = Storage::open_in_memory().unwrap();
     let design = sample_design();

@@ -7,8 +7,15 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
-pub static MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "initial",
-    sql: include_str!("migrations/0001_initial.sql"),
-}];
+pub static MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "initial",
+        sql: include_str!("migrations/0001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "page_generated_pdf_asset",
+        sql: include_str!("migrations/0002_page_generated_pdf_asset.sql"),
+    },
+];

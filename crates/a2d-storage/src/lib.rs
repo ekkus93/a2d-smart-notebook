@@ -288,6 +288,7 @@ delegate_repository!(PageRepository {
     fn insert_page(&self, page: &a2d_domain::Page) -> Result<(), A2dError>;
     fn get_page(&self, id: &a2d_domain::PageId) -> Result<Option<a2d_domain::Page>, A2dError>;
     fn set_preferred_scan(&self, page_id: &a2d_domain::PageId, scan_id: &a2d_domain::ScanId) -> Result<(), A2dError>;
+    fn set_generated_pdf_asset(&self, page_id: &a2d_domain::PageId, asset_id: &a2d_domain::AssetId) -> Result<(), A2dError>;
 });
 
 delegate_repository!(AssetRepository {

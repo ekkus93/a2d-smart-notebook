@@ -1,33 +1,53 @@
 //! Composes the other crates into the typed use cases exposed across the FFI boundary.
 //!
-//! Milestone 2.4's job is proving the FFI plumbing works end-to-end, not implementing real
-//! library use cases — those need storage (Milestone 3) and workflows (Milestone 6+), neither of
-//! which exist yet. `open_library` is genuinely complete (path validation has no storage
-//! dependency); `generate_page_id`/`parse_page_id` re-expose already-complete Milestone 2.1
-//! functionality specifically so there is a real, non-stub operation to prove the FFI round-trip
-//! with, rather than a placeholder that returns a fabricated empty result.
+//! `open_library` now opens the real SQLite database and asset store (Milestone 3), not just a
+//! bare directory. `Storage::transaction` needs `&mut Storage`, but `A2dCore` is shared behind
+//! `Arc` and its methods take `&self` (mirroring how `a2d-ffi`'s `A2dClient` holds it) — so
+//! `storage` is wrapped in a `Mutex`, locked for the duration of each use case's transaction.
+//! `AssetStore`'s own methods only need `&self` (each asset commit uses its own fresh temp
+//! filename), so it needs no such wrapper.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use a2d_domain::{
-    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, LayoutId, NotebookDesignId, PageId,
-    SmartPageId,
+    A2dError, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, LayoutId, NotebookDesignId, Page,
+    PageId, PageKind, PageSet, PageSetId, SmartPageId,
 };
 use a2d_identity::PageCode;
+use a2d_storage::{AssetRepository, AssetStore, PageRepository, PageSetRepository, Storage};
 
 pub struct OpenLibraryRequest {
     pub library_path: String,
 }
 
-#[derive(Debug)]
 pub struct A2dCore {
     library_path: PathBuf,
+    storage: Mutex<Storage>,
+    asset_store: AssetStore,
+}
+
+// Manual impl: `Storage`/`AssetStore` don't derive `Debug` (rusqlite's `Connection` doesn't),
+// but `Result::unwrap_err` in tests needs *some* `Debug` bound on the `Ok` type. Prints only the
+// library path, never connection/file-handle internals.
+impl std::fmt::Debug for A2dCore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("A2dCore")
+            .field("library_path", &self.library_path)
+            .finish_non_exhaustive()
+    }
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 impl A2dCore {
-    /// Opens (creating if necessary) the local library directory. Does not touch SQLite —
-    /// that's Milestone 3.
+    /// Opens (creating if necessary) the local library directory, its SQLite database
+    /// (`library.sqlite`), and its asset store (`assets/`, `tmp/`).
     pub fn open(request: OpenLibraryRequest) -> Result<Arc<Self>, A2dError> {
         let path = PathBuf::from(&request.library_path);
         std::fs::create_dir_all(&path).map_err(|e| {
@@ -52,7 +72,13 @@ impl A2dCore {
             )
             .with_detail("path", request.library_path));
         }
-        Ok(Arc::new(Self { library_path: path }))
+        let storage = Storage::open(&path.join("library.sqlite"))?;
+        let asset_store = AssetStore::open(&path)?;
+        Ok(Arc::new(Self {
+            library_path: path,
+            storage: Mutex::new(storage),
+            asset_store,
+        }))
     }
 
     pub fn library_path(&self) -> String {
@@ -96,6 +122,118 @@ impl A2dCore {
         }
         .encode()
     }
+
+    fn lock_storage(&self) -> Result<std::sync::MutexGuard<'_, Storage>, A2dError> {
+        self.storage.lock().map_err(|_| {
+            A2dError::new(
+                ErrorCode::new("CORE_STORAGE_LOCK_POISONED"),
+                ErrorCategory::Internal,
+                ErrorSeverity::Critical,
+                "error.core.storage_lock_poisoned",
+                "the storage mutex was poisoned by a panic in another operation",
+                false,
+            )
+        })
+    }
+
+    /// Generates a Smart Page Set PDF and registers it durably (TODO 5.5, spec §7.6): the PDF is
+    /// committed through the asset commit protocol (spec §16.3) first, since that step is itself
+    /// a write-then-verify-then-rename sequence with nothing to roll back; the `PageSet`, every
+    /// `Page`, and the `Asset` row are then inserted together in a single `Storage::transaction`
+    /// so they become visible atomically. A transaction failure rolls back every row from this
+    /// attempt automatically (`Storage::transaction`'s rollback-on-drop) — nothing partial is
+    /// ever left behind to collide with a retry, and every ID here (`PageSetId`, each
+    /// `SmartPageId`, each `PageId`, the `AssetId`) is freshly random regardless of how many
+    /// times this is called, so a retry can never produce a duplicate logical record even though
+    /// nothing here is idempotent by request identity (spec §12.2: every generation is supposed
+    /// to mint new identities, not reuse them).
+    ///
+    /// **Known gap**: if the DB transaction fails *after* the asset was already durably
+    /// committed to `assets/exports/`, that asset file is orphaned — there is no database row
+    /// referencing it. This function does not silently hide that: the returned error carries the
+    /// orphaned `AssetId` in its `details` so it's diagnosable, but there is no automated
+    /// orphan-cleanup or review-item mechanism yet (that needs Milestone 9.4/16's broader Needs
+    /// Review and integrity-check infrastructure, neither of which exists yet) — matching how
+    /// Milestone 3.3 left its own asset-commit orphan cleanup as documented future work rather
+    /// than building it ahead of need.
+    pub fn generate_and_register_page_set(
+        &self,
+        request: a2d_pdf::GeneratePageSetRequest,
+    ) -> Result<RegisteredPageSet, A2dError> {
+        let starting_visible_page = request.starting_visible_page;
+        let generated = a2d_pdf::render_page_set_pdf_bytes(request)?;
+
+        let asset =
+            self.asset_store
+                .commit(&generated.pdf_bytes, AssetKind::Export, "application/pdf")?;
+
+        let created_at = now_ms();
+        let page_set = PageSet::new(generated.page_set_id.clone(), None, created_at);
+
+        let mut pages = Vec::with_capacity(generated.smart_page_ids.len());
+        let mut registered_pages = Vec::with_capacity(generated.smart_page_ids.len());
+        for (offset, smart_page_id) in generated.smart_page_ids.into_iter().enumerate() {
+            let visible_number = starting_visible_page + offset as u32;
+            let page_id = PageId::generate();
+            let mut page = Page::new(
+                page_id.clone(),
+                PageKind::SmartPage {
+                    smart_page_id: smart_page_id.clone(),
+                    page_set_id: Some(generated.page_set_id.clone()),
+                    visible_page_number: Some(visible_number),
+                },
+                generated.layout_id.clone(),
+                None,
+                a2d_domain::PageState::GeneratedNotScanned,
+                created_at,
+            );
+            page.set_generated_pdf_asset(asset.id().clone(), created_at);
+            registered_pages.push(RegisteredPage {
+                page_id,
+                smart_page_id,
+            });
+            pages.push(page);
+        }
+
+        let asset_id = asset.id().clone();
+        let mut storage = self.lock_storage()?;
+        storage
+            .transaction(|tx| {
+                tx.insert_page_set(&page_set)?;
+                tx.insert_asset(&asset)?;
+                for page in &pages {
+                    tx.insert_page(page)?;
+                }
+                Ok(())
+            })
+            .map_err(|e| {
+                e.with_detail("orphaned_asset_id", asset_id.to_string())
+                    .with_detail(
+                        "note",
+                        "the PDF asset was durably committed to disk before this transaction \
+                     failed; no database row references it",
+                    )
+            })?;
+
+        Ok(RegisteredPageSet {
+            page_set_id: generated.page_set_id,
+            pages: registered_pages,
+            pdf_asset_id: asset_id,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct RegisteredPage {
+    pub page_id: PageId,
+    pub smart_page_id: SmartPageId,
+}
+
+#[derive(Debug)]
+pub struct RegisteredPageSet {
+    pub page_set_id: PageSetId,
+    pub pages: Vec<RegisteredPage>,
+    pub pdf_asset_id: a2d_domain::AssetId,
 }
 
 fn example_layout_id() -> LayoutId {
@@ -177,6 +315,97 @@ mod tests {
 
         let smart = core.generate_example_smart_page_qr_payload().unwrap();
         assert!(smart.starts_with("A2D:1:M:"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn open_test_core() -> (Arc<A2dCore>, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("a2d-core-test-{}", PageId::generate()));
+        let core = A2dCore::open(OpenLibraryRequest {
+            library_path: dir.to_string_lossy().into_owned(),
+        })
+        .unwrap();
+        (core, dir)
+    }
+
+    fn sample_request() -> a2d_pdf::GeneratePageSetRequest {
+        a2d_pdf::GeneratePageSetRequest {
+            paper_size: a2d_layout::PaperSize::A4,
+            style: a2d_layout::SmartPageStyle::Blank,
+            page_count: 3,
+            starting_visible_page: 1,
+        }
+    }
+
+    #[test]
+    fn generate_and_register_page_set_persists_the_page_set_pages_and_asset() {
+        let (core, dir) = open_test_core();
+        let registered = core
+            .generate_and_register_page_set(sample_request())
+            .unwrap();
+        assert_eq!(registered.pages.len(), 3);
+
+        // Inspect the library directly through a second, independent Storage/AssetStore handle,
+        // the same way a real second process (or the next app launch) would.
+        let storage = Storage::open(&dir.join("library.sqlite")).unwrap();
+        let asset_store = AssetStore::open(&dir).unwrap();
+
+        let page_set = storage.get_page_set(&registered.page_set_id).unwrap();
+        assert!(page_set.is_some());
+
+        for registered_page in &registered.pages {
+            let page = storage.get_page(&registered_page.page_id).unwrap().unwrap();
+            assert_eq!(page.state, a2d_domain::PageState::GeneratedNotScanned);
+            assert_eq!(
+                page.generated_pdf_asset_id,
+                Some(registered.pdf_asset_id.clone())
+            );
+            match page.kind {
+                PageKind::SmartPage { smart_page_id, .. } => {
+                    assert_eq!(smart_page_id, registered_page.smart_page_id);
+                }
+                other => panic!("expected a SmartPage, got {other:?}"),
+            }
+        }
+
+        // The asset the pages reference actually exists on disk with a verifiable hash -- not
+        // just a database row with a dangling path.
+        let asset = storage
+            .get_asset(&registered.pdf_asset_id)
+            .unwrap()
+            .unwrap();
+        asset_store.verify(&asset).unwrap();
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn generate_and_register_page_set_rejects_zero_pages_before_touching_storage() {
+        let (core, dir) = open_test_core();
+        let mut request = sample_request();
+        request.page_count = 0;
+        let err = core.generate_and_register_page_set(request).unwrap_err();
+        assert!(err.code.to_string().contains("PAGE_SET_EMPTY"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn repeated_generation_produces_fully_independent_page_sets() {
+        let (core, dir) = open_test_core();
+        let first = core
+            .generate_and_register_page_set(sample_request())
+            .unwrap();
+        let second = core
+            .generate_and_register_page_set(sample_request())
+            .unwrap();
+
+        assert_ne!(first.page_set_id, second.page_set_id);
+        assert_ne!(first.pdf_asset_id, second.pdf_asset_id);
+        let first_page_ids: std::collections::HashSet<_> =
+            first.pages.iter().map(|p| p.page_id.clone()).collect();
+        let second_page_ids: std::collections::HashSet<_> =
+            second.pages.iter().map(|p| p.page_id.clone()).collect();
+        assert!(first_page_ids.is_disjoint(&second_page_ids));
 
         std::fs::remove_dir_all(&dir).ok();
     }

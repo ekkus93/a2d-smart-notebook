@@ -665,3 +665,75 @@ blocked on ADR 0001 reaching Accepted, which itself is blocked on Milestone 5 pr
 physical layout to test the worst-case payload against (the ADR's one open Validation Evidence
 item). Next reasonable step once picked back up: Milestone 5 (layout engine and PDF generation) —
 starting it would also unblock ADR 0001's last open item and, transitively, Milestone 4.3.
+
+## 2026-07-26 — Ralph loop: Milestone 5 (layout engine and PDF generation), 5.1-5.4
+
+Confirmed CI green for Milestone 4's commit (`0bfb18d`, all 4 jobs) before starting, per this
+project's "verify for real" discipline, then worked straight through Milestone 5.1-5.4 as one
+continuous session (user: "Continue").
+
+**5.1 (canonical physical layout model)**: new `a2d-layout::geometry` (`PhysicalSize`/
+`PhysicalPoint`/`PhysicalRect`, millimeters, top-left origin/y-down — documented explicitly as a
+choice, since PDF's own coordinate system is bottom-left/y-up and converting is `a2d-pdf`'s job,
+not this crate's) and `a2d-layout::page_layout` (`PageLayout`, `MarkerRole`, `MarkerPlacement`,
+`CalibrationMark`, matching the TODO's own suggested shape closely). `PageLayout::validate`
+checks marker-role uniqueness, safe-margin bounds, and quiet-zone overlap between every
+machine-readable element (markers + QR) and content/page-number/each-other. 25 tests, all passing
+on the first real attempt after careful geometry derivation up front.
+
+**5.2 (Smart Page layouts)**: `smart_page_layout(PaperSize, SmartPageStyle)` builds all 8
+US Letter/A4 x Blank/Lined/DotGrid/Graph combinations. Added `ContentStyle` to `PageLayout`
+(line/dot/graph spacing as physical measurements, not a rendering concern) despite it not being
+in 5.1's original suggested struct — deliberate, since the TODO's own framing of 5.2 as "8
+things" (not "2 layouts x 4 render styles") implies each combination needs to be independently
+identifiable via its own `LayoutId`, which only makes sense if the style is layout metadata.
+Physical constants (6mm safe margin, 3mm quiet zone, 18mm marker/QR size) recorded as CLAUDE.md
+open-decision assumptions, not measured values.
+
+**5.3 (bound-notebook layout)**: first trim-size decision — 152x229mm (6x9in), a common
+print-on-demand journal trim. Extracted `layout_builder::build_layout` out of 5.2's
+`smart_page_layout` so both layout families share one geometry formula (`left_margin_mm` vs.
+`margin_mm` lets the notebook's 20mm gutter exclusion and Smart Pages' symmetric margins reuse
+the same code) — refactored 5.2 to call it too, verified byte-identical behavior via its existing
+test suite before moving on. `pdf_page_number_for_logical_page` maps logical page numbers to PDF
+page positions around interleaved blank versos (logical 1 -> PDF page 3, etc.), satisfying "logical
+page numbers != PDF page numbers" without needing a PDF renderer to exist yet. Deferred "generate
+blank verso pages"/"generate proof interior PDF" to 5.4 explicitly rather than faking them here.
+**One real bug caught by tests, not assumed away**: the notebook's 152mm width (much narrower than
+Letter/A4's 210mm+) broke 5.2's original page-number placement formula (fixed horizontal offset
+next to the QR) — ran out of room before the BR marker's quiet zone, genuine `validate()` failure.
+Fixed by moving the page number into its own reserved horizontal strip above the marker/QR row
+(scales with any page width) rather than patching the specific narrow-page numbers. This is
+exactly the kind of bug "write the formula once, trust it, ship" would have missed — it only
+surfaced because every concrete layout actually gets validated in tests, every time.
+
+**5.4 (PDF renderer)**: new crate `a2d-pdf`, using `printpdf` 0.12 (vector drawing + `BuiltinFont`
+standard-14 fonts, no embedded font file, so no font-licensing question at all) and `qrcode`
+(module matrix only, no image/svg features — module squares rendered as our own vector polygons
+for "integral module scale"). Before writing any code, read printpdf 0.12's actual source under
+`~/.cargo/registry/src/.../printpdf-0.12.4/src/` directly (WebFetch on docs.rs/GitHub returned
+prose without real code examples for this fast-evolving crate) to get exact struct/enum shapes —
+paid off: `a2d-pdf` compiled clean on the very first `cargo build`, no trial-and-error API
+discovery loop. Corner Markers are an explicit placeholder shape (bordered black square) — real
+AprilTag bit pattern waits for Milestone 7's ADR 0002, documented prominently so it can't be
+mistaken for a finished scannable marker. `generate_smart_page_pdf`/`generate_page_set_pdf`/
+`generate_notebook_proof_interior_pdf` all commit via write-to-temp -> re-parse-to-verify (with
+`PdfParseOptions{fail_on_error: true}`, not the lenient default) -> atomic rename, mirroring spec
+§16.3's asset commit protocol. A `debug_assert_eq!` inside the notebook-interior loop ties its
+page construction order directly to 5.3's `pdf_page_number_for_logical_page`, so the two
+independently-written pieces can't silently drift apart. 17 tests, `cargo deny check` clean with
+printpdf+qrcode's full transitive tree (nothing needed adding to `deny.toml`'s allow-list).
+
+Full gate green after every one of 5.1/5.2/5.3/5.4 individually (not just at the end): `cargo fmt
+--check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test
+--workspace --all-features` (33 test binaries throughout, individual crate test counts climbing:
+a2d-layout 25->32->43, a2d-pdf 0->17 new), `cargo deny check`. Four separate commits, four
+separate real GitHub Actions runs, all confirmed green via `gh run view`/`gh run watch` before
+moving to the next task — not batched into one lump commit at the end.
+
+Remaining in Milestone 5: **5.5** (transactional generated-page registration — needs a2d-storage +
+a2d-pdf wired together, likely in a2d-core, still essentially empty) and **5.6** (PDF tests
+requiring rasterization + marker/QR detection from rendered images — genuinely blocked on
+Milestone 7's detector existing; the TODO's own acceptance criterion "a generated page can be
+printed, photographed, identified, and rectified" cannot be satisfied without it). Milestone 5's
+overall acceptance is therefore blocked on Milestone 7 regardless of anything else done here.

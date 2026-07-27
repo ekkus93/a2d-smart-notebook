@@ -351,6 +351,8 @@ pub trait PageRepository {
     fn insert_page(&self, page: &Page) -> Result<(), A2dError>;
     fn get_page(&self, id: &PageId) -> Result<Option<Page>, A2dError>;
     fn set_preferred_scan(&self, page_id: &PageId, scan_id: &ScanId) -> Result<(), A2dError>;
+    fn set_generated_pdf_asset(&self, page_id: &PageId, asset_id: &AssetId)
+    -> Result<(), A2dError>;
 }
 
 impl PageRepository for Connection {
@@ -394,8 +396,9 @@ impl PageRepository for Connection {
         self.execute(
             "INSERT INTO pages (id, kind, notebook_id, notebook_design_id, \
              logical_page_number, smart_page_id, page_set_id, visible_page_number, layout_id, \
-             title, state, preferred_scan_id, created_at_ms, updated_at_ms) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+             title, state, preferred_scan_id, generated_pdf_asset_id, created_at_ms, \
+             updated_at_ms) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 page.id().to_string(),
                 kind,
@@ -409,6 +412,9 @@ impl PageRepository for Connection {
                 page.title,
                 page_state_to_str(page.state),
                 page.preferred_scan_id.as_ref().map(ToString::to_string),
+                page.generated_pdf_asset_id
+                    .as_ref()
+                    .map(ToString::to_string),
                 page.created_at_ms,
                 page.updated_at_ms,
             ],
@@ -421,7 +427,8 @@ impl PageRepository for Connection {
         self.query_row(
             "SELECT id, kind, notebook_id, notebook_design_id, logical_page_number, \
              smart_page_id, page_set_id, visible_page_number, layout_id, title, state, \
-             preferred_scan_id, created_at_ms, updated_at_ms FROM pages WHERE id = ?1",
+             preferred_scan_id, generated_pdf_asset_id, created_at_ms, updated_at_ms FROM pages \
+             WHERE id = ?1",
             [id.to_string()],
             |row| {
                 Ok((
@@ -437,8 +444,9 @@ impl PageRepository for Connection {
                     row.get::<_, Option<String>>(9)?,
                     row.get::<_, String>(10)?,
                     row.get::<_, Option<String>>(11)?,
-                    row.get::<_, i64>(12)?,
+                    row.get::<_, Option<String>>(12)?,
                     row.get::<_, i64>(13)?,
+                    row.get::<_, i64>(14)?,
                 ))
             },
         )
@@ -458,6 +466,7 @@ impl PageRepository for Connection {
                 title,
                 state,
                 preferred_scan_id,
+                generated_pdf_asset_id,
                 created_at_ms,
                 updated_at_ms,
             )| {
@@ -490,6 +499,9 @@ impl PageRepository for Connection {
                     title,
                     page_state_from_str(&state)?,
                     preferred_scan_id.map(|s| ScanId::parse(&s)).transpose()?,
+                    generated_pdf_asset_id
+                        .map(|s| AssetId::parse(&s))
+                        .transpose()?,
                     created_at_ms,
                     updated_at_ms,
                 ))
@@ -512,6 +524,31 @@ impl PageRepository for Connection {
                 ErrorSeverity::Error,
                 "error.storage.page_not_found",
                 "set_preferred_scan: no page with this id",
+                false,
+            )
+            .with_detail("page_id", page_id.to_string()));
+        }
+        Ok(())
+    }
+
+    fn set_generated_pdf_asset(
+        &self,
+        page_id: &PageId,
+        asset_id: &AssetId,
+    ) -> Result<(), A2dError> {
+        let changed = self
+            .execute(
+                "UPDATE pages SET generated_pdf_asset_id = ?1 WHERE id = ?2",
+                params![asset_id.to_string(), page_id.to_string()],
+            )
+            .map_err(|e| map_sql_error("set_generated_pdf_asset", e))?;
+        if changed == 0 {
+            return Err(A2dError::new(
+                ErrorCode::new("STORAGE_PAGE_NOT_FOUND"),
+                ErrorCategory::Validation,
+                ErrorSeverity::Error,
+                "error.storage.page_not_found",
+                "set_generated_pdf_asset: no page with this id",
                 false,
             )
             .with_detail("page_id", page_id.to_string()));

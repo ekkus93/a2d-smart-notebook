@@ -12,3 +12,6 @@ workspace = true
 [dependencies]
 a2d-domain = { path = "../a2d-domain" }
 a2d-identity = { path = "../a2d-identity" }
+a2d-layout = { version = "0.1.0", path = "../a2d-layout" }
+a2d-pdf = { version = "0.1.0", path = "../a2d-pdf" }
+a2d-storage = { version = "0.1.0", path = "../a2d-storage" }

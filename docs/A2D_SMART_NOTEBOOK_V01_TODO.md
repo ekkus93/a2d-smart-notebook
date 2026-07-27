@@ -869,11 +869,48 @@ a2d-pdf`.
 
 ## 5.5 Transactional generated-page registration
 
-- [ ] Create Page Set and all unique page identities transactionally.
-- [ ] Generate and verify PDF.
-- [ ] Attach the PDF asset and mark success.
-- [ ] On failure, roll back coherently or retain an explicit failed-generation record.
-- [ ] Retry safely without duplicate logical records.
+`A2dCore::generate_and_register_page_set` (`crates/a2d-core/src/lib.rs`) implements this for
+Smart Page Sets. `A2dCore::open` now actually opens the SQLite database and asset store
+(previously just created a bare directory — Milestone 3's storage existed but nothing wired it
+into `A2dCore` yet). Added a new migration, `0002_page_generated_pdf_asset.sql` (0001 is
+immutable per policy, so this is additive, not an edit), giving `Page` a
+`generated_pdf_asset_id: Option<AssetId>` field so a generated page can remember which `Asset`
+its PDF was committed as.
+
+- [x] Create Page Set and all unique page identities transactionally. Every `PageSetId`,
+      `SmartPageId`, and `PageId` involved is generated in memory first (via `a2d-pdf`'s
+      `render_page_set_pdf_bytes`, refactored this task to return bytes + identities without
+      touching disk, plus a thin `generate_page_set_pdf` wrapper that adds the temp-write-verify-
+      rename disk path on top for standalone/CLI-style use — Milestone 5.4's file-writing API is
+      unchanged, all 17 of its existing tests still pass unmodified). The `PageSet` row and every
+      `Page` row are then inserted together inside one `Storage::transaction`.
+- [x] Generate and verify PDF. Reuses Milestone 5.4's `render_page_set_pdf_bytes` (the QR/marker/
+      ruling rendering) and the asset commit protocol's own verify step (`AssetStore::commit`
+      re-hashes what it wrote before renaming into place, spec §16.3) — not a second, redundant
+      verify step.
+- [x] Attach the PDF asset and mark success. Every generated `Page`'s `generated_pdf_asset_id` is
+      set to the committed `Asset`'s id before insertion; state is `GeneratedNotScanned`.
+- [x] On failure, roll back coherently or retain an explicit failed-generation record.
+      `Storage::transaction` rolls back every row from a failed attempt automatically (rollback-
+      on-drop). **Documented, not fully closed gap**: if the DB transaction fails *after* the PDF
+      asset was already durably committed to `assets/exports/`, that file is orphaned — no
+      automated cleanup or review-item exists yet (needs Milestone 9.4/16 infrastructure that
+      doesn't exist). The returned error carries the orphaned `AssetId` in its `details` so it's
+      at least diagnosable, matching Milestone 3.3's own precedent of documenting this exact class
+      of gap rather than building unneeded infrastructure ahead of the milestone that needs it.
+- [x] Retry safely without duplicate logical records. Every ID minted is freshly random on every
+      call (spec §12.2), so a retry after a failed (fully rolled-back) attempt cannot produce a
+      duplicate logical record — there is nothing from the failed attempt left in the database to
+      collide with, and a successful retry simply mints an entirely independent Page Set, which
+      is correct behavior here, not a bug to guard against. Verified directly:
+      `repeated_generation_produces_fully_independent_page_sets`.
+
+8 new/changed tests: 2 in `a2d-storage` (`set_generated_pdf_asset_attaches_a_committed_asset_and_round_trips`,
+`set_generated_pdf_asset_rejects_an_unknown_page_id`), 3 new in `a2d-core`
+(`generate_and_register_page_set_persists_the_page_set_pages_and_asset` — which inspects the
+result through a *second*, independent `Storage`/`AssetStore` handle opened against the same
+files, the way a real second process would — plus the zero-page and independent-retry cases), all
+of `a2d-core`'s existing tests still passing after `A2dCore::open` started doing real I/O.
 
 ## 5.6 PDF tests
 

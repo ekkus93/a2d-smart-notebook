@@ -240,6 +240,10 @@ pub struct Page {
     pub title: Option<String>,
     pub state: PageState,
     pub preferred_scan_id: Option<ScanId>,
+    /// The `Asset` (kind `Export`) a generated page's PDF was committed as (TODO 5.5). `None`
+    /// for scanned/imported pages, which never had a PDF generated for them, and briefly for a
+    /// freshly created generated page before its PDF asset is attached.
+    pub generated_pdf_asset_id: Option<AssetId>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }
@@ -260,14 +264,16 @@ impl Page {
             title,
             state,
             preferred_scan_id: None,
+            generated_pdf_asset_id: None,
             created_at_ms,
             updated_at_ms: created_at_ms,
         }
     }
 
     /// Reconstructs a `Page` with every field explicit, including ones `new` defaults
-    /// (`preferred_scan_id`, `updated_at_ms`) — for the storage layer rebuilding a `Page` from a
-    /// database row, where those fields are already known rather than freshly defaulted.
+    /// (`preferred_scan_id`, `generated_pdf_asset_id`, `updated_at_ms`) — for the storage layer
+    /// rebuilding a `Page` from a database row, where those fields are already known rather than
+    /// freshly defaulted.
     #[allow(clippy::too_many_arguments)]
     pub fn from_stored(
         id: PageId,
@@ -276,6 +282,7 @@ impl Page {
         title: Option<String>,
         state: PageState,
         preferred_scan_id: Option<ScanId>,
+        generated_pdf_asset_id: Option<AssetId>,
         created_at_ms: i64,
         updated_at_ms: i64,
     ) -> Self {
@@ -286,6 +293,7 @@ impl Page {
             title,
             state,
             preferred_scan_id,
+            generated_pdf_asset_id,
             created_at_ms,
             updated_at_ms,
         }
@@ -315,6 +323,13 @@ impl Page {
         self.preferred_scan_id = Some(scan.id().clone());
         self.updated_at_ms = now_ms;
         Ok(())
+    }
+
+    /// Records which `Asset` this generated page's PDF was committed as (TODO 5.5 "attach the
+    /// PDF asset and mark success").
+    pub fn set_generated_pdf_asset(&mut self, asset_id: AssetId, now_ms: i64) {
+        self.generated_pdf_asset_id = Some(asset_id);
+        self.updated_at_ms = now_ms;
     }
 }
 

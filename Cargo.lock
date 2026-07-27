@@ -12,6 +12,9 @@ version = "0.1.0"
 dependencies = [
  "a2d-domain",
  "a2d-identity",
+ "a2d-layout",
+ "a2d-pdf",
+ "a2d-storage",
 ]
 
 [[package]]
