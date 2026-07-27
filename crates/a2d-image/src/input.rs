@@ -186,15 +186,7 @@ mod tests {
     #[test]
     fn accepts_padded_grayscale_rows_without_copying_at_validation_time() {
         let bytes = [0_u8; 24];
-        let frame = GrayFrame::new(
-            5,
-            3,
-            8,
-            ImageRotation::Degrees90,
-            &bytes,
-            limits(),
-        )
-        .unwrap();
+        let frame = GrayFrame::new(5, 3, 8, ImageRotation::Degrees90, &bytes, limits()).unwrap();
 
         assert_eq!(frame.width(), 5);
         assert_eq!(frame.height(), 3);
@@ -206,43 +198,22 @@ mod tests {
 
     #[test]
     fn rejects_zero_dimensions() {
-        let err = GrayFrame::new(
-            0,
-            10,
-            10,
-            ImageRotation::Degrees0,
-            &[0; 100],
-            limits(),
-        )
-        .unwrap_err();
+        let err =
+            GrayFrame::new(0, 10, 10, ImageRotation::Degrees0, &[0; 100], limits()).unwrap_err();
         assert_eq!(err.code.to_string(), "IMAGE_DIMENSIONS_INVALID");
     }
 
     #[test]
     fn rejects_stride_smaller_than_width() {
-        let err = GrayFrame::new(
-            10,
-            10,
-            9,
-            ImageRotation::Degrees0,
-            &[0; 100],
-            limits(),
-        )
-        .unwrap_err();
+        let err =
+            GrayFrame::new(10, 10, 9, ImageRotation::Degrees0, &[0; 100], limits()).unwrap_err();
         assert_eq!(err.code.to_string(), "IMAGE_STRIDE_INVALID");
     }
 
     #[test]
     fn rejects_truncated_rows() {
-        let err = GrayFrame::new(
-            10,
-            10,
-            12,
-            ImageRotation::Degrees0,
-            &[0; 119],
-            limits(),
-        )
-        .unwrap_err();
+        let err =
+            GrayFrame::new(10, 10, 12, ImageRotation::Degrees0, &[0; 119], limits()).unwrap_err();
         assert_eq!(err.code.to_string(), "IMAGE_BUFFER_TOO_SMALL");
     }
 

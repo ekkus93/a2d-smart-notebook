@@ -12,8 +12,8 @@ mod error;
 mod input;
 
 pub use detection::{
-    ImagePoint, MarkerDetection, MarkerFamily, MarkerIdLayout, PageOrientation,
-    ResolvedMarker, ResolvedPageMarkers, resolve_page_markers,
+    ImagePoint, MarkerDetection, MarkerFamily, MarkerIdLayout, PageOrientation, ResolvedMarker,
+    ResolvedPageMarkers, resolve_page_markers,
 };
 pub use detector::{AprilTagDetector, DetectorConfig};
 pub use encoded::{

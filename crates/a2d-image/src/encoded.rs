@@ -141,10 +141,7 @@ impl<'a> EncodedImage<'a> {
                 ),
             )
             .with_detail("actual_bytes", bytes.len().to_string())
-            .with_detail(
-                "max_encoded_bytes",
-                limits.max_encoded_bytes().to_string(),
-            ));
+            .with_detail("max_encoded_bytes", limits.max_encoded_bytes().to_string()));
         }
         if !format.has_matching_signature(bytes) {
             return Err(validation_error(
@@ -233,10 +230,8 @@ impl<'a> EncodedImage<'a> {
             )
         })?;
 
-        let mut reader = ImageReader::with_format(
-            Cursor::new(self.bytes),
-            self.format.image_format(),
-        );
+        let mut reader =
+            ImageReader::with_format(Cursor::new(self.bytes), self.format.image_format());
         reader.limits(self.limits.decoder_limits());
         let decoded = reader.decode().map_err(|error| {
             processing_error(
@@ -293,10 +288,8 @@ impl<'a> EncodedImage<'a> {
     }
 
     fn read_dimensions(self) -> Result<(u32, u32), A2dError> {
-        let mut reader = ImageReader::with_format(
-            Cursor::new(self.bytes),
-            self.format.image_format(),
-        );
+        let mut reader =
+            ImageReader::with_format(Cursor::new(self.bytes), self.format.image_format());
         reader.limits(self.limits.decoder_limits());
         reader.into_dimensions().map_err(|error| {
             processing_error(
@@ -521,9 +514,7 @@ mod tests {
         .unwrap()
         .decode_rgb8()
         .unwrap();
-        let gray = rgb
-            .into_gray8(ImageLimits::new(4).unwrap())
-            .unwrap();
+        let gray = rgb.into_gray8(ImageLimits::new(4).unwrap()).unwrap();
         let frame = gray.as_frame(ImageLimits::new(4).unwrap()).unwrap();
 
         assert_eq!(gray.pixel_format(), PixelFormat::Gray8);
@@ -545,10 +536,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(
-            err.code.to_string(),
-            "IMAGE_ENCODED_BYTE_LIMIT_EXCEEDED"
-        );
+        assert_eq!(err.code.to_string(), "IMAGE_ENCODED_BYTE_LIMIT_EXCEEDED");
     }
 
     #[test]
@@ -594,10 +582,7 @@ mod tests {
         .decode_rgb8()
         .unwrap_err();
 
-        assert_eq!(
-            err.code.to_string(),
-            "IMAGE_DECODED_BYTE_LIMIT_EXCEEDED"
-        );
+        assert_eq!(err.code.to_string(), "IMAGE_DECODED_BYTE_LIMIT_EXCEEDED");
     }
 
     #[test]

@@ -1,9 +1,6 @@
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
-pub(crate) fn validation_error(
-    code: &'static str,
-    message: impl Into<String>,
-) -> A2dError {
+pub(crate) fn validation_error(code: &'static str, message: impl Into<String>) -> A2dError {
     A2dError::new(
         ErrorCode::new(code),
         ErrorCategory::Validation,

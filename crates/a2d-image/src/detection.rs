@@ -101,10 +101,7 @@ impl MarkerIdLayout {
             if !roles.contains(expected.as_id_str()) {
                 return Err(validation_error(
                     "MARKER_LAYOUT_MISSING_ROLE",
-                    format!(
-                        "marker layout is missing role {}",
-                        expected.as_id_str()
-                    ),
+                    format!("marker layout is missing role {}", expected.as_id_str()),
                 ));
             }
         }
@@ -196,10 +193,7 @@ pub fn resolve_page_markers(
             .ok_or_else(|| {
                 processing_error(
                     "MARKER_DETECTION_MISSING_ROLE",
-                    format!(
-                        "no detection resolved to role {}",
-                        role.as_id_str()
-                    ),
+                    format!("no detection resolved to role {}", role.as_id_str()),
                     true,
                 )
             })
@@ -210,10 +204,8 @@ pub fn resolve_page_markers(
     let bottom_left = get(MarkerRole::BottomLeft)?;
     let bottom_right = get(MarkerRole::BottomRight)?;
 
-    let orientation = orientation_from_top_edge(
-        top_left.detection.center,
-        top_right.detection.center,
-    )?;
+    let orientation =
+        orientation_from_top_edge(top_left.detection.center, top_right.detection.center)?;
 
     unexpected_tag_ids.sort_unstable();
     Ok(ResolvedPageMarkers {
@@ -324,10 +316,7 @@ mod tests {
             &layout(),
         )
         .unwrap_err();
-        assert_eq!(
-            err.code.to_string(),
-            "MARKER_DETECTION_DUPLICATE_TAG_ID"
-        );
+        assert_eq!(err.code.to_string(), "MARKER_DETECTION_DUPLICATE_TAG_ID");
     }
 
     #[test]
