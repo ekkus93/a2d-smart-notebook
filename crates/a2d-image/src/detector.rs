@@ -32,6 +32,22 @@ impl Default for DetectorConfig {
     }
 }
 
+trait NativeBoolean {
+    fn from_bool(value: bool) -> Self;
+}
+
+impl NativeBoolean for bool {
+    fn from_bool(value: bool) -> Self {
+        value
+    }
+}
+
+impl NativeBoolean for i32 {
+    fn from_bool(value: bool) -> Self {
+        i32::from(value)
+    }
+}
+
 impl DetectorConfig {
     fn validate(self) -> Result<Self, A2dError> {
         if self.thread_count == 0 {
@@ -135,9 +151,9 @@ impl AprilTagDetector {
             native.nthreads = i32::from(config.thread_count);
             native.quad_decimate = config.quad_decimate;
             native.quad_sigma = config.quad_sigma;
-            native.refine_edges = if config.refine_edges { 1 } else { 0 };
+            native.refine_edges = NativeBoolean::from_bool(config.refine_edges);
             native.decode_sharpening = config.decode_sharpening;
-            native.debug = 0;
+            native.debug = NativeBoolean::from_bool(false);
         }
 
         Ok(Self { detector, family })
@@ -524,6 +540,14 @@ mod tests {
             detections.len(),
             elapsed
         );
+    }
+
+    #[test]
+    fn native_boolean_mapping_is_portable_across_generated_binding_types() {
+        assert!(<bool as NativeBoolean>::from_bool(true));
+        assert!(!<bool as NativeBoolean>::from_bool(false));
+        assert_eq!(<i32 as NativeBoolean>::from_bool(true), 1);
+        assert_eq!(<i32 as NativeBoolean>::from_bool(false), 0);
     }
 
     #[test]
