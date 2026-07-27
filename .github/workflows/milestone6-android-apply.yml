@@ -1,4 +1,4 @@
-name: Apply Milestone 6 Android v2
+name: Apply Milestone 6 Android v3
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
       - tools/apply_milestone6_android.py
 
 concurrency:
-  group: milestone6-android-apply-v2
+  group: milestone6-android-apply-v3
   cancel-in-progress: true
 
 permissions:
@@ -20,19 +20,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: Swatinem/rust-cache@v2
       - name: Apply source, regenerate Kotlin bindings, and validate
         id: gates
         shell: bash
         run: |
           set +e
-          LOG="$RUNNER_TEMP/milestone6-android-v2.log"
+          LOG="$RUNNER_TEMP/milestone6-android-v3.log"
           (
             set -euo pipefail
+            java -version
+            cargo --version
             python3 tools/apply_milestone6_android.py
             cargo fmt --all
             cargo fmt --all --check
@@ -48,7 +45,7 @@ jobs:
             mkdir -p apps/android/app/src/main/kotlin/uniffi/a2d_ffi
             cp /tmp/a2d-m6-kotlin/uniffi/a2d_ffi/a2d_ffi.kt \
               apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
-            (cd apps/android && ./gradlew lint test assembleDebug --no-daemon)
+            (cd apps/android && ./gradlew lint test assembleDebug --no-daemon --stacktrace)
           ) >"$LOG" 2>&1
           STATUS=$?
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
@@ -62,8 +59,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add apps/android docs/MILESTONE6_APPLY_STATUS.md
-          git commit -m "Implement Milestone 6 Android workflows"
-          git push origin HEAD:master
+          if git diff --cached --quiet; then
+            echo "No Android changes to commit"
+          else
+            git commit -m "Implement Milestone 6 Android workflows"
+            git push origin HEAD:master
+          fi
       - name: Publish failure diagnostics without broken source
         if: steps.gates.outputs.status != '0'
         shell: bash
@@ -74,12 +75,12 @@ jobs:
             echo "# Milestone 6 Android apply failure"
             echo
             echo '```text'
-            tail -n 800 "$LOG"
+            tail -n 1000 "$LOG"
             echo '```'
           } > docs/MILESTONE6_APPLY_STATUS.md
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/MILESTONE6_APPLY_STATUS.md
-          git commit -m "Record Milestone 6 Android v2 failure"
+          git commit -m "Record Milestone 6 Android v3 failure"
           git push origin HEAD:master
           exit 1
