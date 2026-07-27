@@ -73,7 +73,6 @@ jobs:
           path: |
             ios-device.log
             ios-simulator.log
-            crates/a2d-image/src/detector.rs
           if-no-files-found: error
       - name: Report iOS build failures
         if: steps.ios-device.outcome == 'failure' || steps.ios-simulator.outcome == 'failure'
