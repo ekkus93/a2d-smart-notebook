@@ -33,7 +33,7 @@ jobs:
       - name: Validate official AprilTag detector and Android builds
         id: android-build
         continue-on-error: true
-        run: ./tools/validate-milestone7-native.sh > milestone7-android.log 2>&1
+        run: bash ./tools/validate-milestone7-native.sh > milestone7-android.log 2>&1
       - name: Upload compact Android build log
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,6 +73,7 @@ jobs:
           path: |
             ios-device.log
             ios-simulator.log
+            crates/a2d-image/src/detector.rs
           if-no-files-found: error
       - name: Report iOS build failures
         if: steps.ios-device.outcome == 'failure' || steps.ios-simulator.outcome == 'failure'
