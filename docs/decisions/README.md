@@ -21,3 +21,4 @@ checkboxes.
 |---|---|---|
 | [0001](0001-qr-v1-encoding-and-integrity.md) | Proposed | QR v1 wire encoding and integrity check |
 | [0002](0002-apriltag-detector-selection.md) | Proposed | Corner-marker detector selection |
+| [0003](0003-qr-image-decoder-boundary.md) | Accepted | Platform QR image decoding with canonical Rust payload validation |
