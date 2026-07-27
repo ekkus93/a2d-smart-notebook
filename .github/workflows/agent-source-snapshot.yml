@@ -1,11 +1,10 @@
-name: Apply Milestone 6
+name: Apply Milestone 6 Android
 
 on:
   push:
     branches: [master]
     paths:
-      - tools/apply_milestone6.py
-      - tools/fix_milestone6_pass2.py
+      - tools/apply_milestone6_android.py
       - .github/workflows/agent-source-snapshot.yml
 
 permissions:
@@ -18,36 +17,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-      - name: Apply transformations and run Rust gates
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Prepare Android native toolchain
+        shell: bash
+        run: |
+          rustup target add x86_64-linux-android
+          echo "ANDROID_SDK_ROOT=${ANDROID_HOME}" >> "$GITHUB_ENV"
+          sdkmanager --install "ndk;27.0.12077973"
+          cargo install cargo-ndk --locked
+      - name: Apply Android UI and run full gates
         id: gates
         shell: bash
         run: |
           set +e
-          LOG="$RUNNER_TEMP/milestone6-rust.log"
+          LOG="$RUNNER_TEMP/milestone6-android.log"
           {
-            python3 tools/apply_milestone6.py
-            python3 tools/fix_milestone6_pass2.py
+            python3 tools/apply_milestone6_android.py
             cargo fmt --all
             cargo fmt --all --check
             cargo clippy --workspace --all-targets --all-features -- -D warnings
             cargo test --workspace --all-features
+            ./tools/build-android-native.sh
+            (cd apps/android && ./gradlew lint test assembleDebug --no-daemon)
           } >"$LOG" 2>&1
           STATUS=$?
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
           echo "log=$LOG" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Commit validated Rust implementation
+      - name: Commit validated Android implementation
         if: steps.gates.outputs.status == '0'
         shell: bash
         run: |
           rm -f docs/MILESTONE6_APPLY_STATUS.md
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates docs/MILESTONE6_APPLY_STATUS.md
+          git add apps/android docs/MILESTONE6_APPLY_STATUS.md
           if git diff --cached --quiet; then
-            echo "No source changes to commit"
+            echo "No Android changes to commit"
           else
-            git commit -m "Implement Milestone 6 Rust notebook workflows"
+            git commit -m "Implement Milestone 6 Android workflows"
             git push origin HEAD:master
           fi
       - name: Publish failure diagnostics without broken source
@@ -57,15 +69,15 @@ jobs:
           LOG="${{ steps.gates.outputs.log }}"
           git reset --hard HEAD
           {
-            echo "# Milestone 6 apply failure"
+            echo "# Milestone 6 Android apply failure"
             echo
             echo '```text'
-            tail -n 500 "$LOG"
+            tail -n 600 "$LOG"
             echo '```'
           } > docs/MILESTONE6_APPLY_STATUS.md
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/MILESTONE6_APPLY_STATUS.md
-          git commit -m "Record Milestone 6 Rust apply failure"
+          git commit -m "Record Milestone 6 Android apply failure"
           git push origin HEAD:master
           exit 1
