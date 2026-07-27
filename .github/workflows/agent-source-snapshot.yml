@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - tools/apply_milestone6_android.py
+      - tools/milestone6_android_trigger.txt
       - .github/workflows/agent-source-snapshot.yml
 
 concurrency:
