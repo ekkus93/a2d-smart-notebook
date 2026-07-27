@@ -9,7 +9,7 @@ permissions:
 
 concurrency:
   group: apply-unit-test-coverage-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   apply-test-commit:
