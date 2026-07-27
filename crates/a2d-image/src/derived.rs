@@ -41,7 +41,9 @@ impl ContrastNormalizationConfig {
         if !maximum_gain.is_finite() || maximum_gain < 1.0 {
             return Err(validation_error(
                 "DERIVED_CONTRAST_GAIN_INVALID",
-                format!("maximum contrast gain must be finite and at least 1.0, got {maximum_gain}"),
+                format!(
+                    "maximum contrast gain must be finite and at least 1.0, got {maximum_gain}"
+                ),
             ));
         }
         Ok(Self {
@@ -82,9 +84,7 @@ impl SharpenConfig {
         if passes == 0 || passes > MAX_SHARPEN_PASSES {
             return Err(validation_error(
                 "DERIVED_SHARPEN_PASSES_INVALID",
-                format!(
-                    "sharpen passes must be between 1 and {MAX_SHARPEN_PASSES}, got {passes}"
-                ),
+                format!("sharpen passes must be between 1 and {MAX_SHARPEN_PASSES}, got {passes}"),
             ));
         }
         Ok(Self {
@@ -381,9 +381,7 @@ impl DerivedImagePipeline {
             corrected_height: corrected_color.height(),
             thumbnail_width: thumbnail.width(),
             thumbnail_height: thumbnail.height(),
-            source_to_corrected_matrix: rectification
-                .transform()
-                .source_to_destination_matrix(),
+            source_to_corrected_matrix: rectification.transform().source_to_destination_matrix(),
             contrast,
             sharpening: self.config.sharpening(),
         };
@@ -417,11 +415,8 @@ impl PipelineDimensions {
         let corrected_pixels = output.pixel_count();
         let corrected_rgb_bytes = output.rgb_byte_count();
         let ocr_bytes = corrected_pixels;
-        let (thumbnail_width, thumbnail_height) = thumbnail_dimensions(
-            output.width(),
-            output.height(),
-            config.thumbnail(),
-        )?;
+        let (thumbnail_width, thumbnail_height) =
+            thumbnail_dimensions(output.width(), output.height(), config.thumbnail())?;
         let thumbnail_pixels = u64::from(thumbnail_width)
             .checked_mul(u64::from(thumbnail_height))
             .ok_or_else(|| {
@@ -449,7 +444,11 @@ impl PipelineDimensions {
 
     fn validate_limits(self, limits: DerivedImageLimits) -> Result<(), A2dError> {
         for (name, pixels, bytes) in [
-            ("corrected color", self.corrected_pixels, self.corrected_rgb_bytes),
+            (
+                "corrected color",
+                self.corrected_pixels,
+                self.corrected_rgb_bytes,
+            ),
             ("OCR optimized", self.corrected_pixels, self.ocr_bytes),
             ("thumbnail", self.thumbnail_pixels, self.thumbnail_rgb_bytes),
         ] {
@@ -504,12 +503,15 @@ impl PipelineDimensions {
         }
 
         let scratch_bytes = self.ocr_bytes;
-        let peak_working_bytes = total_output_bytes.checked_add(scratch_bytes).ok_or_else(|| {
-            validation_error(
-                "DERIVED_WORKING_SET_OVERFLOW",
-                "derived-image working-set estimate overflowed",
-            )
-        })?;
+        let peak_working_bytes =
+            total_output_bytes
+                .checked_add(scratch_bytes)
+                .ok_or_else(|| {
+                    validation_error(
+                        "DERIVED_WORKING_SET_OVERFLOW",
+                        "derived-image working-set estimate overflowed",
+                    )
+                })?;
         if peak_working_bytes > limits.max_working_bytes() {
             return Err(validation_error(
                 "DERIVED_WORKING_SET_LIMIT_EXCEEDED",
@@ -601,7 +603,7 @@ fn histogram_value_at_rank(histogram: &[u64; 256], rank: u64) -> u8 {
 }
 
 fn sharpen_gray_in_place(
-    bytes: &mut Vec<u8>,
+    bytes: &mut [u8],
     width: u32,
     height: u32,
     config: SharpenConfig,
@@ -611,7 +613,7 @@ fn sharpen_gray_in_place(
     if width < 3 || height < 3 {
         return Ok(());
     }
-    let original = bytes.clone();
+    let original = bytes.to_vec();
     for y in 1..height - 1 {
         for x in 1..width - 1 {
             let index = y * width + x;
@@ -650,14 +652,12 @@ fn thumbnail_dimensions(
     let width_limited = u64::from(config.max_width()) * u64::from(height)
         <= u64::from(config.max_height()) * u64::from(width);
     if width_limited {
-        let thumbnail_height = (u64::from(height) * u64::from(config.max_width())
-            / u64::from(width))
-        .max(1);
+        let thumbnail_height =
+            (u64::from(height) * u64::from(config.max_width()) / u64::from(width)).max(1);
         Ok((config.max_width(), thumbnail_height as u32))
     } else {
-        let thumbnail_width = (u64::from(width) * u64::from(config.max_height())
-            / u64::from(height))
-        .max(1);
+        let thumbnail_width =
+            (u64::from(width) * u64::from(config.max_height()) / u64::from(height)).max(1);
         Ok((thumbnail_width as u32, config.max_height()))
     }
 }
@@ -719,10 +719,10 @@ fn sample_rgb(source: &OwnedRgbImage, x: f64, y: f64) -> [u8; 3] {
     };
     let mut result = [0_u8; 3];
     for (channel, output) in result.iter_mut().enumerate() {
-        let top = pixel(x0, y0, channel)
-            + (pixel(x1, y0, channel) - pixel(x0, y0, channel)) * x_fraction;
-        let bottom = pixel(x0, y1, channel)
-            + (pixel(x1, y1, channel) - pixel(x0, y1, channel)) * x_fraction;
+        let top =
+            pixel(x0, y0, channel) + (pixel(x1, y0, channel) - pixel(x0, y0, channel)) * x_fraction;
+        let bottom =
+            pixel(x0, y1, channel) + (pixel(x1, y1, channel) - pixel(x0, y1, channel)) * x_fraction;
         *output = (top + (bottom - top) * y_fraction)
             .round()
             .clamp(0.0, 255.0) as u8;
@@ -732,9 +732,7 @@ fn sample_rgb(source: &OwnedRgbImage, x: f64, y: f64) -> [u8; 3] {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ImagePoint, ImageQuad, RectificationLimits, RectifiedImageSize,
-    };
+    use crate::{ImagePoint, ImageQuad, RectificationLimits, RectifiedImageSize};
 
     use super::*;
 
@@ -746,11 +744,7 @@ mod tests {
         let mut bytes = Vec::new();
         for y in 0..height {
             for x in 0..width {
-                bytes.extend_from_slice(&[
-                    (x * 20) as u8,
-                    (y * 20) as u8,
-                    ((x + y) * 10) as u8,
-                ]);
+                bytes.extend_from_slice(&[(x * 20) as u8, (y * 20) as u8, ((x + y) * 10) as u8]);
             }
         }
         OwnedRgbImage::from_tight(width, height, ImageRotation::Degrees90, bytes).unwrap()
@@ -793,12 +787,19 @@ mod tests {
         let source = source_image(4, 4);
         let original = source.bytes().to_vec();
         let result = DerivedImagePipeline::new(config(2, 2))
-            .process(&source, &identity_plan(4, 4), &ProcessingCancellation::active())
+            .process(
+                &source,
+                &identity_plan(4, 4),
+                &ProcessingCancellation::active(),
+            )
             .unwrap();
 
         assert_eq!(source.bytes(), original);
         assert_eq!(result.corrected_color.bytes(), original);
-        assert_eq!((result.thumbnail.width(), result.thumbnail.height()), (2, 2));
+        assert_eq!(
+            (result.thumbnail.width(), result.thumbnail.height()),
+            (2, 2)
+        );
         assert_eq!(result.ocr_optimized.bytes().len(), 16);
         assert_eq!(result.provenance.pipeline_version, 3);
         assert_eq!(result.provenance.source_rotation, ImageRotation::Degrees90);
@@ -833,13 +834,7 @@ mod tests {
     fn optional_sharpening_changes_only_eligible_interior_pixels() {
         let mut bytes = vec![100_u8; 25];
         bytes[12] = 150;
-        sharpen_gray_in_place(
-            &mut bytes,
-            5,
-            5,
-            SharpenConfig::new(1.0, 1, 1).unwrap(),
-        )
-        .unwrap();
+        sharpen_gray_in_place(&mut bytes, 5, 5, SharpenConfig::new(1.0, 1, 1).unwrap()).unwrap();
         assert!(bytes[12] > 150);
         assert_eq!(bytes[0], 100);
     }
