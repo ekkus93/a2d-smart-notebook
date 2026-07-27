@@ -1,5 +1,6 @@
 name: One-shot Milestone 6 cleanup
 
+# Direct-ref trigger: this file deletes itself after completing the cleanup.
 on:
   push:
     branches: [master]
