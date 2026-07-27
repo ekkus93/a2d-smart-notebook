@@ -1,0 +1,5 @@
+# Force apriltag-sys to compile its bundled AprilTag C sources and link them
+# statically. This prevents a developer workstation's pkg-config installation
+# from silently selecting a different native library than Android/CI.
+[env]
+APRILTAG_SYS_METHOD = "raw,static"

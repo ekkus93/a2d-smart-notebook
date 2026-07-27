@@ -10,3 +10,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+a2d-domain = { path = "../a2d-domain" }
+a2d-layout = { path = "../a2d-layout" }
+apriltag-sys = "=0.4.0"
