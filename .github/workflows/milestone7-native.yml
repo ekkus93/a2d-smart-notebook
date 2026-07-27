@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: milestone7-native-${{ github.ref }}
@@ -23,62 +23,10 @@ concurrency:
 
 jobs:
   synthetic-fixtures:
-    name: Generate and validate synthetic scan fixtures
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/milestone-7-native-validation' && github.event.pull_request.head.repo.full_name == github.repository
+    name: Regenerate and verify synthetic scan fixtures
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-
-      - name: Preserve photographed fixtures and fit rotated pages
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("tools/generate_scan_fixtures.py")
-          text = path.read_text(encoding="utf-8")
-
-          text = text.replace('        "photographed",\n', '', 1)
-          manifest_anchor = '    manifest = output_dir / "manifest.json"\n'
-          photographed_guard = '    (output_dir / "photographed").mkdir(parents=True, exist_ok=True)\n'
-          if photographed_guard not in text:
-              if text.count(manifest_anchor) != 1:
-                  raise SystemExit("manifest anchor not found exactly once")
-              text = text.replace(manifest_anchor, photographed_guard + manifest_anchor, 1)
-
-          old_rotation = '''    scene = Image.new("RGBA", (SCENE_WIDTH, SCENE_HEIGHT), BACKGROUND + (255,))
-              left = (SCENE_WIDTH - rotated.width) // 2
-              top = (SCENE_HEIGHT - rotated.height) // 2
-              scene.alpha_composite(rotated, (left, top))
-          '''
-          new_rotation = '''    maximum_width = SCENE_WIDTH - 100
-              maximum_height = SCENE_HEIGHT - 100
-              if rotated.width > maximum_width or rotated.height > maximum_height:
-                  scale = min(maximum_width / rotated.width, maximum_height / rotated.height)
-                  rotated = rotated.resize(
-                      (max(1, round(rotated.width * scale)), max(1, round(rotated.height * scale))),
-                      resample=Image.Resampling.LANCZOS,
-                  )
-              scene = Image.new("RGBA", (SCENE_WIDTH, SCENE_HEIGHT), BACKGROUND + (255,))
-              left = (SCENE_WIDTH - rotated.width) // 2
-              top = (SCENE_HEIGHT - rotated.height) // 2
-              scene.alpha_composite(rotated, (left, top))
-          '''
-          if "maximum_width = SCENE_WIDTH - 100" not in text:
-              if text.count(old_rotation) != 1:
-                  raise SystemExit("rotated scene anchor not found exactly once")
-              text = text.replace(old_rotation, new_rotation, 1)
-
-          if '        "photographed",\n' in text:
-              raise SystemExit("synthetic generator still deletes photographed fixtures")
-          if photographed_guard not in text:
-              raise SystemExit("photographed directory guard is missing")
-          if "maximum_width = SCENE_WIDTH - 100" not in text:
-              raise SystemExit("rotated page fit is missing")
-
-          path.write_text(text, encoding="utf-8")
-          PY
 
       - uses: actions/setup-python@v5
         with:
@@ -91,66 +39,40 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Format and render official fixture support assets
-        id: fixture-support
-        continue-on-error: true
+      - name: Verify Rust formatting and render official support assets
         run: |
-          {
-            cargo fmt --all
-            rm -rf target/fixture-support
-            cargo run -p a2d-image --features fixture-tools --bin a2d-fixture-support -- target/fixture-support
-          } > fixture-support.log 2>&1
+          cargo fmt --check
+          rm -rf target/fixture-support target/generated-scan-fixtures
+          cargo run -p a2d-image --features fixture-tools --bin a2d-fixture-support -- target/fixture-support
 
-      - name: Upload compact fixture support log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: milestone7-fixture-support-log
-          path: fixture-support.log
-          if-no-files-found: error
-
-      - name: Report fixture support failure
-        if: steps.fixture-support.outcome == 'failure'
-        run: |
-          cat fixture-support.log || true
-          exit 1
-
-      - name: Generate and verify synthetic corpus
+      - name: Regenerate and verify synthetic corpus
         run: |
           python tools/generate_scan_fixtures.py \
             --support-dir target/fixture-support \
-            --output-dir fixtures/scans
-          python tools/verify_scan_fixtures.py --fixture-dir fixtures/scans
+            --output-dir target/generated-scan-fixtures
+          python tools/verify_scan_fixtures.py \
+            --fixture-dir target/generated-scan-fixtures
+
+      - name: Fail on generated fixture drift
+        run: |
+          for path in \
+            generated \
+            glare \
+            blur \
+            missing-marker \
+            wrong-layout \
+            duplicate \
+            revisions \
+            corrupted \
+            manifest.json
+          do
+            diff -r "fixtures/scans/${path}" "target/generated-scan-fixtures/${path}"
+          done
 
       - name: Run fixture Rust quality gates
         run: |
-          cargo fmt --check
           cargo clippy -p a2d-image --all-targets --all-features -- -D warnings
           cargo test -p a2d-image --all-features
-
-      - name: Verify generated-change scope
-        run: |
-          rm -f fixture-support.log
-          git status --short
-          unexpected=$(git status --short | awk '{print $2}' | grep -Ev '^(Cargo.lock|crates/a2d-image/|tools/generate_scan_fixtures.py|tools/scan-fixtures-requirements.txt|tools/verify_scan_fixtures.py|fixtures/scans/)' || true)
-          test -z "$unexpected" || {
-            echo "Unexpected changed paths:" >&2
-            echo "$unexpected" >&2
-            exit 1
-          }
-
-      - name: Commit validated synthetic corpus
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock crates/a2d-image tools/generate_scan_fixtures.py \
-            tools/scan-fixtures-requirements.txt tools/verify_scan_fixtures.py fixtures/scans
-          if git diff --cached --quiet; then
-            echo "No synthetic fixture changes required"
-            exit 0
-          fi
-          git commit -m "Generate Milestone 7 synthetic scan fixtures"
-          git push origin HEAD:${{ github.head_ref }}
 
   desktop-and-android:
     name: Desktop detector and Android native ABIs
