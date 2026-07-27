@@ -1,4 +1,4 @@
-name: Apply Milestone 6 Android v5
+name: Apply Milestone 6 Android v6
 
 on:
   push:
@@ -11,8 +11,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: milestone6-android-apply-v5
-  cancel-in-progress: true
+  group: milestone6-android-apply-v6
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -31,7 +31,7 @@ jobs:
             exit 0
           fi
           set +e
-          LOG="$RUNNER_TEMP/milestone6-android-v5.log"
+          LOG="$RUNNER_TEMP/milestone6-android-v6.log"
           (
             set -euo pipefail
             java -version
@@ -87,6 +87,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/MILESTONE6_APPLY_STATUS.md
-          git commit -m "Record Milestone 6 Android v5 failure"
+          git commit -m "Record Milestone 6 Android v6 failure"
           git push origin HEAD:master
           exit 1
