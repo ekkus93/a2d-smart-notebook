@@ -20,6 +20,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Narrow sharpening helper to a mutable slice
         run: |
+          # This is the only reviewed source correction from the read-only clippy run.
           python3 - <<'PY'
           from pathlib import Path
           path = Path("crates/a2d-image/src/derived.rs")
