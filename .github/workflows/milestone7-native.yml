@@ -27,6 +27,57 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
       - uses: Swatinem/rust-cache@v2
+      - name: Apply reviewed Gaussian-elimination iterator fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/a2d-image/src/rectification.rs")
+          text = path.read_text()
+          old = '''        let divisor = augmented[column][column];
+          for value in &mut augmented[column][column..] {
+              *value /= divisor;
+          }
+          for row in 0..8 {
+              if row == column {
+                  continue;
+              }
+              let factor = augmented[row][column];
+              if factor == 0.0 {
+                  continue;
+              }
+              for item in column..9 {
+                  augmented[row][item] -= factor * augmented[column][item];
+              }
+          }
+          '''
+          new = '''        let divisor = augmented[column][column];
+          for value in &mut augmented[column][column..] {
+              *value /= divisor;
+          }
+          let pivot_values = augmented[column];
+          for row in 0..8 {
+              if row == column {
+                  continue;
+              }
+              let factor = augmented[row][column];
+              if factor == 0.0 {
+                  continue;
+              }
+              for (target, pivot) in augmented[row][column..]
+                  .iter_mut()
+                  .zip(&pivot_values[column..])
+              {
+                  *target -= factor * pivot;
+              }
+          }
+          '''
+          if new in text:
+              raise SystemExit(0)
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one elimination-loop anchor, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1))
+          PY
       - name: Apply canonical formatting
         run: cargo fmt --all
       - name: Run clippy
