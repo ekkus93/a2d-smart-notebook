@@ -1,0 +1,49 @@
+name: Milestone 7 Native Validation
+
+on:
+  pull_request:
+    paths:
+      - ".cargo/config.toml"
+      - "Cargo.lock"
+      - "crates/a2d-image/**"
+      - "tools/validate-milestone7-native.sh"
+      - ".github/workflows/milestone7-native.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: milestone7-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-and-android:
+    name: Desktop detector and Android native ABIs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show resolved Rust toolchain
+        run: rustc --version && cargo --version
+      - uses: Swatinem/rust-cache@v2
+      - uses: android-actions/setup-android@v3
+      - name: Normalize Android SDK root
+        run: echo "ANDROID_SDK_ROOT=${ANDROID_HOME}" >> "$GITHUB_ENV"
+      - name: Install Android NDK and cargo-ndk
+        run: |
+          sdkmanager --install "ndk;27.0.12077973"
+          cargo install cargo-ndk --locked
+      - name: Validate official AprilTag detector and Android builds
+        run: ./tools/validate-milestone7-native.sh
+
+  ios-feasibility:
+    name: Future iOS native compile feasibility
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show resolved Rust and Xcode toolchains
+        run: rustc --version && cargo --version && xcodebuild -version
+      - uses: Swatinem/rust-cache@v2
+      - name: Add iOS Rust targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - name: Compile a2d-image for iOS device
+        run: cargo check -p a2d-image --target aarch64-apple-ios
+      - name: Compile a2d-image for Apple Silicon simulator
+        run: cargo check -p a2d-image --target aarch64-apple-ios-sim
