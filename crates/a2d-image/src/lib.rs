@@ -2,10 +2,11 @@
 //!
 //! Milestone 7 establishes validated borrowed grayscale and bounded encoded-image
 //! input boundaries, projective page rectification, explicit versioned quality
-//! measurement/classification, and a small reviewed unsafe wrapper around the
-//! official AprilTag 3 C detector. Native pointers, ownership, and allocation
-//! never cross the public Rust API.
+//! measurement/classification, bounded atomic derived-image processing, and a
+//! small reviewed unsafe wrapper around the official AprilTag 3 C detector.
+//! Native pointers, ownership, and allocation never cross the public Rust API.
 
+mod derived;
 mod detection;
 mod detector;
 mod encoded;
@@ -14,6 +15,11 @@ mod input;
 mod quality;
 mod rectification;
 
+pub use derived::{
+    ContrastNormalizationConfig, ContrastNormalizationProvenance, DerivedImageConfig,
+    DerivedImageLimits, DerivedImagePipeline, DerivedImageProvenance, DerivedImages,
+    ProcessingCancellation, SharpenConfig, ThumbnailConfig,
+};
 pub use detection::{
     ImagePoint, MarkerDetection, MarkerFamily, MarkerIdLayout, PageOrientation, ResolvedMarker,
     ResolvedPageMarkers, resolve_page_markers,
