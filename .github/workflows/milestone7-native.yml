@@ -130,6 +130,7 @@ jobs:
 
       - name: Verify generated-change scope
         run: |
+          rm -f fixture-support.log
           git status --short
           unexpected=$(git status --short | awk '{print $2}' | grep -Ev '^(Cargo.lock|crates/a2d-image/|tools/generate_scan_fixtures.py|tools/scan-fixtures-requirements.txt|tools/verify_scan_fixtures.py|fixtures/scans/)' || true)
           test -z "$unexpected" || {
