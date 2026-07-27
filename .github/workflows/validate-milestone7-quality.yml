@@ -7,13 +7,16 @@ on:
       - ".github/workflows/validate-milestone7-quality.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
+    if: github.head_ref == 'agent/milestone-7-native-validation' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: Swatinem/rust-cache@v2
       - name: Apply canonical Rust formatting
         run: cargo fmt --all
@@ -40,3 +43,22 @@ jobs:
         run: |
           cat quality-validation.log
           exit 1
+      - name: Verify formatting touched only Rust source
+        run: |
+          unexpected=$(git diff --name-only | grep -v '^crates/a2d-image/src/.*\.rs$' || true)
+          test -z "$unexpected" || {
+            echo "Unexpected changed paths:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          }
+      - name: Commit verified formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/a2d-image/src
+          if git diff --cached --quiet; then
+            echo "No formatting changes required"
+            exit 0
+          fi
+          git commit -m "Format and validate Milestone 7 quality metrics"
+          git push origin HEAD:${{ github.head_ref }}
