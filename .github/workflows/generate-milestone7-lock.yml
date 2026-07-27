@@ -1,0 +1,29 @@
+name: Generate Milestone 7 Lockfile
+
+on:
+  push:
+    branches:
+      - agent/milestone-7-native-validation
+    paths:
+      - ".github/workflows/generate-milestone7-lock.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve and compile a2d-image
+        run: |
+          cargo check -p a2d-image --all-features
+          cargo tree -p a2d-image > milestone7-cargo-tree.txt
+      - name: Upload resolved lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone7-resolved-lockfile
+          path: |
+            Cargo.lock
+            milestone7-cargo-tree.txt
+          if-no-files-found: error
