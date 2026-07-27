@@ -713,9 +713,21 @@ Acceptance:
 
 ## 5.1 Canonical physical layout model
 
-- [ ] Use fixed physical units, not authoritative screen pixels.
-- [ ] Define page size, safe margins, content rectangle, four marker rectangles, QR rectangle, visible numbering, and calibration mark.
-- [ ] Validate bounds, overlap, marker roles, and quiet zones.
+- [x] Use fixed physical units, not authoritative screen pixels. `crates/a2d-layout/src/geometry.rs`:
+      `PhysicalSize`/`PhysicalPoint`/`PhysicalRect` are all millimeter-denominated (`f64`), never
+      device pixels; module doc records the coordinate convention (top-left origin, y down) and
+      that converting to PDF's bottom-left-origin space is `a2d-pdf`'s job (Milestone 5.4), not
+      this crate's.
+- [x] Define page size, safe margins, content rectangle, four marker rectangles, QR rectangle,
+      visible numbering, and calibration mark. `crates/a2d-layout/src/page_layout.rs`:
+      `PageLayout` (matches this task's own suggested shape almost exactly), `MarkerRole`/
+      `MarkerPlacement`, `CalibrationMark`.
+- [x] Validate bounds, overlap, marker roles, and quiet zones. `PageLayout::validate`: exactly one
+      marker per role, every element within the safe-margin inset, and every machine-readable
+      element's (markers + QR) quiet-zone-inflated footprint clear of content, the visible page
+      number, and every other machine-readable element. 6 rejection tests plus one
+      well-formed-layout acceptance test in `crates/a2d-layout/src/page_layout.rs`, 7 geometry
+      primitive tests in `geometry.rs` — 25 tests total in the crate, `cargo test -p a2d-layout`.
 
 Example:
 
