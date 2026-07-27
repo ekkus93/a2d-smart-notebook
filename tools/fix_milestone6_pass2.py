@@ -20,9 +20,35 @@ replace_exact(
 )
 replace_exact(
     "crates/a2d-core/src/milestone6.rs",
-    "        let mut storage = self.lock_storage()?;\n",
-    "        let storage = self.lock_storage()?;\n",
-    expected=2,
+    '''    pub fn rename_notebook(
+        &self,
+        notebook_id: &NotebookId,
+        display_name: String,
+    ) -> Result<NotebookSummary, A2dError> {
+        let mut storage = self.lock_storage()?;
+''',
+    '''    pub fn rename_notebook(
+        &self,
+        notebook_id: &NotebookId,
+        display_name: String,
+    ) -> Result<NotebookSummary, A2dError> {
+        let storage = self.lock_storage()?;
+''',
+)
+replace_exact(
+    "crates/a2d-core/src/milestone6.rs",
+    '''    pub fn archive_notebook(
+        &self,
+        notebook_id: &NotebookId,
+    ) -> Result<NotebookSummary, A2dError> {
+        let mut storage = self.lock_storage()?;
+''',
+    '''    pub fn archive_notebook(
+        &self,
+        notebook_id: &NotebookId,
+    ) -> Result<NotebookSummary, A2dError> {
+        let storage = self.lock_storage()?;
+''',
 )
 replace_exact(
     "crates/a2d-ffi/src/milestone6.rs",
