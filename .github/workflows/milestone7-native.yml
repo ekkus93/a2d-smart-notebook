@@ -17,19 +17,29 @@ concurrency:
 jobs:
   desktop-and-android:
     name: Desktop detector and Android native ABIs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      A2D_ANDROID_NDK_VERSION: "27.0.12077973"
+      A2D_CARGO_NDK_VERSION: "4.1.2"
     steps:
       - uses: actions/checkout@v4
       - name: Show resolved Rust toolchain
         run: rustc --version && cargo --version
       - uses: Swatinem/rust-cache@v2
       - uses: android-actions/setup-android@v3
-      - name: Normalize Android SDK root
-        run: echo "ANDROID_SDK_ROOT=${ANDROID_HOME}" >> "$GITHUB_ENV"
-      - name: Install Android NDK and cargo-ndk
+      - name: Install and select pinned Android native toolchain
         run: |
-          sdkmanager --install "ndk;27.0.12077973"
-          cargo install cargo-ndk --locked
+          sdkmanager --install "ndk;${A2D_ANDROID_NDK_VERSION}"
+          ndk_home="${ANDROID_HOME}/ndk/${A2D_ANDROID_NDK_VERSION}"
+          test -d "$ndk_home"
+          {
+            echo "ANDROID_SDK_ROOT=${ANDROID_HOME}"
+            echo "ANDROID_NDK_HOME=$ndk_home"
+            echo "ANDROID_NDK_ROOT=$ndk_home"
+            echo "A2D_EXPECTED_NDK_VERSION=${A2D_ANDROID_NDK_VERSION}"
+            echo "A2D_REQUIRE_EXPLICIT_NDK_HOME=1"
+          } >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Validate official AprilTag detector and Android builds
         id: android-build
         continue-on-error: true
