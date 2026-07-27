@@ -687,6 +687,26 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_trigger_panic_for_testing(
     ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_archive_notebook(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_create_notebook(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_generate_smart_pages(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_get_active_notebook(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_get_notebook(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_list_notebooks(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_rename_notebook(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_resolve_notebook_setup_code(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_resolve_page_code(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_set_active_notebook(
+    ): Int
     external fun uniffi_a2d_ffi_checksum_constructor_a2dclient_open(
     ): Int
     external fun ffi_a2d_ffi_uniffi_contract_version(
@@ -727,6 +747,26 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_a2d_ffi_fn_method_a2dclient_trigger_panic_for_testing(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_archive_notebook(`ptr`: Long,`notebookId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_create_notebook(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_generate_smart_pages(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_get_active_notebook(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_get_notebook(`ptr`: Long,`notebookId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_list_notebooks(`ptr`: Long,`includeArchived`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_rename_notebook(`ptr`: Long,`notebookId`: RustBuffer.ByValue,`displayName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_resolve_notebook_setup_code(`ptr`: Long,`payload`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_resolve_page_code(`ptr`: Long,`payload`: RustBuffer.ByValue,`confirmedNotebookId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_set_active_notebook(`ptr`: Long,`notebookId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun ffi_a2d_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_a2d_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -865,6 +905,36 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_trigger_panic_for_testing() != 60667) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_archive_notebook() != 33436) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_create_notebook() != 31378) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_generate_smart_pages() != 24815) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_get_active_notebook() != 26323) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_get_notebook() != 3570) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_list_notebooks() != 15150) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_rename_notebook() != 63068) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_resolve_notebook_setup_code() != 8218) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_resolve_page_code() != 59899) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_set_active_notebook() != 21117) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_constructor_a2dclient_open() != 8661) {
@@ -1025,6 +1095,29 @@ private class JavaLangRefCleanable(
     val cleanable: java.lang.ref.Cleaner.Cleanable
 ) : UniffiCleaner.Cleanable {
     override fun clean() = cleanable.clean()
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterUInt: FfiConverter<UInt, Int> {
+    override fun lift(value: Int): UInt {
+        return value.toUInt()
+    }
+
+    override fun read(buf: ByteBuffer): UInt {
+        return lift(buf.getInt())
+    }
+
+    override fun lower(value: UInt): Int {
+        return value.toInt()
+    }
+
+    override fun allocationSize(value: UInt) = 4UL
+
+    override fun write(value: UInt, buf: ByteBuffer) {
+        buf.putInt(value.toInt())
+    }
 }
 
 /**
@@ -1230,6 +1323,26 @@ public interface A2dClientInterface {
      * here only proves the Rust-level behavior this relies on.
      */
     fun `triggerPanicForTesting`()
+    
+    fun `archiveNotebook`(`notebookId`: kotlin.String): NotebookSummary
+    
+    fun `createNotebook`(`request`: CreateNotebookRequest): CreatedNotebook
+    
+    fun `generateSmartPages`(`request`: SmartPageGenerationRequest): GeneratedSmartPages
+    
+    fun `getActiveNotebook`(): NotebookSummary?
+    
+    fun `getNotebook`(`notebookId`: kotlin.String): NotebookSummary?
+    
+    fun `listNotebooks`(`includeArchived`: kotlin.Boolean): List<NotebookSummary>
+    
+    fun `renameNotebook`(`notebookId`: kotlin.String, `displayName`: kotlin.String): NotebookSummary
+    
+    fun `resolveNotebookSetupCode`(`payload`: kotlin.String): NotebookDesignSummary
+    
+    fun `resolvePageCode`(`payload`: kotlin.String, `confirmedNotebookId`: kotlin.String?): PageResolution
+    
+    fun `setActiveNotebook`(`notebookId`: kotlin.String?): NotebookSummary?
     
     companion object
 }
@@ -1443,6 +1556,157 @@ open class A2dClient: Disposable, AutoCloseable, A2dClientInterface
     
 
     
+    @Throws(A2dFfiException::class)override fun `archiveNotebook`(`notebookId`: kotlin.String): NotebookSummary {
+            return FfiConverterTypeNotebookSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_archive_notebook(
+        it,
+        
+        FfiConverterString.lower(`notebookId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `createNotebook`(`request`: CreateNotebookRequest): CreatedNotebook {
+            return FfiConverterTypeCreatedNotebook.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_create_notebook(
+        it,
+        
+        FfiConverterTypeCreateNotebookRequest.lower(`request`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `generateSmartPages`(`request`: SmartPageGenerationRequest): GeneratedSmartPages {
+            return FfiConverterTypeGeneratedSmartPages.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_generate_smart_pages(
+        it,
+        
+        FfiConverterTypeSmartPageGenerationRequest.lower(`request`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `getActiveNotebook`(): NotebookSummary? {
+            return FfiConverterOptionalTypeNotebookSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_get_active_notebook(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `getNotebook`(`notebookId`: kotlin.String): NotebookSummary? {
+            return FfiConverterOptionalTypeNotebookSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_get_notebook(
+        it,
+        
+        FfiConverterString.lower(`notebookId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `listNotebooks`(`includeArchived`: kotlin.Boolean): List<NotebookSummary> {
+            return FfiConverterSequenceTypeNotebookSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_list_notebooks(
+        it,
+        
+        FfiConverterBoolean.lower(`includeArchived`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `renameNotebook`(`notebookId`: kotlin.String, `displayName`: kotlin.String): NotebookSummary {
+            return FfiConverterTypeNotebookSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_rename_notebook(
+        it,
+        
+        FfiConverterString.lower(`notebookId`),
+        FfiConverterString.lower(`displayName`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `resolveNotebookSetupCode`(`payload`: kotlin.String): NotebookDesignSummary {
+            return FfiConverterTypeNotebookDesignSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_resolve_notebook_setup_code(
+        it,
+        
+        FfiConverterString.lower(`payload`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `resolvePageCode`(`payload`: kotlin.String, `confirmedNotebookId`: kotlin.String?): PageResolution {
+            return FfiConverterTypePageResolution.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_resolve_page_code(
+        it,
+        
+        FfiConverterString.lower(`payload`),
+        FfiConverterOptionalString.lower(`confirmedNotebookId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `setActiveNotebook`(`notebookId`: kotlin.String?): NotebookSummary? {
+            return FfiConverterOptionalTypeNotebookSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_set_active_notebook(
+        it,
+        
+        FfiConverterOptionalString.lower(`notebookId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
 
     
 
@@ -1567,6 +1831,261 @@ public object FfiConverterTypeA2dFfiErrorDetails: FfiConverterRustBuffer<A2dFfiE
 
 
 
+data class CreateNotebookRequest (
+    var `setupPayload`: kotlin.String
+    , 
+    var `displayName`: kotlin.String
+    , 
+    var `optionalColor`: kotlin.String?
+    , 
+    var `optionalIcon`: kotlin.String?
+    , 
+    var `optionalUserNotes`: kotlin.String?
+    , 
+    var `makeActive`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCreateNotebookRequest: FfiConverterRustBuffer<CreateNotebookRequest> {
+    override fun read(buf: ByteBuffer): CreateNotebookRequest {
+        return CreateNotebookRequest(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CreateNotebookRequest) = (
+            FfiConverterString.allocationSize(value.`setupPayload`) +
+            FfiConverterString.allocationSize(value.`displayName`) +
+            FfiConverterOptionalString.allocationSize(value.`optionalColor`) +
+            FfiConverterOptionalString.allocationSize(value.`optionalIcon`) +
+            FfiConverterOptionalString.allocationSize(value.`optionalUserNotes`) +
+            FfiConverterBoolean.allocationSize(value.`makeActive`)
+    )
+
+    override fun write(value: CreateNotebookRequest, buf: ByteBuffer) {
+            FfiConverterString.write(value.`setupPayload`, buf)
+            FfiConverterString.write(value.`displayName`, buf)
+            FfiConverterOptionalString.write(value.`optionalColor`, buf)
+            FfiConverterOptionalString.write(value.`optionalIcon`, buf)
+            FfiConverterOptionalString.write(value.`optionalUserNotes`, buf)
+            FfiConverterBoolean.write(value.`makeActive`, buf)
+    }
+}
+
+
+
+data class CreatedNotebook (
+    var `notebook`: NotebookSummary
+    , 
+    var `createdPageCount`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCreatedNotebook: FfiConverterRustBuffer<CreatedNotebook> {
+    override fun read(buf: ByteBuffer): CreatedNotebook {
+        return CreatedNotebook(
+            FfiConverterTypeNotebookSummary.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CreatedNotebook) = (
+            FfiConverterTypeNotebookSummary.allocationSize(value.`notebook`) +
+            FfiConverterUInt.allocationSize(value.`createdPageCount`)
+    )
+
+    override fun write(value: CreatedNotebook, buf: ByteBuffer) {
+            FfiConverterTypeNotebookSummary.write(value.`notebook`, buf)
+            FfiConverterUInt.write(value.`createdPageCount`, buf)
+    }
+}
+
+
+
+data class GeneratedSmartPages (
+    var `pageSetId`: kotlin.String
+    , 
+    var `pageIds`: List<kotlin.String>
+    , 
+    var `smartPageIds`: List<kotlin.String>
+    , 
+    var `pdfAssetId`: kotlin.String
+    , 
+    var `pdfPath`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGeneratedSmartPages: FfiConverterRustBuffer<GeneratedSmartPages> {
+    override fun read(buf: ByteBuffer): GeneratedSmartPages {
+        return GeneratedSmartPages(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GeneratedSmartPages) = (
+            FfiConverterString.allocationSize(value.`pageSetId`) +
+            FfiConverterSequenceString.allocationSize(value.`pageIds`) +
+            FfiConverterSequenceString.allocationSize(value.`smartPageIds`) +
+            FfiConverterString.allocationSize(value.`pdfAssetId`) +
+            FfiConverterString.allocationSize(value.`pdfPath`)
+    )
+
+    override fun write(value: GeneratedSmartPages, buf: ByteBuffer) {
+            FfiConverterString.write(value.`pageSetId`, buf)
+            FfiConverterSequenceString.write(value.`pageIds`, buf)
+            FfiConverterSequenceString.write(value.`smartPageIds`, buf)
+            FfiConverterString.write(value.`pdfAssetId`, buf)
+            FfiConverterString.write(value.`pdfPath`, buf)
+    }
+}
+
+
+
+data class NotebookDesignSummary (
+    var `id`: kotlin.String
+    , 
+    var `name`: kotlin.String
+    , 
+    var `designVersion`: kotlin.UInt
+    , 
+    var `logicalPageCount`: kotlin.UInt
+    , 
+    var `trusted`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNotebookDesignSummary: FfiConverterRustBuffer<NotebookDesignSummary> {
+    override fun read(buf: ByteBuffer): NotebookDesignSummary {
+        return NotebookDesignSummary(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NotebookDesignSummary) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterUInt.allocationSize(value.`designVersion`) +
+            FfiConverterUInt.allocationSize(value.`logicalPageCount`) +
+            FfiConverterBoolean.allocationSize(value.`trusted`)
+    )
+
+    override fun write(value: NotebookDesignSummary, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterUInt.write(value.`designVersion`, buf)
+            FfiConverterUInt.write(value.`logicalPageCount`, buf)
+            FfiConverterBoolean.write(value.`trusted`, buf)
+    }
+}
+
+
+
+data class NotebookSummary (
+    var `id`: kotlin.String
+    , 
+    var `designId`: kotlin.String
+    , 
+    var `displayName`: kotlin.String
+    , 
+    var `archived`: kotlin.Boolean
+    , 
+    var `active`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNotebookSummary: FfiConverterRustBuffer<NotebookSummary> {
+    override fun read(buf: ByteBuffer): NotebookSummary {
+        return NotebookSummary(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NotebookSummary) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`designId`) +
+            FfiConverterString.allocationSize(value.`displayName`) +
+            FfiConverterBoolean.allocationSize(value.`archived`) +
+            FfiConverterBoolean.allocationSize(value.`active`)
+    )
+
+    override fun write(value: NotebookSummary, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`designId`, buf)
+            FfiConverterString.write(value.`displayName`, buf)
+            FfiConverterBoolean.write(value.`archived`, buf)
+            FfiConverterBoolean.write(value.`active`, buf)
+    }
+}
+
+
+
 data class OpenLibraryRequest (
     var `libraryPath`: kotlin.String
     
@@ -1595,6 +2114,54 @@ public object FfiConverterTypeOpenLibraryRequest: FfiConverterRustBuffer<OpenLib
 
     override fun write(value: OpenLibraryRequest, buf: ByteBuffer) {
             FfiConverterString.write(value.`libraryPath`, buf)
+    }
+}
+
+
+
+data class SmartPageGenerationRequest (
+    var `paperSize`: SmartPagePaperSize
+    , 
+    var `style`: SmartPageContentStyle
+    , 
+    var `pageCount`: kotlin.UInt
+    , 
+    var `startingVisiblePage`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSmartPageGenerationRequest: FfiConverterRustBuffer<SmartPageGenerationRequest> {
+    override fun read(buf: ByteBuffer): SmartPageGenerationRequest {
+        return SmartPageGenerationRequest(
+            FfiConverterTypeSmartPagePaperSize.read(buf),
+            FfiConverterTypeSmartPageContentStyle.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SmartPageGenerationRequest) = (
+            FfiConverterTypeSmartPagePaperSize.allocationSize(value.`paperSize`) +
+            FfiConverterTypeSmartPageContentStyle.allocationSize(value.`style`) +
+            FfiConverterUInt.allocationSize(value.`pageCount`) +
+            FfiConverterUInt.allocationSize(value.`startingVisiblePage`)
+    )
+
+    override fun write(value: SmartPageGenerationRequest, buf: ByteBuffer) {
+            FfiConverterTypeSmartPagePaperSize.write(value.`paperSize`, buf)
+            FfiConverterTypeSmartPageContentStyle.write(value.`style`, buf)
+            FfiConverterUInt.write(value.`pageCount`, buf)
+            FfiConverterUInt.write(value.`startingVisiblePage`, buf)
     }
 }
 
@@ -1658,5 +2225,426 @@ public object FfiConverterTypeA2dFfiError : FfiConverterRustBuffer<A2dFfiExcepti
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
+}
+
+
+
+sealed class PageResolution {
+    
+    data class Resolved(
+        val `pageId`: kotlin.String, 
+        val `notebookId`: kotlin.String?) : PageResolution()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class RequiresNotebookSelection(
+        val `candidates`: List<uniffi.a2d_ffi.NotebookSummary>) : PageResolution()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class RequiresNotebookRegistration(
+        val `design`: uniffi.a2d_ffi.NotebookDesignSummary) : PageResolution()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ConflictingActiveNotebook(
+        val `active`: uniffi.a2d_ffi.NotebookSummary, 
+        val `detectedDesign`: kotlin.String) : PageResolution()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ImportedUnknownSmartPage(
+        val `smartPageId`: kotlin.String, 
+        val `layoutId`: kotlin.String, 
+        val `visiblePageNumber`: kotlin.UInt?, 
+        val `pageSetId`: kotlin.String?) : PageResolution()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class UnsupportedCode(
+        val `reason`: kotlin.String) : PageResolution()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePageResolution : FfiConverterRustBuffer<PageResolution>{
+    override fun read(buf: ByteBuffer): PageResolution {
+        return when(buf.getInt()) {
+            1 -> PageResolution.Resolved(
+                FfiConverterString.read(buf),
+                FfiConverterOptionalString.read(buf),
+                )
+            2 -> PageResolution.RequiresNotebookSelection(
+                FfiConverterSequenceTypeNotebookSummary.read(buf),
+                )
+            3 -> PageResolution.RequiresNotebookRegistration(
+                FfiConverterTypeNotebookDesignSummary.read(buf),
+                )
+            4 -> PageResolution.ConflictingActiveNotebook(
+                FfiConverterTypeNotebookSummary.read(buf),
+                FfiConverterString.read(buf),
+                )
+            5 -> PageResolution.ImportedUnknownSmartPage(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterOptionalUInt.read(buf),
+                FfiConverterOptionalString.read(buf),
+                )
+            6 -> PageResolution.UnsupportedCode(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: PageResolution): ULong = when(value) {
+        is PageResolution.Resolved -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`pageId`)
+                + FfiConverterOptionalString.allocationSize(value.`notebookId`)
+            )
+        }
+        is PageResolution.RequiresNotebookSelection -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeNotebookSummary.allocationSize(value.`candidates`)
+            )
+        }
+        is PageResolution.RequiresNotebookRegistration -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeNotebookDesignSummary.allocationSize(value.`design`)
+            )
+        }
+        is PageResolution.ConflictingActiveNotebook -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeNotebookSummary.allocationSize(value.`active`)
+                + FfiConverterString.allocationSize(value.`detectedDesign`)
+            )
+        }
+        is PageResolution.ImportedUnknownSmartPage -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`smartPageId`)
+                + FfiConverterString.allocationSize(value.`layoutId`)
+                + FfiConverterOptionalUInt.allocationSize(value.`visiblePageNumber`)
+                + FfiConverterOptionalString.allocationSize(value.`pageSetId`)
+            )
+        }
+        is PageResolution.UnsupportedCode -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`reason`)
+            )
+        }
+    }
+
+    override fun write(value: PageResolution, buf: ByteBuffer) {
+        when(value) {
+            is PageResolution.Resolved -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`pageId`, buf)
+                FfiConverterOptionalString.write(value.`notebookId`, buf)
+                Unit
+            }
+            is PageResolution.RequiresNotebookSelection -> {
+                buf.putInt(2)
+                FfiConverterSequenceTypeNotebookSummary.write(value.`candidates`, buf)
+                Unit
+            }
+            is PageResolution.RequiresNotebookRegistration -> {
+                buf.putInt(3)
+                FfiConverterTypeNotebookDesignSummary.write(value.`design`, buf)
+                Unit
+            }
+            is PageResolution.ConflictingActiveNotebook -> {
+                buf.putInt(4)
+                FfiConverterTypeNotebookSummary.write(value.`active`, buf)
+                FfiConverterString.write(value.`detectedDesign`, buf)
+                Unit
+            }
+            is PageResolution.ImportedUnknownSmartPage -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.`smartPageId`, buf)
+                FfiConverterString.write(value.`layoutId`, buf)
+                FfiConverterOptionalUInt.write(value.`visiblePageNumber`, buf)
+                FfiConverterOptionalString.write(value.`pageSetId`, buf)
+                Unit
+            }
+            is PageResolution.UnsupportedCode -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.`reason`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class SmartPageContentStyle {
+    
+    BLANK,
+    LINED,
+    DOT_GRID,
+    GRAPH;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSmartPageContentStyle: FfiConverterRustBuffer<SmartPageContentStyle> {
+    override fun read(buf: ByteBuffer) = try {
+        SmartPageContentStyle.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SmartPageContentStyle) = 4UL
+
+    override fun write(value: SmartPageContentStyle, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class SmartPagePaperSize {
+    
+    US_LETTER,
+    A4;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSmartPagePaperSize: FfiConverterRustBuffer<SmartPagePaperSize> {
+    override fun read(buf: ByteBuffer) = try {
+        SmartPagePaperSize.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SmartPagePaperSize) = 4UL
+
+    override fun write(value: SmartPagePaperSize, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalUInt: FfiConverterRustBuffer<kotlin.UInt?> {
+    override fun read(buf: ByteBuffer): kotlin.UInt? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterUInt.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.UInt?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterUInt.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.UInt?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterUInt.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
+    override fun read(buf: ByteBuffer): kotlin.String? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterString.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.String?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterString.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.String?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeNotebookSummary: FfiConverterRustBuffer<NotebookSummary?> {
+    override fun read(buf: ByteBuffer): NotebookSummary? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeNotebookSummary.read(buf)
+    }
+
+    override fun allocationSize(value: NotebookSummary?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeNotebookSummary.allocationSize(value)
+        }
+    }
+
+    override fun write(value: NotebookSummary?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeNotebookSummary.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
+    override fun read(buf: ByteBuffer): List<kotlin.String> {
+        val len = buf.getInt()
+        return List<kotlin.String>(len) {
+            FfiConverterString.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.String>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterString.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.String>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeNotebookSummary: FfiConverterRustBuffer<List<NotebookSummary>> {
+    override fun read(buf: ByteBuffer): List<NotebookSummary> {
+        val len = buf.getInt()
+        return List<NotebookSummary>(len) {
+            FfiConverterTypeNotebookSummary.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<NotebookSummary>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNotebookSummary.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<NotebookSummary>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNotebookSummary.write(it, buf)
+        }
+    }
 }
 
