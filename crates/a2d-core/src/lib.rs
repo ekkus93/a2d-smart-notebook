@@ -187,7 +187,7 @@ impl A2dCore {
                 a2d_domain::PageState::GeneratedNotScanned,
                 created_at,
             );
-            page.set_generated_pdf_asset(asset.id().clone(), created_at);
+            page.set_generated_pdf_asset(asset.id().clone(), created_at)?;
             registered_pages.push(RegisteredPage {
                 page_id,
                 smart_page_id,
@@ -386,6 +386,71 @@ mod tests {
         request.page_count = 0;
         let err = core.generate_and_register_page_set(request).unwrap_err();
         assert!(err.code.to_string().contains("PAGE_SET_EMPTY"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn transaction_failure_after_asset_commit_reports_a_real_orphan_and_rolls_back_rows() {
+        let (core, dir) = open_test_core();
+
+        // Deterministic real-SQL fault injection: the trigger lets the asset commit complete, then
+        // aborts the first page_sets INSERT inside the registration transaction. This is reliable
+        // across CI/container privilege models, unlike changing file permissions on an already
+        // open WAL database, and it does not add a production-only mock seam.
+        {
+            let mut storage = core.lock_storage().unwrap();
+            storage
+                .transaction(|tx| {
+                    tx.execute_batch(
+                        "CREATE TRIGGER fail_page_set_registration_for_test \
+                         BEFORE INSERT ON page_sets \
+                         BEGIN \
+                           SELECT RAISE(ABORT, 'forced page-set registration failure'); \
+                         END;",
+                    )
+                    .expect("failure-injection trigger must be created");
+                    Ok(())
+                })
+                .unwrap();
+        }
+
+        let err = core
+            .generate_and_register_page_set(sample_request())
+            .unwrap_err();
+        let orphaned_asset_id = err
+            .details
+            .get("orphaned_asset_id")
+            .expect("transaction failure after asset commit must identify the orphan")
+            .clone();
+        assert!(err.details.contains_key("note"));
+
+        let orphaned_path = dir.join("assets").join("exports").join(&orphaned_asset_id);
+        assert!(
+            orphaned_path.is_file(),
+            "the diagnostic must refer to the PDF file that was durably committed before SQL failed"
+        );
+
+        // The database transaction must have rolled back all attempted rows, including the Asset
+        // row; only the deliberately orphaned filesystem object remains.
+        let mut storage = Storage::open(&dir.join("library.sqlite")).unwrap();
+        let (page_sets, pages, assets): (i64, i64, i64) = storage
+            .transaction(|tx| {
+                let page_sets = tx
+                    .query_row("SELECT COUNT(*) FROM page_sets", [], |row| row.get(0))
+                    .expect("page_sets count must be readable");
+                let pages = tx
+                    .query_row("SELECT COUNT(*) FROM pages", [], |row| row.get(0))
+                    .expect("pages count must be readable");
+                let assets = tx
+                    .query_row("SELECT COUNT(*) FROM assets", [], |row| row.get(0))
+                    .expect("assets count must be readable");
+                Ok((page_sets, pages, assets))
+            })
+            .unwrap();
+        assert_eq!((page_sets, pages, assets), (0, 0, 0));
+
+        drop(storage);
+        drop(core);
         std::fs::remove_dir_all(&dir).ok();
     }
 

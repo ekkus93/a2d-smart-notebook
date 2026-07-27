@@ -171,7 +171,27 @@ fn set_generated_pdf_asset_attaches_a_committed_asset_and_round_trips() {
     storage
         .set_generated_pdf_asset(page.id(), asset.id())
         .unwrap();
+    // Repeating the exact assignment is idempotent and must remain safe.
+    storage
+        .set_generated_pdf_asset(page.id(), asset.id())
+        .unwrap();
 
+    let fetched = storage.get_page(page.id()).unwrap().unwrap();
+    assert_eq!(fetched.generated_pdf_asset_id, Some(asset.id().clone()));
+
+    // A different assignment is an explicit conflict and must preserve the original association.
+    let replacement = asset_store
+        .commit(
+            b"%PDF-1.7 replacement bytes",
+            AssetKind::Export,
+            "application/pdf",
+        )
+        .unwrap();
+    storage.insert_asset(&replacement).unwrap();
+    let err = storage
+        .set_generated_pdf_asset(page.id(), replacement.id())
+        .unwrap_err();
+    assert_eq!(err.code.to_string(), "STORAGE_GENERATED_PDF_ASSET_CONFLICT");
     let fetched = storage.get_page(page.id()).unwrap().unwrap();
     assert_eq!(fetched.generated_pdf_asset_id, Some(asset.id().clone()));
 }

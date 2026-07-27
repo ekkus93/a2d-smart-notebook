@@ -67,6 +67,33 @@ pub enum ContentStyle {
     Graph { spacing_mm: f64 },
 }
 
+impl ContentStyle {
+    /// Validates physical ruling parameters before a layout is accepted. A spacing value must be
+    /// finite and strictly positive: zero/negative values can make iterative renderers fail to
+    /// progress, while NaN/infinity can silently suppress ruling or produce non-portable output.
+    /// The PDF renderer repeats this validation as defense in depth because callers can construct
+    /// a `PageLayout` directly without calling [`PageLayout::validate`].
+    pub fn validate(&self) -> Result<(), A2dError> {
+        let spacing = match self {
+            ContentStyle::Blank => return Ok(()),
+            ContentStyle::Lined { line_spacing_mm } => *line_spacing_mm,
+            ContentStyle::DotGrid { spacing_mm } | ContentStyle::Graph { spacing_mm } => {
+                *spacing_mm
+            }
+        };
+
+        if !spacing.is_finite() || spacing <= 0.0 {
+            return Err(layout_error(
+                "LAYOUT_CONTENT_STYLE_SPACING_INVALID",
+                format!(
+                    "content-style spacing must be finite and greater than zero millimeters, got {spacing}"
+                ),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PageLayout {
     pub id: LayoutId,
@@ -106,6 +133,7 @@ impl PageLayout {
     /// concrete layout's own tests (Milestone 5.2/5.3) rather than trusted implicitly — a
     /// layout that fails this must never ship.
     pub fn validate(&self) -> Result<(), A2dError> {
+        self.content_style.validate()?;
         self.validate_marker_roles()?;
         self.validate_safe_margins()?;
         self.validate_no_unwanted_overlap()?;
@@ -293,6 +321,46 @@ mod tests {
     #[test]
     fn a_well_formed_layout_validates() {
         valid_layout().validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_non_finite_or_non_positive_content_style_spacing() {
+        let invalid = [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
+        for spacing in invalid {
+            for style in [
+                ContentStyle::Lined {
+                    line_spacing_mm: spacing,
+                },
+                ContentStyle::Graph {
+                    spacing_mm: spacing,
+                },
+                ContentStyle::DotGrid {
+                    spacing_mm: spacing,
+                },
+            ] {
+                let mut layout = valid_layout();
+                layout.content_style = style;
+                let err = layout.validate().unwrap_err();
+                assert_eq!(err.code.to_string(), "LAYOUT_CONTENT_STYLE_SPACING_INVALID");
+                assert_eq!(err.category, ErrorCategory::Validation);
+            }
+        }
+    }
+
+    #[test]
+    fn accepts_blank_and_positive_content_style_spacing() {
+        for style in [
+            ContentStyle::Blank,
+            ContentStyle::Lined {
+                line_spacing_mm: 7.0,
+            },
+            ContentStyle::Graph { spacing_mm: 5.0 },
+            ContentStyle::DotGrid { spacing_mm: 5.0 },
+        ] {
+            let mut layout = valid_layout();
+            layout.content_style = style;
+            layout.validate().unwrap();
+        }
     }
 
     #[test]

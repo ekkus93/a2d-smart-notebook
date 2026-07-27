@@ -722,12 +722,12 @@ Acceptance:
       visible numbering, and calibration mark. `crates/a2d-layout/src/page_layout.rs`:
       `PageLayout` (matches this task's own suggested shape almost exactly), `MarkerRole`/
       `MarkerPlacement`, `CalibrationMark`.
-- [x] Validate bounds, overlap, marker roles, and quiet zones. `PageLayout::validate`: exactly one
-      marker per role, every element within the safe-margin inset, and every machine-readable
-      element's (markers + QR) quiet-zone-inflated footprint clear of content, the visible page
-      number, and every other machine-readable element. 6 rejection tests plus one
-      well-formed-layout acceptance test in `crates/a2d-layout/src/page_layout.rs`, 7 geometry
-      primitive tests in `geometry.rs` — 25 tests total in the crate, `cargo test -p a2d-layout`.
+- [x] Validate bounds, overlap, marker roles, quiet zones, and content-style spacing.
+      `PageLayout::validate` requires exactly one marker per role, keeps every element within the
+      safe-margin inset, keeps machine-readable quiet zones clear, and rejects ruling spacing that
+      is non-finite or not strictly positive. The spacing invariant is repeated inside the PDF
+      renderer as defense in depth because callers can construct a `PageLayout` without invoking
+      `validate()`.
 
 Example:
 
@@ -834,11 +834,13 @@ The PDF renderer must live in Rust.
       `qrcode` crate (EC level M), then draws one filled vector square per dark module at
       `qr_rect.width / module_count` — vector fill, never a scaled raster QR image, so there's no
       resampling blur regardless of output resolution.
-- [x] Render line/grid styles deterministically. `render.rs::content_style_ops`: pure functions of
-      `ContentStyle` and `content_rect`, no randomness, same inputs always produce the same ops
-      (`Lined`/`Graph` draw ruled lines at the style's spacing; `DotGrid` draws small filled
-      squares at grid intersections — a simplification versus true circles, noted inline;
-      `Blank` draws nothing).
+- [x] Render line/grid styles deterministically and with bounded work.
+      `render.rs::content_style_ops` is a pure function of `ContentStyle` and `content_rect`, uses
+      precomputed integer iteration counts instead of non-progressing floating-point `while`
+      loops, rejects invalid spacing even if layout validation was bypassed, and enforces a
+      defensive element ceiling so pathologically tiny positive spacing fails with a typed error
+      instead of exhausting memory. `Lined`/`Graph` draw ruled lines; `DotGrid` draws small filled
+      squares at intersections; `Blank` draws nothing.
 - [x] Use legally distributable fonts or avoid embedding unlicensed fonts. `render.rs::page_number_ops`
       uses `printpdf::BuiltinFont::Helvetica` — one of the 14 standard PDF fonts every viewer/
       printer already has. No font file is embedded at all, so there is no font license to clear.
@@ -890,6 +892,10 @@ its PDF was committed as.
       verify step.
 - [x] Attach the PDF asset and mark success. Every generated `Page`'s `generated_pdf_asset_id` is
       set to the committed `Asset`'s id before insertion; state is `GeneratedNotScanned`.
+      Assignment is single-writer and idempotent: repeating the same `AssetId` succeeds without
+      rewriting timestamps, while a different `AssetId` returns an explicit integrity conflict
+      instead of silently replacing provenance. The typed storage repository enforces the same
+      rule.
 - [x] On failure, roll back coherently or retain an explicit failed-generation record.
       `Storage::transaction` rolls back every row from a failed attempt automatically (rollback-
       on-drop). **Documented, not fully closed gap**: if the DB transaction fails *after* the PDF
@@ -898,6 +904,8 @@ its PDF was committed as.
       doesn't exist). The returned error carries the orphaned `AssetId` in its `details` so it's
       at least diagnosable, matching Milestone 3.3's own precedent of documenting this exact class
       of gap rather than building unneeded infrastructure ahead of the milestone that needs it.
+      A deterministic SQLite abort-trigger test proves that the file exists while all attempted
+      `PageSet`, `Page`, and `Asset` rows roll back.
 - [x] Retry safely without duplicate logical records. Every ID minted is freshly random on every
       call (spec §12.2), so a retry after a failed (fully rolled-back) attempt cannot produce a
       duplicate logical record — there is nothing from the failed attempt left in the database to

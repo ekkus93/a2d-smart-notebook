@@ -536,14 +536,32 @@ impl PageRepository for Connection {
         page_id: &PageId,
         asset_id: &AssetId,
     ) -> Result<(), A2dError> {
+        let requested = asset_id.to_string();
         let changed = self
             .execute(
-                "UPDATE pages SET generated_pdf_asset_id = ?1 WHERE id = ?2",
-                params![asset_id.to_string(), page_id.to_string()],
+                "UPDATE pages SET generated_pdf_asset_id = ?1 \
+                 WHERE id = ?2 \
+                   AND (generated_pdf_asset_id IS NULL OR generated_pdf_asset_id = ?1)",
+                params![requested, page_id.to_string()],
             )
             .map_err(|e| map_sql_error("set_generated_pdf_asset", e))?;
-        if changed == 0 {
-            return Err(A2dError::new(
+        if changed != 0 {
+            return Ok(());
+        }
+
+        let existing: Option<Option<String>> = self
+            .query_row(
+                "SELECT generated_pdf_asset_id FROM pages WHERE id = ?1",
+                [page_id.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| {
+                map_sql_error("reading generated_pdf_asset_id after failed assignment", e)
+            })?;
+
+        match existing {
+            None => Err(A2dError::new(
                 ErrorCode::new("STORAGE_PAGE_NOT_FOUND"),
                 ErrorCategory::Validation,
                 ErrorSeverity::Error,
@@ -551,9 +569,24 @@ impl PageRepository for Connection {
                 "set_generated_pdf_asset: no page with this id",
                 false,
             )
-            .with_detail("page_id", page_id.to_string()));
+            .with_detail("page_id", page_id.to_string())),
+            Some(Some(existing_asset_id)) if existing_asset_id == asset_id.to_string() => Ok(()),
+            Some(Some(existing_asset_id)) => Err(A2dError::new(
+                ErrorCode::new("STORAGE_GENERATED_PDF_ASSET_CONFLICT"),
+                ErrorCategory::Integrity,
+                ErrorSeverity::Error,
+                "error.storage.generated_pdf_asset_conflict",
+                "generated PDF asset is already assigned and cannot be replaced implicitly",
+                false,
+            )
+            .with_detail("page_id", page_id.to_string())
+            .with_detail("existing_asset_id", existing_asset_id)
+            .with_detail("requested_asset_id", asset_id.to_string())),
+            Some(None) => Err(A2dError::internal_unknown(
+                "set_generated_pdf_asset matched an existing unassigned page but SQLite reported zero changed rows",
+            )
+            .with_detail("page_id", page_id.to_string())),
         }
-        Ok(())
     }
 }
 

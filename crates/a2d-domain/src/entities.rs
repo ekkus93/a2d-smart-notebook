@@ -326,10 +326,34 @@ impl Page {
     }
 
     /// Records which `Asset` this generated page's PDF was committed as (TODO 5.5 "attach the
-    /// PDF asset and mark success").
-    pub fn set_generated_pdf_asset(&mut self, asset_id: AssetId, now_ms: i64) {
-        self.generated_pdf_asset_id = Some(asset_id);
-        self.updated_at_ms = now_ms;
+    /// PDF asset and mark success"). Assignment is single-writer and idempotent: repeating the
+    /// same asset succeeds without changing timestamps, while attempting to replace it with a
+    /// different asset is an explicit integrity conflict rather than a silent overwrite that
+    /// could orphan the original PDF and erase provenance.
+    pub fn set_generated_pdf_asset(
+        &mut self,
+        asset_id: AssetId,
+        now_ms: i64,
+    ) -> Result<(), A2dError> {
+        match &self.generated_pdf_asset_id {
+            None => {
+                self.generated_pdf_asset_id = Some(asset_id);
+                self.updated_at_ms = now_ms;
+                Ok(())
+            }
+            Some(existing) if existing == &asset_id => Ok(()),
+            Some(existing) => Err(A2dError::new(
+                ErrorCode::new("PAGE_GENERATED_PDF_ASSET_CONFLICT"),
+                ErrorCategory::Integrity,
+                ErrorSeverity::Error,
+                "error.page.generated_pdf_asset_conflict",
+                "generated PDF asset is already assigned and cannot be replaced implicitly",
+                false,
+            )
+            .with_detail("page_id", self.id.to_string())
+            .with_detail("existing_asset_id", existing.to_string())
+            .with_detail("requested_asset_id", asset_id.to_string())),
+        }
     }
 }
 
@@ -839,6 +863,36 @@ mod tests {
         );
         // Rejected assignment must not have mutated state.
         assert_eq!(page.preferred_scan_id, Some(own_scan.id().clone()));
+    }
+
+    #[test]
+    fn generated_pdf_asset_assignment_is_single_writer_and_idempotent() {
+        let mut page = gen_page(PageId::generate());
+        let first = AssetId::generate();
+        page.set_generated_pdf_asset(first.clone(), 100).unwrap();
+        assert_eq!(page.generated_pdf_asset_id, Some(first.clone()));
+        assert_eq!(page.updated_at_ms, 100);
+
+        // Repeating the exact assignment is an idempotent no-op, including the timestamp.
+        page.set_generated_pdf_asset(first.clone(), 200).unwrap();
+        assert_eq!(page.generated_pdf_asset_id, Some(first.clone()));
+        assert_eq!(page.updated_at_ms, 100);
+
+        let replacement = AssetId::generate();
+        let err = page
+            .set_generated_pdf_asset(replacement.clone(), 300)
+            .unwrap_err();
+        assert_eq!(err.code.to_string(), "PAGE_GENERATED_PDF_ASSET_CONFLICT");
+        assert_eq!(err.category, ErrorCategory::Integrity);
+        let first_string = first.to_string();
+        let replacement_string = replacement.to_string();
+        assert_eq!(err.details.get("existing_asset_id"), Some(&first_string));
+        assert_eq!(
+            err.details.get("requested_asset_id"),
+            Some(&replacement_string)
+        );
+        assert_eq!(page.generated_pdf_asset_id, Some(first));
+        assert_eq!(page.updated_at_ms, 100);
     }
 
     #[test]

@@ -375,6 +375,117 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    fn table_has_column(conn: &rusqlite::Connection, table: &str, column: &str) -> bool {
+        let mut statement = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .expect("table-info query must prepare");
+        statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("table-info query must run")
+            .any(|name| name.expect("column name must decode") == column)
+    }
+
+    #[test]
+    fn opening_a_partially_migrated_database_applies_only_the_missing_migrations() {
+        let dir = std::env::temp_dir().join(format!(
+            "a2d-storage-incremental-migration-test-{}",
+            a2d_domain::PageId::generate()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("library.sqlite");
+        const ORIGINAL_V1_APPLIED_AT: i64 = 123_456_789;
+
+        // Build the exact durable state an installation had when migration 0001 was the newest
+        // version: schema_migrations exists, 0001 is committed and recorded, and 0002's column is
+        // absent. Tests live in this child module so they can use the real private migration
+        // machinery rather than duplicating migration SQL or approximating its transaction rules.
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            conn.pragma_update(None, "foreign_keys", true).unwrap();
+            let mut storage = Storage { conn };
+            storage
+                .conn
+                .execute_batch(
+                    "CREATE TABLE schema_migrations (\
+                         version INTEGER PRIMARY KEY NOT NULL,\
+                         name TEXT NOT NULL,\
+                         applied_at_ms INTEGER NOT NULL\
+                     );",
+                )
+                .unwrap();
+            storage.apply_migration(&MIGRATIONS[0]).unwrap();
+            storage
+                .conn
+                .execute(
+                    "UPDATE schema_migrations SET applied_at_ms = ?1 WHERE version = 1",
+                    [ORIGINAL_V1_APPLIED_AT],
+                )
+                .unwrap();
+            assert!(!table_has_column(
+                &storage.conn,
+                "pages",
+                "generated_pdf_asset_id"
+            ));
+        }
+
+        let upgraded = Storage::open(&db_path).expect("partial database must upgrade in place");
+        assert_eq!(upgraded.schema_version().unwrap(), 2);
+        assert!(table_has_column(
+            &upgraded.conn,
+            "pages",
+            "generated_pdf_asset_id"
+        ));
+
+        let rows: Vec<(i64, String, i64)> = {
+            let mut statement = upgraded
+                .conn
+                .prepare(
+                    "SELECT version, name, applied_at_ms FROM schema_migrations ORDER BY version",
+                )
+                .unwrap();
+            statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0], (1, "initial".to_string(), ORIGINAL_V1_APPLIED_AT));
+        assert_eq!(rows[1].0, 2);
+        assert_eq!(rows[1].1, "page_generated_pdf_asset");
+
+        // Exercise the new column through the real typed repositories, not merely PRAGMA output.
+        let page = a2d_domain::Page::new(
+            a2d_domain::PageId::generate(),
+            a2d_domain::PageKind::SmartPage {
+                smart_page_id: a2d_domain::SmartPageId::generate(),
+                page_set_id: None,
+                visible_page_number: None,
+            },
+            a2d_domain::LayoutId::parse("PAGE-V1").unwrap(),
+            None,
+            a2d_domain::PageState::GeneratedNotScanned,
+            500,
+        );
+        upgraded.insert_page(&page).unwrap();
+        let asset_store = AssetStore::open(&dir).unwrap();
+        let asset = asset_store
+            .commit(
+                b"%PDF-1.7 incremental migration fixture",
+                a2d_domain::AssetKind::Export,
+                "application/pdf",
+            )
+            .unwrap();
+        upgraded.insert_asset(&asset).unwrap();
+        upgraded
+            .set_generated_pdf_asset(page.id(), asset.id())
+            .unwrap();
+        let fetched = upgraded.get_page(page.id()).unwrap().unwrap();
+        assert_eq!(fetched.generated_pdf_asset_id, Some(asset.id().clone()));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn foreign_keys_are_enforced() {
         let storage = Storage::open_in_memory().unwrap();

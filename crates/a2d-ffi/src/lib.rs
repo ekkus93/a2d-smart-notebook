@@ -165,6 +165,50 @@ mod tests {
     }
 
     #[test]
+    fn example_qr_payload_methods_cross_the_ffi_wrapper_and_round_trip_as_typed_codes() {
+        let client = open_test_client();
+
+        let setup_a = client.generate_example_notebook_setup_qr_payload().unwrap();
+        let setup_b = client.generate_example_notebook_setup_qr_payload().unwrap();
+        assert_ne!(
+            setup_a, setup_b,
+            "each wrapper call must preserve fresh IDs"
+        );
+        assert!(matches!(
+            a2d_identity::qr::parse(&setup_a, |_| true).unwrap(),
+            a2d_identity::PageCode::NotebookSetup { .. }
+        ));
+
+        let notebook_page = client.generate_example_notebook_page_qr_payload().unwrap();
+        match a2d_identity::qr::parse(&notebook_page, |_| true).unwrap() {
+            a2d_identity::PageCode::NotebookPage {
+                logical_page_number,
+                layout_id,
+                ..
+            } => {
+                assert_eq!(logical_page_number, 12);
+                assert_eq!(layout_id.as_str(), "USLETTER-LINED");
+            }
+            other => panic!("expected NotebookPage through FFI wrapper, got {other:?}"),
+        }
+
+        let smart_page = client.generate_example_smart_page_qr_payload().unwrap();
+        match a2d_identity::qr::parse(&smart_page, |_| true).unwrap() {
+            a2d_identity::PageCode::SmartPage {
+                layout_id,
+                visible_page_number,
+                page_set_id,
+                ..
+            } => {
+                assert_eq!(layout_id.as_str(), "USLETTER-LINED");
+                assert_eq!(visible_page_number, Some(3));
+                assert_eq!(page_set_id, None);
+            }
+            other => panic!("expected SmartPage through FFI wrapper, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn open_rejects_a_path_that_is_a_file_with_a_mapped_error() {
         let file = std::env::temp_dir().join(format!(
             "a2d-ffi-test-file-{}",
