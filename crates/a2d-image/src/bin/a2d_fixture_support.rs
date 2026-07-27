@@ -20,8 +20,8 @@ use qrcode::types::Color as QrColor;
 use qrcode::{EcLevel, QrCode};
 
 const MAIN_DESIGN_ID: &str = "00000000000000000000000001";
-const MAIN_LAYOUT_ID: &str = "00000000000000000000000001";
-const WRONG_LAYOUT_ID: &str = "00000000000000000000000002";
+const MAIN_LAYOUT_ID: &str = "FIXTURE-MAIN-V1";
+const WRONG_LAYOUT_ID: &str = "FIXTURE-WRONG-V1";
 const LOGICAL_PAGE_NUMBER: u32 = 42;
 const QR_SCALE: usize = 8;
 const QR_QUIET_ZONE_MODULES: usize = 4;
@@ -109,7 +109,9 @@ fn render_tags(
                     || native.stride < native.width
                     || native.buf.is_null()
                 {
-                    return Err(format!("official renderer returned invalid tag image {tag_id}").into());
+                    return Err(
+                        format!("official renderer returned invalid tag image {tag_id}").into(),
+                    );
                 }
 
                 let length = usize::try_from(native.stride)?
