@@ -1,4 +1,4 @@
-name: Apply Milestone 6 Android v3
+name: Apply Milestone 6 Android v4
 
 on:
   push:
@@ -6,9 +6,12 @@ on:
     paths:
       - .github/workflows/milestone6-android-apply.yml
       - tools/apply_milestone6_android.py
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
 
 concurrency:
-  group: milestone6-android-apply-v3
+  group: milestone6-android-apply-v4
   cancel-in-progress: true
 
 permissions:
@@ -16,7 +19,7 @@ permissions:
 
 jobs:
   apply-and-validate:
-    if: github.actor != 'github-actions[bot]'
+    if: ${{ !hashFiles('apps/android/app/src/main/kotlin/com/a2d/notebook/feature/notebook/NotebookSetupScreen.kt') && !hashFiles('docs/MILESTONE6_APPLY_STATUS.md') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          LOG="$RUNNER_TEMP/milestone6-android-v3.log"
+          LOG="$RUNNER_TEMP/milestone6-android-v4.log"
           (
             set -euo pipefail
             java -version
@@ -81,6 +84,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/MILESTONE6_APPLY_STATUS.md
-          git commit -m "Record Milestone 6 Android v3 failure"
+          git commit -m "Record Milestone 6 Android v4 failure"
           git push origin HEAD:master
           exit 1
