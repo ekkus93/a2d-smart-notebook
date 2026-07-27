@@ -44,6 +44,27 @@ jobs:
       - name: Add iOS Rust targets
         run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
       - name: Compile a2d-image for iOS device
-        run: cargo check -p a2d-image --target aarch64-apple-ios
+        id: ios-device
+        continue-on-error: true
+        run: cargo check -p a2d-image --target aarch64-apple-ios > ios-device.log 2>&1
       - name: Compile a2d-image for Apple Silicon simulator
-        run: cargo check -p a2d-image --target aarch64-apple-ios-sim
+        id: ios-simulator
+        continue-on-error: true
+        run: cargo check -p a2d-image --target aarch64-apple-ios-sim > ios-simulator.log 2>&1
+      - name: Upload compact iOS build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone7-ios-build-logs
+          path: |
+            ios-device.log
+            ios-simulator.log
+          if-no-files-found: error
+      - name: Report iOS build failures
+        if: steps.ios-device.outcome == 'failure' || steps.ios-simulator.outcome == 'failure'
+        run: |
+          echo '=== iOS device build ==='
+          cat ios-device.log || true
+          echo '=== Apple Silicon simulator build ==='
+          cat ios-simulator.log || true
+          exit 1
