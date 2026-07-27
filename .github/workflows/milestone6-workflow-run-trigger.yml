@@ -1,0 +1,46 @@
+name: Trigger Milestone 6 TODO reconciliation after CI
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute the checked-in reconciliation and remove temporary workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master
+          git reset --hard origin/master
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source_path = Path(".github/workflows/milestone6-todo-reconcile.yml")
+          lines = source_path.read_text().splitlines()
+          start = next(i for i, line in enumerate(lines) if line.strip() == "python3 - <<'PY'") + 1
+          end = next(i for i in range(start, len(lines)) if lines[i].strip() == "PY")
+          script_lines = []
+          for line in lines[start:end]:
+              script_lines.append(line[10:] if line.startswith("          ") else line)
+          Path("/tmp/reconcile_milestone6_todo.py").write_text("\n".join(script_lines) + "\n")
+          PY
+
+          python3 /tmp/reconcile_milestone6_todo.py
+          git show f421cd21bdd1590f3fdf25f2782f64199d3f3a9a:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git rm .github/workflows/milestone6-todo-reconcile.yml
+          git rm .github/workflows/milestone6-workflow-run-trigger.yml
+          git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md .github/workflows/ci.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Reconcile Milestone 6 TODO completion"
+          git push origin HEAD:master
