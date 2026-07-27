@@ -263,6 +263,14 @@ def rotated_scene(page: Image.Image, degrees: float) -> Image.Image:
         resample=Image.Resampling.BICUBIC,
         fillcolor=(0, 0, 0, 0),
     )
+    maximum_width = SCENE_WIDTH - 100
+    maximum_height = SCENE_HEIGHT - 100
+    if rotated.width > maximum_width or rotated.height > maximum_height:
+        scale = min(maximum_width / rotated.width, maximum_height / rotated.height)
+        rotated = rotated.resize(
+            (max(1, round(rotated.width * scale)), max(1, round(rotated.height * scale))),
+            resample=Image.Resampling.LANCZOS,
+        )
     scene = Image.new("RGBA", (SCENE_WIDTH, SCENE_HEIGHT), BACKGROUND + (255,))
     left = (SCENE_WIDTH - rotated.width) // 2
     top = (SCENE_HEIGHT - rotated.height) // 2
@@ -320,7 +328,6 @@ def fixture_entry(output_dir: Path, spec: FixtureSpec) -> dict[str, Any]:
 def clear_generated_output(output_dir: Path) -> None:
     for name in (
         "generated",
-        "photographed",
         "glare",
         "blur",
         "missing-marker",
@@ -333,6 +340,7 @@ def clear_generated_output(output_dir: Path) -> None:
         if path.exists():
             shutil.rmtree(path)
         path.mkdir(parents=True, exist_ok=True)
+    (output_dir / "photographed").mkdir(parents=True, exist_ok=True)
     manifest = output_dir / "manifest.json"
     if manifest.exists():
         manifest.unlink()

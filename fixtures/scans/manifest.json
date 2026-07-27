@@ -1,0 +1,614 @@
+{
+  "fixtures": [
+    {
+      "byte_length": 60610,
+      "category": "generated",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 1900,
+      "id": "generated-base-page",
+      "image_decode": "success",
+      "intended_quality_state": "Accepted",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "generated/base-page.png",
+      "sha256": "bfc373e2308934a19ef5be02fc7187ea26ac50c0458440bcc2a224bb1737afb5",
+      "source": "project-generated",
+      "transform": {
+        "kind": "none"
+      },
+      "warnings": [],
+      "width": 1400
+    },
+    {
+      "byte_length": 435037,
+      "category": "generated",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "generated-rotated-7-5",
+      "image_decode": "success",
+      "intended_quality_state": "AcceptedWithWarnings",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "generated/rotated-7-5-degrees.png",
+      "sha256": "c4f33d37014055da411a946e72f8e68d808fb057bb25738f5cc2a2de17f4ab61",
+      "source": "project-generated",
+      "transform": {
+        "degrees": 7.5,
+        "kind": "rotation"
+      },
+      "warnings": [
+        "moderate_rotation"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 186584,
+      "category": "generated",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "generated-rotated-90",
+      "image_decode": "success",
+      "intended_quality_state": "AcceptedWithWarnings",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "generated/rotated-90-degrees.png",
+      "sha256": "1622983e41118f967181ade0005a4105d47c4883d58a8d32c472fc05492ba3d1",
+      "source": "project-generated",
+      "transform": {
+        "degrees": 90.0,
+        "kind": "rotation"
+      },
+      "warnings": [
+        "orientation_normalization_required"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 350097,
+      "category": "generated",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "generated-perspective-mild",
+      "image_decode": "success",
+      "intended_quality_state": "AcceptedWithWarnings",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "generated/perspective-mild.png",
+      "sha256": "559bddf899974c2ccf943df04ca168eb390a5029edc858f82785bf19f164343c",
+      "source": "project-generated",
+      "transform": {
+        "corners": [
+          [
+            205,
+            145
+          ],
+          [
+            1580,
+            230
+          ],
+          [
+            1650,
+            2050
+          ],
+          [
+            145,
+            1980
+          ]
+        ],
+        "kind": "perspective"
+      },
+      "warnings": [
+        "mild_perspective"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 486731,
+      "category": "generated",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "generated-perspective-severe",
+      "image_decode": "success",
+      "intended_quality_state": "NeedsReview",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "generated/perspective-severe.png",
+      "sha256": "adec3e264175e015b3383a6dd5c2411db202af5398869d5faf706707f22b3bce",
+      "source": "project-generated",
+      "transform": {
+        "corners": [
+          [
+            430,
+            110
+          ],
+          [
+            1480,
+            390
+          ],
+          [
+            1720,
+            2030
+          ],
+          [
+            80,
+            1800
+          ]
+        ],
+        "kind": "perspective"
+      },
+      "warnings": [
+        "severe_perspective",
+        "low_page_fill"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 268004,
+      "category": "generated",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "generated-underexposed",
+      "image_decode": "success",
+      "intended_quality_state": "NeedsReview",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "generated/underexposed.png",
+      "sha256": "51bb697d1d18ed4d94bca45c95d70e3edbc8634daa3ff7b8e65a603245698206",
+      "source": "project-generated",
+      "transform": {
+        "factor": 0.32,
+        "kind": "brightness"
+      },
+      "warnings": [
+        "underexposed"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 216664,
+      "category": "generated",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "generated-overexposed",
+      "image_decode": "success",
+      "intended_quality_state": "NeedsReview",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "generated/overexposed.png",
+      "sha256": "8b435194e208aff99588e8f154fb01562c992cad9d5b7cfe3eef7ea2f250e597",
+      "source": "project-generated",
+      "transform": {
+        "factor": 1.72,
+        "kind": "brightness"
+      },
+      "warnings": [
+        "overexposed",
+        "highlight_clipping"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 482938,
+      "category": "blur",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "blur-moderate",
+      "image_decode": "success",
+      "intended_quality_state": "AcceptedWithWarnings",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "blur/gaussian-radius-2.png",
+      "sha256": "b669da4b16fcf5f3148db7d237d0a705746640903d6d61afdde089116a6a32c7",
+      "source": "project-generated",
+      "transform": {
+        "kind": "gaussian_blur",
+        "radius": 2.0
+      },
+      "warnings": [
+        "moderate_blur"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 493803,
+      "category": "blur",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "blur-severe",
+      "image_decode": "success",
+      "intended_quality_state": "Rejected",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "blur/gaussian-radius-7.png",
+      "sha256": "79aa50c455e87e901f67ba9b9526f36010a2cd62ae9001af44544560a29216d7",
+      "source": "project-generated",
+      "transform": {
+        "kind": "gaussian_blur",
+        "radius": 7.0
+      },
+      "warnings": [
+        "severe_blur"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 492671,
+      "category": "glare",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "glare-partial",
+      "image_decode": "success",
+      "intended_quality_state": "AcceptedWithWarnings",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "glare/partial-glare.png",
+      "sha256": "ff23e27a56d9acf57281b4ea2d1ce80ecb7523fa826e3694700506489d376cae",
+      "source": "project-generated",
+      "transform": {
+        "alpha": 135,
+        "blur": 48.0,
+        "box": [
+          860,
+          420,
+          1510,
+          1150
+        ],
+        "kind": "glare"
+      },
+      "warnings": [
+        "partial_glare"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 678896,
+      "category": "glare",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "glare-strong",
+      "image_decode": "success",
+      "intended_quality_state": "NeedsReview",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "glare/strong-glare.png",
+      "sha256": "dd77354ea2be657e598b5aea796c4a65e01fc99b3756d1fec548514b1a47094d",
+      "source": "project-generated",
+      "transform": {
+        "alpha": 220,
+        "blur": 95.0,
+        "box": [
+          250,
+          230,
+          1580,
+          1830
+        ],
+        "kind": "glare"
+      },
+      "warnings": [
+        "strong_glare",
+        "highlight_clipping"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 345748,
+      "category": "missing-marker",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "missing-marker-bottom-right",
+      "image_decode": "success",
+      "intended_quality_state": "Rejected",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "missing-marker/missing-bottom-right.png",
+      "sha256": "9551f489f34f49e0cd7aa2af39f564ce68e5b26b2f9635fc77e19ffd23a7ff0c",
+      "source": "project-generated",
+      "transform": {
+        "kind": "remove_marker",
+        "role": "bottom_right"
+      },
+      "warnings": [
+        "insufficient_markers"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 350178,
+      "category": "wrong-layout",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "wrong_layout",
+      "height": 2200,
+      "id": "wrong-layout-qr",
+      "image_decode": "success",
+      "intended_quality_state": "Rejected",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "wrong-layout/wrong-layout-qr.png",
+      "sha256": "87d0497a1b032b1f17173c64e4a9d6a949db755d591746472008edb6554b1ecc",
+      "source": "project-generated",
+      "transform": {
+        "kind": "replace_qr_layout"
+      },
+      "warnings": [
+        "wrong_layout_identity"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 350389,
+      "category": "wrong-layout",
+      "expected_marker_roles": {
+        "bottom_left": 7,
+        "bottom_right": 6,
+        "top_left": 4,
+        "top_right": 5
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "wrong-layout-tag-set",
+      "image_decode": "success",
+      "intended_quality_state": "Rejected",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "wrong-layout/wrong-tag-set.png",
+      "sha256": "5e5de12df4e5a4e2a0d71f66166d6726219d5d506d55b829613157e3f2776d08",
+      "source": "project-generated",
+      "transform": {
+        "kind": "replace_marker_set"
+      },
+      "warnings": [
+        "unexpected_marker_ids"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 353923,
+      "category": "duplicate",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "duplicate-top-left-marker",
+      "image_decode": "success",
+      "intended_quality_state": "NeedsReview",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "duplicate/duplicate-top-left.png",
+      "sha256": "c2c9d8133da339363f0523e816c1ce46ecc90e101deb77ce2b7852fa6b428a60",
+      "source": "project-generated",
+      "transform": {
+        "kind": "duplicate_marker",
+        "role": "top_left"
+      },
+      "warnings": [
+        "duplicate_marker_id"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 350097,
+      "category": "revisions",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "revision-original",
+      "image_decode": "success",
+      "intended_quality_state": "AcceptedWithWarnings",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "revisions/revision-original.png",
+      "sha256": "559bddf899974c2ccf943df04ca168eb390a5029edc858f82785bf19f164343c",
+      "source": "project-generated",
+      "transform": {
+        "kind": "revision",
+        "revision": 1
+      },
+      "warnings": [
+        "mild_perspective"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 374141,
+      "category": "revisions",
+      "expected_marker_roles": {
+        "bottom_left": 3,
+        "bottom_right": 2,
+        "top_left": 0,
+        "top_right": 1
+      },
+      "expected_qr": "main",
+      "height": 2200,
+      "id": "revision-updated",
+      "image_decode": "success",
+      "intended_quality_state": "AcceptedWithWarnings",
+      "license": "Apache-2.0",
+      "mode": "RGB",
+      "notes": "",
+      "path": "revisions/revision-updated.png",
+      "sha256": "8a0efbd5ba79d1a1de82c570a170286adddf0c606c4858586ce2f69e21fa2210",
+      "source": "project-generated",
+      "transform": {
+        "kind": "revision",
+        "revision": 2
+      },
+      "warnings": [
+        "mild_perspective",
+        "content_changed"
+      ],
+      "width": 1800
+    },
+    {
+      "byte_length": 20203,
+      "category": "corrupted",
+      "expected_marker_roles": null,
+      "expected_qr": null,
+      "id": "corrupted-truncated-png",
+      "image_decode": "failure",
+      "intended_quality_state": "Rejected",
+      "license": "Apache-2.0",
+      "notes": "Valid PNG prefix truncated to one third of the original byte length.",
+      "path": "corrupted/truncated.png",
+      "sha256": "ca02483ff40bfe1f8f94a23f08a0aed429a473e98f3f187809118e22f163e78f",
+      "source": "project-generated",
+      "transform": {
+        "kind": "truncate",
+        "retained_fraction": 0.3333333333333333
+      },
+      "warnings": [
+        "corrupt_capture"
+      ]
+    },
+    {
+      "byte_length": 49,
+      "category": "corrupted",
+      "expected_marker_roles": null,
+      "expected_qr": null,
+      "id": "corrupted-not-an-image",
+      "image_decode": "failure",
+      "intended_quality_state": "Rejected",
+      "license": "Apache-2.0",
+      "notes": "",
+      "path": "corrupted/not-an-image.bin",
+      "sha256": "4290ff66160870b70017f15d54187d9538950ec0f7ef312f12c5a37da5b8a830",
+      "source": "project-generated",
+      "transform": {
+        "kind": "invalid_bytes"
+      },
+      "warnings": [
+        "unsupported_or_corrupt_capture"
+      ]
+    }
+  ],
+  "generator": {
+    "deterministic": true,
+    "name": "a2d-synthetic-scan-generator",
+    "script": "tools/generate_scan_fixtures.py",
+    "support_binary": "a2d-fixture-support",
+    "version": 1
+  },
+  "identity": {
+    "design_id": "00000000000000000000000001",
+    "layout_id": "FIXTURE-MAIN-V1",
+    "logical_page_number": 42,
+    "main_payload": "A2D:1:B:00000000000000000000000001:42:FIXTURE-MAIN-V1:0QV1AKZ",
+    "schema_version": 1,
+    "wrong_layout_id": "FIXTURE-WRONG-V1",
+    "wrong_layout_payload": "A2D:1:B:00000000000000000000000001:42:FIXTURE-WRONG-V1:17ZMB6N"
+  },
+  "marker_family": "tagStandard41h12",
+  "marker_roles": {
+    "bottom_left": 3,
+    "bottom_right": 2,
+    "top_left": 0,
+    "top_right": 1
+  },
+  "provenance": {
+    "license": "Apache-2.0",
+    "photographed": false,
+    "source": "project-generated",
+    "statement": "All assets in this manifest are synthetic controls generated by project code. They do not satisfy photographed/device-fixture requirements."
+  },
+  "schema_version": 1
+}

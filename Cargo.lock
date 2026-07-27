@@ -51,9 +51,11 @@ name = "a2d-image"
 version = "0.1.0"
 dependencies = [
  "a2d-domain",
+ "a2d-identity",
  "a2d-layout",
  "apriltag-sys",
  "image",
+ "qrcode",
 ]
 
 [[package]]
