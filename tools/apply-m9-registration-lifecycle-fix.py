@@ -70,4 +70,4 @@ replace_once(
 )
 
 path.write_text(text)
-# Observable pull-request validation run.
+# Trigger the default-branch pull-request applicator.
