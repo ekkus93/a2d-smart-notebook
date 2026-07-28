@@ -454,12 +454,12 @@ mod tests {
                 .collect::<Result<_, _>>()
                 .unwrap()
         };
-        assert_eq!(rows.len(), 3);
+        assert_eq!(rows.len(), MIGRATIONS.len());
         assert_eq!(rows[0], (1, "initial".to_string(), ORIGINAL_V1_APPLIED_AT));
-        assert_eq!(rows[1].0, 2);
-        assert_eq!(rows[1].1, "page_generated_pdf_asset");
-        assert_eq!(rows[2].0, 3);
-        assert_eq!(rows[2].1, "milestone6_notebook_workflows");
+        for (row, migration) in rows.iter().zip(MIGRATIONS.iter()).skip(1) {
+            assert_eq!(row.0, migration.version);
+            assert_eq!(row.1, migration.name);
+        }
 
         // Exercise the new column through the real typed repositories, not merely PRAGMA output.
         let page = a2d_domain::Page::new(
