@@ -448,6 +448,17 @@ impl A2dCore {
                 .with_detail("asset_commit_journal", journal_path.clone())
                 .with_detail("staging_path", staged.canonical_path.to_string_lossy())
         })?;
+        let resolve_path = |asset: &Asset| {
+            self.resolve_asset_path(asset).map_err(|error| {
+                error
+                    .with_detail("asset_commit_journal", journal_path.clone())
+                    .with_detail("staging_path", staged.canonical_path.to_string_lossy())
+            })
+        };
+        let original_path = resolve_path(&original)?;
+        let corrected_path = resolve_path(&corrected)?;
+        let ocr_path = resolve_path(&ocr)?;
+        let thumbnail_path = resolve_path(&thumbnail)?;
 
         let scan = Scan::new(
             scan_id.clone(),
@@ -554,10 +565,10 @@ impl A2dCore {
             corrected_asset_id: corrected.id().clone(),
             ocr_asset_id: ocr.id().clone(),
             thumbnail_asset_id: thumbnail.id().clone(),
-            original_path: self.resolve_asset_path(&original)?,
-            corrected_path: self.resolve_asset_path(&corrected)?,
-            ocr_path: self.resolve_asset_path(&ocr)?,
-            thumbnail_path: self.resolve_asset_path(&thumbnail)?,
+            original_path,
+            corrected_path,
+            ocr_path,
+            thumbnail_path,
             quality_status,
             preferred,
             warnings: warnings.into_iter().collect(),

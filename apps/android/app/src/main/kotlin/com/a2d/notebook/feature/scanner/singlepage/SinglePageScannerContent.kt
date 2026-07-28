@@ -48,7 +48,7 @@ object SinglePageScannerTestTags {
     const val TORCH = "single_scanner_torch"
     const val PROCESSING = "single_scanner_processing"
     const val CORRECTED_PREVIEW = "single_scanner_corrected_preview"
-    const val APPROVED_NOT_SAVED = "single_scanner_approved_not_saved"
+    const val REGISTRATION_RESULT = "single_scanner_registration_result"
     const val IDENTITY_WARNING = "single_scanner_identity_warning"
 }
 
@@ -77,7 +77,12 @@ fun SinglePageScannerContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onBack) { Text(stringResource(R.string.common_back)) }
+            TextButton(
+                onClick = onBack,
+                enabled = !state.registrationInProgress,
+            ) {
+                Text(stringResource(R.string.common_back))
+            }
             Text(
                 text = stringResource(R.string.single_scanner_title),
                 style = MaterialTheme.typography.titleLarge,
@@ -190,23 +195,43 @@ fun SinglePageScannerContent(
         }
     }
 
-    if (state.processing) {
+    if (state.processing || state.registrationInProgress) {
         AlertDialog(
             modifier = Modifier.testTag(SinglePageScannerTestTags.PROCESSING),
             onDismissRequest = {},
-            title = { Text(stringResource(R.string.single_scanner_processing)) },
+            title = {
+                Text(
+                    stringResource(
+                        if (state.registrationInProgress) {
+                            R.string.single_scanner_registering
+                        } else {
+                            R.string.single_scanner_processing
+                        },
+                    ),
+                )
+            },
             text = {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CircularProgressIndicator()
-                    Text(stringResource(R.string.single_scanner_review_explanation))
+                    Text(
+                        stringResource(
+                            if (state.registrationInProgress) {
+                                R.string.single_scanner_registering_explanation
+                            } else {
+                                R.string.single_scanner_review_explanation
+                            },
+                        ),
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = onCancelProcessing) {
-                    Text(stringResource(R.string.single_scanner_cancel_processing))
+                if (state.processing) {
+                    TextButton(onClick = onCancelProcessing) {
+                        Text(stringResource(R.string.single_scanner_cancel_processing))
+                    }
                 }
             },
         )
@@ -307,28 +332,53 @@ private fun ReviewContent(
                 color = MaterialTheme.colorScheme.tertiary,
             )
         }
-        if (state.approvedForRegistration) {
+        state.registeredScan?.let { registered ->
             Card(
-                modifier = Modifier.fillMaxWidth().testTag(SinglePageScannerTestTags.APPROVED_NOT_SAVED),
+                modifier = Modifier.fillMaxWidth().testTag(SinglePageScannerTestTags.REGISTRATION_RESULT),
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        stringResource(R.string.single_scanner_approved),
+                        stringResource(R.string.single_scanner_saved),
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    Text(stringResource(R.string.single_scanner_not_saved))
+                    Text(stringResource(R.string.single_scanner_saved_scan_id, registered.scanId))
+                    Text(
+                        stringResource(
+                            R.string.single_scanner_saved_status,
+                            registered.qualityStatus.name,
+                        ),
+                    )
+                    registered.warnings.forEach { warning ->
+                        Text(stringResource(R.string.single_scanner_detail_warning, warning.name))
+                    }
+                    registered.requiredActions.forEach { action ->
+                        Text(stringResource(R.string.single_scanner_required_action, action.name))
+                    }
                 }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onApprove,
-                enabled = state.canApprove && !state.approvedForRegistration,
-            ) {
-                Text(stringResource(R.string.single_scanner_accept))
+            if (state.registeredScan == null) {
+                Button(
+                    onClick = onApprove,
+                    enabled = state.canApprove,
+                ) {
+                    Text(stringResource(R.string.single_scanner_save_scan))
+                }
             }
-            OutlinedButton(onClick = onRetake) {
-                Text(stringResource(R.string.single_scanner_retake))
+            OutlinedButton(
+                onClick = onRetake,
+                enabled = !state.registrationInProgress,
+            ) {
+                Text(
+                    stringResource(
+                        if (state.registeredScan == null) {
+                            R.string.single_scanner_retake
+                        } else {
+                            R.string.single_scanner_scan_another
+                        },
+                    ),
+                )
             }
             TextButton(onClick = onToggleDetails) {
                 Text(stringResource(R.string.common_details))
@@ -357,7 +407,18 @@ private fun ScannerDetailsDialog(
                 artifact?.let {
                     Text(stringResource(R.string.single_scanner_detail_page, it.captureRequest.pageId))
                     Text(stringResource(R.string.single_scanner_detail_pipeline, it.pipelineVersion))
-                    Text(stringResource(R.string.single_scanner_not_saved))
+                    val registered = state.registeredScan
+                    if (registered == null) {
+                        Text(stringResource(R.string.single_scanner_awaiting_registration))
+                    } else {
+                        Text(stringResource(R.string.single_scanner_saved_scan_id, registered.scanId))
+                        Text(
+                            stringResource(
+                                R.string.single_scanner_saved_status,
+                                registered.qualityStatus.name,
+                            ),
+                        )
+                    }
                     it.identityWarning?.let { warning ->
                         Text(warning, color = MaterialTheme.colorScheme.error)
                     }

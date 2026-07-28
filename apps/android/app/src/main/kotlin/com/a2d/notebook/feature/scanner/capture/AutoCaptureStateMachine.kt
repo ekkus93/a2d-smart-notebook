@@ -482,6 +482,20 @@ class AutoCaptureStateMachine(
     }
 
     @Synchronized
+    fun reviewRegistrationCompleted(
+        token: CaptureRequestToken,
+        scanId: String,
+    ): AutoCaptureTransition {
+        require(scanId.isNotBlank()) { "registered scan ID must not be blank" }
+        val review = phase as? AutoCapturePhase.NeedsReview
+        if (review == null || review.request.token != token || token.generation != generation) {
+            return transition(AutoCaptureEffect.StaleCallbackIgnored("reviewRegistrationCompleted", token))
+        }
+        phase = AutoCapturePhase.Accepted(review.request, scanId)
+        return transition()
+    }
+
+    @Synchronized
     fun continueScanning(
         nowNanos: Long,
         allowImmediateSamePageRetake: Boolean = false,

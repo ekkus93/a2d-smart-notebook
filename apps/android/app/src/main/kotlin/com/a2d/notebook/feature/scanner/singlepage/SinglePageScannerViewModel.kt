@@ -87,15 +87,21 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
     private var qrResolutionSequence = 0L
     private var qrResolutionJob: Job? = null
     private var processingJob: Job? = null
+    private var registrationJob: Job? = null
     private var processingCancellation: PagePreviewCancellation? = null
     private var pendingStagingFile: File? = null
+    private var pendingCapturedAtMs: Long? = null
 
     init {
         refreshNotebooks()
     }
 
     fun selectNotebook(notebook: NotebookSummary) {
-        if (mutableState.value.processing || mutableState.value.activeNotebook?.id == notebook.id) {
+        if (
+            mutableState.value.processing ||
+                mutableState.value.registrationInProgress ||
+                mutableState.value.activeNotebook?.id == notebook.id
+        ) {
             return
         }
         update { it.copy(loadingNotebooks = true, error = null) }
@@ -260,6 +266,8 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
                     update { it.copy(error = "A stale camera capture was discarded") }
                     return
                 }
+                val capturedAtMs = System.currentTimeMillis()
+                pendingCapturedAtMs = capturedAtMs
                 applyTransition(
                     captureMachine.captureSucceeded(
                         request.token,
@@ -270,12 +278,13 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
                     ),
                 )
                 update { it.copy(processing = true, error = null) }
-                startFullResolutionProcessing(request, file)
+                startFullResolutionProcessing(request, file, capturedAtMs)
             }
 
             is CameraCaptureResult.Failure -> {
                 pendingStagingFile?.let(::safeDelete)
                 pendingStagingFile = null
+                pendingCapturedAtMs = null
                 applyTransition(
                     captureMachine.captureFailed(
                         request.token,
@@ -293,24 +302,73 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
 
     fun approveReview() {
         val current = mutableState.value
-        if (!current.canApprove) {
-            update { it.copy(error = "Final page identity must match before approval") }
+        val artifact = current.reviewArtifact
+        if (!current.canApprove || artifact == null) {
+            update { it.copy(error = "Final page identity must match before registration") }
             return
         }
-        update { it.copy(approvedForRegistration = true, error = null) }
+        check(registrationJob == null) { "scan registration is already active" }
+        update { it.copy(registrationInProgress = true, error = null) }
+        registrationJob =
+            viewModelScope.launch {
+                try {
+                    val registered =
+                        withContext(Dispatchers.IO) {
+                            client.registerScan(artifact.toRegisterScanRequest())
+                        }
+                    pendingStagingFile = null
+                    pendingCapturedAtMs = null
+                    applyTransition(
+                        captureMachine.reviewRegistrationCompleted(
+                            artifact.captureRequest.token,
+                            registered.scanId,
+                        ),
+                    )
+                    update {
+                        it.copy(
+                            registrationInProgress = false,
+                            registeredScan = registered,
+                            capturePhase = captureMachine.snapshot().phase,
+                            error = null,
+                        )
+                    }
+                } catch (failure: CancellationException) {
+                    throw failure
+                } catch (failure: Exception) {
+                    update {
+                        it.copy(
+                            registrationInProgress = false,
+                            error = failure.message ?: "Rust scan registration failed",
+                        )
+                    }
+                } finally {
+                    registrationJob = null
+                }
+            }
     }
 
     fun retake() {
-        val artifact = mutableState.value.reviewArtifact ?: return
-        safeDelete(File(artifact.stagingPath))
+        val current = mutableState.value
+        if (current.registrationInProgress) return
+        val artifact = current.reviewArtifact ?: return
+        val alreadyRegistered = current.registeredScan != null
+        if (!alreadyRegistered) {
+            safeDelete(File(artifact.stagingPath))
+        }
         pendingStagingFile = null
-        val transition = captureMachine.continueScanning(System.nanoTime(), true)
+        pendingCapturedAtMs = null
+        val transition =
+            captureMachine.continueScanning(
+                System.nanoTime(),
+                allowImmediateSamePageRetake = !alreadyRegistered,
+            )
         latestAssessment = null
         update {
             it.copy(
                 capturePhase = transition.snapshot.phase,
                 reviewArtifact = null,
-                approvedForRegistration = false,
+                registrationInProgress = false,
+                registeredScan = null,
                 detailsVisible = false,
                 latestAnalysis = null,
                 latestPageResolution = null,
@@ -327,6 +385,10 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
     }
 
     fun leaveScanner() {
+        if (mutableState.value.registrationInProgress) {
+            update { it.copy(error = "Wait for durable registration to finish before leaving") }
+            return
+        }
         cancelActiveWork(deleteReview = true)
         applyTransition(captureMachine.stop())
         update { it.copy(cameraGeneration = nextGeneration(it.cameraGeneration)) }
@@ -573,6 +635,7 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
     private fun startFullResolutionProcessing(
         request: AutoCaptureRequest,
         file: File,
+        capturedAtMs: Long,
     ) {
         check(processingJob == null) { "full-resolution processing is already active" }
         val cancellation = PagePreviewCancellation()
@@ -614,7 +677,7 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
                         }
 
                         is PagePreviewProcessingOutcome.Completed ->
-                            finishReview(request, file, processed)
+                            finishReview(request, file, capturedAtMs, processed)
                     }
                 } catch (failure: CancellationException) {
                     safeDelete(file)
@@ -699,6 +762,7 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
     private suspend fun finishReview(
         request: AutoCaptureRequest,
         file: File,
+        capturedAtMs: Long,
         processed: PagePreviewProcessingOutcome.Completed,
     ) {
         val result = processed.result
@@ -714,6 +778,9 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
             SinglePageReviewArtifact(
                 captureRequest = request,
                 stagingPath = file.absolutePath,
+                pageCodePayload = finalCode.payload,
+                imageRotation = readJpegRotation(file),
+                capturedAtMs = capturedAtMs,
                 analysis = result.analysis,
                 finalResolution = finalCode.resolution,
                 corrected = result.corrected.toScannerImage(),
@@ -736,7 +803,8 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
             it.copy(
                 processing = false,
                 reviewArtifact = artifact,
-                approvedForRegistration = false,
+                registrationInProgress = false,
+                registeredScan = null,
                 capturePhase = captureMachine.snapshot().phase,
                 error = null,
             )
@@ -744,6 +812,7 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
     }
 
     private data class FinalPageCodeResult(
+        val payload: String?,
         val resolution: PageResolution?,
         val warning: String?,
     )
@@ -756,15 +825,21 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
             try {
                 val payload = decodeQrPixels(image.width, image.height, image.toArgbPixels())
                 FinalPageCodeResult(
+                    payload = payload,
                     resolution = client.resolvePageCode(payload, request.activeNotebookId),
                     warning = null,
                 )
             } catch (_: NotFoundException) {
-                FinalPageCodeResult(null, "No Page Code was found in the corrected capture.")
+                FinalPageCodeResult(
+                    payload = null,
+                    resolution = null,
+                    warning = "No Page Code was found in the corrected capture.",
+                )
             } catch (failure: Exception) {
                 FinalPageCodeResult(
-                    null,
-                    "Final Page Code validation failed: ${failure.message ?: failure}",
+                    payload = null,
+                    resolution = null,
+                    warning = "Final Page Code validation failed: ${failure.message ?: failure}",
                 )
             }
         }
@@ -778,15 +853,25 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
         processingJob = null
         processingCancellation?.close()
         processingCancellation = null
-        pendingStagingFile?.let(::safeDelete)
-        pendingStagingFile = null
-        if (deleteReview) {
-            mutableState.value.reviewArtifact?.let { safeDelete(File(it.stagingPath)) }
+        if (!mutableState.value.registrationInProgress) {
+            pendingStagingFile?.let(::safeDelete)
+            pendingStagingFile = null
+            pendingCapturedAtMs = null
+            if (deleteReview) {
+                mutableState.value.reviewArtifact?.let { safeDelete(File(it.stagingPath)) }
+            }
         }
     }
 
     private fun stagingDirectory(): File =
-        File(getApplication<Application>().cacheDir, "a2d-scanner-staging")
+        A2dBridge
+            .libraryDirectory(getApplication<Application>())
+            .resolve("tmp/scanner-staging")
+            .also { directory ->
+                check(directory.isDirectory || directory.mkdirs()) {
+                    "Rust-owned scanner staging directory could not be created"
+                }
+            }
 
     private fun safeDelete(file: File) {
         val root = stagingDirectory().absoluteFile.normalize()

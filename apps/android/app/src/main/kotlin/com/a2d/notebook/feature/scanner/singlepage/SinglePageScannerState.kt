@@ -6,8 +6,10 @@ import com.a2d.notebook.feature.scanner.capture.AutoCaptureRequest
 import com.a2d.notebook.feature.scanner.capture.ManualCaptureWarning
 import com.a2d.notebook.feature.scanner.presentation.LiveScannerPresentationState
 import com.a2d.notebook.rustbridge.EncodedPageAnalysisResult
+import com.a2d.notebook.rustbridge.EncodedPageRotation
 import uniffi.a2d_ffi.NotebookSummary
 import uniffi.a2d_ffi.PageResolution
+import uniffi.a2d_ffi.RegisteredScan
 
 sealed interface PageCodeUiStatus {
     data object Searching : PageCodeUiStatus
@@ -40,6 +42,9 @@ data class ScannerRgbImage(
 data class SinglePageReviewArtifact(
     val captureRequest: AutoCaptureRequest,
     val stagingPath: String,
+    val pageCodePayload: String?,
+    val imageRotation: EncodedPageRotation,
+    val capturedAtMs: Long,
     val analysis: EncodedPageAnalysisResult,
     val finalResolution: PageResolution?,
     val corrected: ScannerRgbImage,
@@ -52,6 +57,10 @@ data class SinglePageReviewArtifact(
 ) {
     init {
         require(stagingPath.isNotBlank())
+        require(capturedAtMs > 0L)
+        require(!approvalAllowed || !pageCodePayload.isNullOrBlank()) {
+            "an approvable review artifact must retain its validated Page Code payload"
+        }
         require(pipelineVersion > 0)
         require(sourceToCorrectedMatrix.size == 9)
         require(approvalAllowed || !identityWarning.isNullOrBlank()) {
@@ -74,7 +83,8 @@ data class SinglePageScannerUiState(
     val pendingManualWarning: ManualCaptureWarning? = null,
     val processing: Boolean = false,
     val reviewArtifact: SinglePageReviewArtifact? = null,
-    val approvedForRegistration: Boolean = false,
+    val registrationInProgress: Boolean = false,
+    val registeredScan: RegisteredScan? = null,
     val detailsVisible: Boolean = false,
     val cameraGeneration: Long = 0,
     val error: String? = null,
@@ -93,5 +103,9 @@ data class SinglePageScannerUiState(
                 reviewArtifact == null
 
     val canApprove: Boolean
-        get() = reviewArtifact?.approvalAllowed == true && !processing
+        get() =
+            reviewArtifact?.approvalAllowed == true &&
+                !processing &&
+                !registrationInProgress &&
+                registeredScan == null
 }

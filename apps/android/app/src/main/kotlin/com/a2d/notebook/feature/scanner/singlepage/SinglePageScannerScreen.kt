@@ -1,5 +1,6 @@
 package com.a2d.notebook.feature.scanner.singlepage
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ fun SinglePageScannerScreen(
 ) {
     val state by viewModel.state
     val permission = rememberCameraPermissionState()
+    BackHandler(enabled = state.registrationInProgress) {}
 
     when (permission.status) {
         CameraPermissionStatus.Granted -> {
@@ -52,8 +54,10 @@ fun SinglePageScannerScreen(
             SinglePageScannerContent(
                 state = state,
                 onBack = {
-                    viewModel.leaveScanner()
-                    onBack()
+                    if (!state.registrationInProgress) {
+                        viewModel.leaveScanner()
+                        onBack()
+                    }
                 },
                 onSelectNotebook = viewModel::selectNotebook,
                 onManualCapture = viewModel::requestManualCapture,
