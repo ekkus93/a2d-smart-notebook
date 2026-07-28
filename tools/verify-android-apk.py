@@ -35,10 +35,13 @@ REQUIRED_NATIVE_SYMBOL_NAMES = (
     b"a2d_preview_cancellation_new",
     b"a2d_preview_cancellation_cancel",
     b"a2d_preview_cancellation_free",
+    b"uniffi_a2d_ffi_fn_method_a2dclient_register_scan",
 )
+
 
 def fail(message: str) -> "NoReturn":
     raise ValueError(message)
+
 
 def verify_elf(path: str, data: bytes, expected_machine: int) -> None:
     if len(data) < 64:
@@ -65,6 +68,7 @@ def verify_elf(path: str, data: bytes, expected_machine: int) -> None:
                 f"{path} does not contain required native symbol name "
                 f"{symbol.decode('ascii')}"
             )
+
 
 def verify(apk_path: Path, license_path: Path) -> None:
     if not apk_path.is_file():
@@ -107,11 +111,13 @@ def verify(apk_path: Path, license_path: Path) -> None:
         if b"Apache License" not in packaged_license or b"Version 2.0" not in packaged_license:
             fail("packaged APACHE-2.0.txt is not recognizable as Apache License 2.0")
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("apk", type=Path)
     parser.add_argument("--license", type=Path, default=Path("LICENSE"))
     return parser.parse_args()
+
 
 def main() -> int:
     args = parse_args()
@@ -123,6 +129,7 @@ def main() -> int:
 
     print(f"Verified Android APK native packaging and notices: {args.apk}")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
