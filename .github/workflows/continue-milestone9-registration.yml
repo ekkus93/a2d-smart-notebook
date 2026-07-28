@@ -1,0 +1,46 @@
+name: Continue Milestone 9 durable registration
+
+on:
+  push:
+    paths:
+      - .github/tmp/continue-milestone9.trigger
+
+permissions:
+  contents: write
+
+concurrency:
+  group: continue-milestone9-registration
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "15859902"
+      - name: Apply focused Milestone 9 continuation
+        run: |
+          gzip -dc .github/tmp/apply-milestone9-registration.py.gz > /tmp/apply-milestone9-registration.py
+          python /tmp/apply-milestone9-registration.py
+          cargo fmt
+      - name: Verify Rust registration tests
+        run: cargo test -p a2d-core milestone9 --all-features
+      - name: Verify Android unit tests and lint
+        working-directory: apps/android
+        run: ./gradlew testDebugUnitTest lintDebug --no-daemon
+      - name: Commit verified continuation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/continue-milestone9-registration.yml
+          git rm .github/tmp/apply-milestone9-registration.py.gz
+          git rm .github/tmp/continue-milestone9.trigger
+          git add -A
+          git commit -m "Wire durable scan registration into Android review"
+          git push
