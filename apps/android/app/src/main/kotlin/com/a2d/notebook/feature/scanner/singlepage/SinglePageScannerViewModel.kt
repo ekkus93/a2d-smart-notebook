@@ -97,7 +97,11 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
     }
 
     fun selectNotebook(notebook: NotebookSummary) {
-        if (mutableState.value.processing || mutableState.value.activeNotebook?.id == notebook.id) {
+        if (
+            mutableState.value.processing ||
+                mutableState.value.registrationInProgress ||
+                mutableState.value.activeNotebook?.id == notebook.id
+        ) {
             return
         }
         update { it.copy(loadingNotebooks = true, error = null) }
@@ -304,7 +308,6 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
             return
         }
         check(registrationJob == null) { "scan registration is already active" }
-        val generation = current.cameraGeneration
         update { it.copy(registrationInProgress = true, error = null) }
         registrationJob =
             viewModelScope.launch {
@@ -313,12 +316,6 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
                         withContext(Dispatchers.IO) {
                             client.registerScan(artifact.toRegisterScanRequest())
                         }
-                    if (
-                        generation != mutableState.value.cameraGeneration ||
-                            mutableState.value.reviewArtifact?.stagingPath != artifact.stagingPath
-                    ) {
-                        return@launch
-                    }
                     pendingStagingFile = null
                     pendingCapturedAtMs = null
                     applyTransition(
@@ -856,13 +853,13 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
         processingJob = null
         processingCancellation?.close()
         processingCancellation = null
-        if (registrationJob?.isActive != true) {
+        if (!mutableState.value.registrationInProgress) {
             pendingStagingFile?.let(::safeDelete)
             pendingStagingFile = null
             pendingCapturedAtMs = null
-        }
-        if (deleteReview && registrationJob?.isActive != true) {
-            mutableState.value.reviewArtifact?.let { safeDelete(File(it.stagingPath)) }
+            if (deleteReview) {
+                mutableState.value.reviewArtifact?.let { safeDelete(File(it.stagingPath)) }
+            }
         }
     }
 
