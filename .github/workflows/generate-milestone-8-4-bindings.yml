@@ -1,0 +1,58 @@
+name: Generate Milestone 8.4 bindings
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+env:
+  A2D_ANDROID_NDK_VERSION: "27.0.12077973"
+  A2D_CARGO_NDK_VERSION: "4.1.2"
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: Swatinem/rust-cache@v2
+      - uses: android-actions/setup-android@v3
+      - name: Install pinned Android native toolchain
+        run: |
+          set -euo pipefail
+          sdkmanager --install "ndk;${A2D_ANDROID_NDK_VERSION}"
+          ndk_home="${ANDROID_HOME}/ndk/${A2D_ANDROID_NDK_VERSION}"
+          test -d "$ndk_home"
+          {
+            echo "ANDROID_SDK_ROOT=${ANDROID_HOME}"
+            echo "ANDROID_NDK_HOME=$ndk_home"
+            echo "ANDROID_NDK_ROOT=$ndk_home"
+          } >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
+      - name: Format and test new Rust API
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo clippy -p a2d-ffi --all-targets --all-features -- -D warnings
+          cargo test -p a2d-ffi --all-features
+      - name: Generate Kotlin bindings from packaged native library
+        run: bash ./tools/build-android-native.sh "x86_64"
+      - name: Commit generated binding and remove workflow
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/generate-milestone-8-4-bindings.yml
+          git add crates/a2d-ffi/src/lib.rs crates/a2d-ffi/src/milestone8.rs \
+            apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
+          git diff --cached --quiet && { echo "expected generated or formatted changes"; exit 1; }
+          git commit -m "Generate Milestone 8.4 scanner preview bindings [skip ci]"
+          git push origin HEAD:master
