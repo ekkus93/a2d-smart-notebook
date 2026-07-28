@@ -1,0 +1,100 @@
+name: Reconcile CameraX adapter TODO
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Reconcile authoritative TODO
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          path = Path("docs/A2D_SMART_NOTEBOOK_V01_TODO.md")
+          text = path.read_text(encoding="utf-8")
+
+          status = (
+              "**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except "
+              "photographed Android fixtures and physical-device performance evidence; Milestone "
+              "8.1 CameraX adapter complete  "
+          )
+          text, replacements = re.subn(
+              r"^\*\*Status:\*\*.*$",
+              status,
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if replacements != 1:
+              raise SystemExit("could not replace the authoritative status line")
+
+          start_marker = "## 8.1 Camera adapter\n"
+          end_marker = "## 8.2 Live Rust/native analysis\n"
+          start = text.find(start_marker)
+          end = text.find(end_marker, start + len(start_marker))
+          if start < 0 or end < 0 or end <= start:
+              raise SystemExit("could not locate the bounded Milestone 8.1 section")
+
+          replacement = """## 8.1 Camera adapter
+
+- [x] CameraX preview. `CameraPreviewSurface` hosts `PreviewView` in Compose and binds only after
+      view attachment so initial display rotation is authoritative without a delayed callback that
+      can outlive disposal.
+- [x] Image analysis. `CameraXAdapter` binds a YUV `ImageAnalysis` use case and emits owned,
+      tightly packed luminance frames through explicit success/failure events.
+- [x] Full-resolution capture. `ImageCapture` writes only to a caller-selected new staging file;
+      existing files are rejected rather than overwritten silently.
+- [x] Correct lifecycle binding. Preview, analysis, and capture bind together through
+      `bindToLifecycle`; disposal and lifecycle destruction invalidate stale work, clear the
+      analyzer, unbind use cases, and close the analysis executor.
+- [x] Permission-denied handling. The Compose permission state distinguishes not requested,
+      retryable denial, permanent denial, and granted states, with an explicit application-settings
+      action.
+- [x] Background/foreground recovery. CameraX lifecycle binding owns stop/start transitions, while
+      permission state is refreshed on lifecycle resume.
+- [x] Rotation handling. Preview, analysis, and capture target rotations are validated and updated
+      together; invalid rotations surface an explicit adapter error.
+- [x] Torch control where available. Torch requests reject absent flash hardware explicitly and
+      stale asynchronous completions cannot publish state after rebind or closure.
+- [x] Bounded analysis backpressure. Analysis uses `STRATEGY_KEEP_ONLY_LATEST` on a dedicated
+      single-thread executor.
+- [x] Reliably close every frame. Every `ImageProxy` is closed on success and recoverable failure;
+      fatal JVM errors propagate only after frame closure. Unit tests cover row/pixel stride, crop,
+      source buffer limits, ordinary failures, close failures, and fatal-error propagation.
+
+Validation evidence:
+
+- GitHub Actions CameraX adapter run `30339511067` passed workspace formatting/clippy/tests,
+  permanent printable QR/page compatibility regeneration, both packaged Android native-library
+  ABIs, Android lint and JVM tests, debug APK assembly, and APK native packaging verification.
+- This completes only the platform adapter in Milestone 8.1. Live shared-Rust analysis, latency
+  measurement, stale native-work cancellation, overlays/guidance, and auto-capture remain in
+  Milestones 8.2 and 8.3; physical printer/camera and representative Android-device evidence also
+  remain open.
+
+"""
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Commit reconciliation and remove this workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/reconcile-camerax-todo.yml
+          git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md
+          git diff --cached --check
+          git commit -m "Reconcile CameraX adapter milestone status [skip ci]"
+          git push origin HEAD:master
