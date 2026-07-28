@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
@@ -9,9 +8,7 @@ use a2d_domain::{
 use a2d_identity::PageCode;
 use a2d_image::{AprilTagDetector, DetectorConfig};
 use a2d_layout::{MarkerRole, writable_page_layout};
-use a2d_storage::{
-    NotebookDesignRepository, NotebookRepository, PageRepository, ScanRepository,
-};
+use a2d_storage::{NotebookDesignRepository, NotebookRepository, PageRepository, ScanRepository};
 use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 
 use super::*;
@@ -120,13 +117,11 @@ fn production_layout_page() -> Vec<u8> {
             .unwrap();
         let tag = detector.render_tag(id).unwrap();
         let left = BORDER
-            + (placement.rect.left() / layout.physical_size.width_mm
-                * f64::from(PAGE_WIDTH - 1))
-            .round() as u32;
+            + (placement.rect.left() / layout.physical_size.width_mm * f64::from(PAGE_WIDTH - 1))
+                .round() as u32;
         let top = BORDER
-            + (placement.rect.top() / layout.physical_size.height_mm
-                * f64::from(PAGE_HEIGHT - 1))
-            .round() as u32;
+            + (placement.rect.top() / layout.physical_size.height_mm * f64::from(PAGE_HEIGHT - 1))
+                .round() as u32;
         let target_width = (placement.rect.size.width_mm / layout.physical_size.width_mm
             * f64::from(PAGE_WIDTH - 1))
         .round() as u32;
