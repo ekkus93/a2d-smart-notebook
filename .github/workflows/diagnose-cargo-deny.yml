@@ -1,0 +1,37 @@
+name: Temporary cargo-deny diagnostics
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned cargo-deny binary
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin
+          cargo-deny --version
+      - name: Run cargo-deny and retain exact output
+        id: deny
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cargo-deny check 2>&1 | tee cargo-deny.log
+      - name: Upload cargo-deny output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-deny-diagnostics
+          path: cargo-deny.log
+          if-no-files-found: error
+      - name: Preserve cargo-deny failure
+        if: steps.deny.outcome != 'success'
+        run: exit 1
