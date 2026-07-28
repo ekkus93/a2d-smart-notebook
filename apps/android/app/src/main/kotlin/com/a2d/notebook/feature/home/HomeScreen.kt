@@ -23,12 +23,14 @@ import com.a2d.notebook.rustbridge.A2dBridge
 object HomeScreenTestTags {
     const val TITLE = "home_title"
     const val RUST_GENERATED_ID = "home_rust_generated_id"
+    const val SCAN_PAGE = "home_scan_page"
     const val NOTEBOOKS = "home_notebooks"
     const val SMART_PAGES = "home_smart_pages"
 }
 
 @Composable
 fun HomeScreen(
+    onScanPage: () -> Unit,
     onOpenNotebooks: () -> Unit,
     onCreateSmartPages: () -> Unit,
 ) {
@@ -47,6 +49,11 @@ fun HomeScreen(
         )
         Text(stringResource(R.string.home_placeholder), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(24.dp))
+        Button(
+            onClick = onScanPage,
+            modifier = Modifier.testTag(HomeScreenTestTags.SCAN_PAGE),
+        ) { Text(stringResource(R.string.home_scan_page)) }
+        Spacer(Modifier.height(12.dp))
         Button(
             onClick = onOpenNotebooks,
             modifier = Modifier.testTag(HomeScreenTestTags.NOTEBOOKS),
