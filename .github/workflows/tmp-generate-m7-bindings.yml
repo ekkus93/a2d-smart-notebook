@@ -51,4 +51,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Regenerate Milestone 7 Android UniFFI binding"
+          git pull --rebase origin agent/milestone-7-native-validation
           git push origin HEAD:agent/milestone-7-native-validation
