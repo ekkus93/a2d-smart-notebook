@@ -1,0 +1,10 @@
+name: One-use validation cleanup target
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This file exists only so the historical validation run can remove itself."
