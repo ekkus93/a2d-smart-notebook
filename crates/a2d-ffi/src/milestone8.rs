@@ -19,8 +19,8 @@ use a2d_image::{
 use a2d_layout::{MarkerRole, writable_page_layout};
 
 use super::{
-    A2dClient, A2dFfiError, AnalyzeEncodedPageRequest, AnalyzeEncodedPageResult, AnalyzedImagePoint,
-    AnalyzedMarker, GrayQualityMeasurements,
+    A2dClient, A2dFfiError, AnalyzeEncodedPageRequest, AnalyzeEncodedPageResult,
+    AnalyzedImagePoint, AnalyzedMarker, GrayQualityMeasurements,
 };
 
 #[derive(Clone, Copy, Debug, uniffi::Enum)]
@@ -74,7 +74,9 @@ pub struct ProcessEncodedPagePreviewResult {
 
 #[derive(Clone, Debug, uniffi::Enum)]
 pub enum ProcessEncodedPagePreviewOutcome {
-    Completed { result: ProcessEncodedPagePreviewResult },
+    Completed {
+        result: ProcessEncodedPagePreviewResult,
+    },
     Cancelled,
 }
 
@@ -322,17 +324,14 @@ fn process_encoded_page_preview_impl(
         )?,
     )?;
 
-    let derived = match DerivedImagePipeline::new(config).process(
-        &source,
-        &rectification,
-        cancellation,
-    ) {
-        Ok(value) => value,
-        Err(error) if is_cancelled(&error) => {
-            return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);
-        }
-        Err(error) => return Err(error),
-    };
+    let derived =
+        match DerivedImagePipeline::new(config).process(&source, &rectification, cancellation) {
+            Ok(value) => value,
+            Err(error) if is_cancelled(&error) => {
+                return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);
+            }
+            Err(error) => return Err(error),
+        };
     if cancellation.is_cancelled() {
         return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);
     }
@@ -433,7 +432,10 @@ mod tests {
             panic!("expected completed preview processing");
         };
 
-        assert_eq!((result.corrected.width, result.corrected.height), (600, 904));
+        assert_eq!(
+            (result.corrected.width, result.corrected.height),
+            (600, 904)
+        );
         assert_eq!(result.corrected.rgb_bytes.len(), 600 * 904 * 3);
         assert!(result.thumbnail.width <= 300);
         assert!(result.thumbnail.height <= 300);

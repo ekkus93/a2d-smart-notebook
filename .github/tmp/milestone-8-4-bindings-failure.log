@@ -1,0 +1,392 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded aliasable v0.1.3
+  Downloaded alloc-stdlib v0.2.4
+  Downloaded askama_macros v0.16.0
+  Downloaded adler2 v2.0.1
+  Downloaded alloc-no-stdlib v2.0.4
+  Downloaded anstyle v1.0.14
+  Downloaded rustc-hash v2.1.3
+  Downloaded block-buffer v0.12.1
+  Downloaded scroll_derive v0.12.1
+  Downloaded fallible-streaming-iterator v0.1.9
+  Downloaded clap_lex v1.1.0
+  Downloaded cargo-platform v0.3.3
+  Downloaded rustc_version v0.4.1
+  Downloaded semver v1.0.28
+  Downloaded rangemap v1.7.1
+  Downloaded fs-err v3.3.1
+  Downloaded find-msvc-tools v0.1.9
+  Downloaded cmake v0.1.58
+  Downloaded anyhow v1.0.104
+  Downloaded powerfmt v0.2.0
+  Downloaded percent-encoding v2.3.2
+  Downloaded pathfinder_geometry v0.5.1
+  Downloaded jobserver v0.1.35
+  Downloaded uniffi_pipeline v0.32.0
+  Downloaded inout v0.2.2
+  Downloaded rand_core v0.10.1
+  Downloaded siphasher v1.0.3
+  Downloaded simd-adler32 v0.3.10
+  Downloaded ucd-trie v0.1.7
+  Downloaded unicode-canonical-combining-class v1.0.0
+  Downloaded rand v0.10.2
+  Downloaded uniffi_internal_macros v0.32.0
+  Downloaded png v0.18.1
+  Downloaded uniffi_udl v0.32.0
+  Downloaded static_assertions v1.1.0
+  Downloaded moxcms v0.8.1
+  Downloaded zune-core v0.5.1
+  Downloaded lopdf v0.44.0
+  Downloaded uniffi_meta v0.32.0
+  Downloaded unicode-joining-type v1.0.0
+  Downloaded toml_writer v1.1.2+spec-1.1.0
+  Downloaded unicode-properties v0.1.4
+  Downloaded tempfile v3.27.0
+  Downloaded uniffi_core v0.32.0
+  Downloaded weezl v0.2.1
+  Downloaded uniffi_macros v0.32.0
+  Downloaded unicode-ident v1.0.24
+  Downloaded yansi v1.0.1
+  Downloaded serde v1.0.229
+  Downloaded zune-jpeg v0.5.15
+  Downloaded typenum v1.20.1
+  Downloaded rusqlite v0.32.1
+  Downloaded unicode-normalization v0.1.25
+  Downloaded serde_json v1.0.151
+  Downloaded allsorts-azul v0.17.1
+  Downloaded winnow v1.0.4
+  Downloaded vcpkg v0.2.15
+  Downloaded uniffi_bindgen v0.32.0
+  Downloaded unicode-general-category v1.1.0
+  Downloaded time v0.3.54
+  Downloaded zerocopy v0.8.55
+  Downloaded syn v3.0.3
+  Downloaded toml v1.1.3+spec-1.1.0
+  Downloaded syn v2.0.119
+  Downloaded rustix v1.1.4
+  Downloaded tinyvec v1.12.0
+  Downloaded unicode-bidi v0.3.18
+  Downloaded textwrap v0.16.2
+  Downloaded serde_derive v1.0.229
+  Downloaded smawk v0.3.3
+  Downloaded image v0.25.10
+  Downloaded shlex v2.0.1
+  Downloaded zmij v1.0.23
+  Downloaded libc v0.2.189
+  Downloaded weedle2 v5.0.0
+  Downloaded uniffi v0.32.0
+  Downloaded toml_datetime v1.1.1+spec-1.1.0
+  Downloaded time-core v0.1.9
+  Downloaded thiserror-impl v2.0.19
+  Downloaded thiserror v2.0.19
+  Downloaded serde_core v1.0.229
+  Downloaded brotli-decompressor v5.0.3
+  Downloaded goblin v0.8.2
+  Downloaded clap_builder v4.6.2
+  Downloaded smallvec v1.15.2
+  Downloaded hashbrown v0.17.1
+  Downloaded nom v8.0.0
+  Downloaded itertools v0.10.5
+  Downloaded hashbrown v0.14.5
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded nom v7.1.3
+  Downloaded pxfm v0.1.30
+  Downloaded minimal-lexical v0.2.1
+  Downloaded memchr v2.8.3
+  Downloaded cc v1.4.0
+  Downloaded aes v0.9.1
+  Downloaded qrcode v0.14.1
+  Downloaded miniz_oxide v0.8.9
+  Downloaded indexmap v2.14.0
+  Downloaded glyph-names v0.2.0
+  Downloaded bitflags v2.13.1
+  Downloaded encoding_rs v0.8.35
+  Downloaded basic-toml v0.1.10
+  Downloaded base64 v0.22.1
+  Downloaded toml_parser v1.1.2+spec-1.1.0
+  Downloaded flate2 v1.1.9
+  Downloaded bytes v1.12.1
+  Downloaded bytemuck v1.25.2
+  Downloaded askama_derive v0.16.0
+  Downloaded sha2 v0.11.0
+  Downloaded quote v1.0.47
+  Downloaded proc-macro2 v1.0.107
+  Downloaded pathfinder_simd v0.5.6
+  Downloaded log v0.4.33
+  Downloaded getrandom v0.4.3
+  Downloaded cipher v0.5.2
+  Downloaded askama_parser v0.16.0
+  Downloaded serde_spanned v1.1.1
+  Downloaded hybrid-array v0.4.13
+  Downloaded clap v4.6.4
+  Downloaded autocfg v1.5.1
+  Downloaded once_cell v1.21.4
+  Downloaded md-5 v0.11.0
+  Downloaded getrandom v0.2.17
+  Downloaded crc32fast v1.5.0
+  Downloaded const-oid v0.10.2
+  Downloaded clap_derive v4.6.4
+  Downloaded apriltag-sys v0.4.0
+  Downloaded cargo_metadata v0.23.1
+  Downloaded cbc v0.2.1
+  Downloaded stringprep v0.1.5
+  Downloaded proc-macro2-diagnostics v0.10.1
+  Downloaded pkg-config v0.3.33
+  Downloaded ouroboros_macro v0.18.5
+  Downloaded hashlink v0.9.1
+  Downloaded chacha20 v0.10.1
+  Downloaded camino v1.2.4
+  Downloaded itoa v1.0.18
+  Downloaded plain v0.2.3
+  Downloaded num-conv v0.2.2
+  Downloaded heck v0.4.1
+  Downloaded glob v0.3.4
+  Downloaded fallible-iterator v0.3.0
+  Downloaded enumflags2 v0.7.12
+  Downloaded either v1.17.0
+  Downloaded ecb v0.2.0
+  Downloaded deranged v0.5.8
+  Downloaded fastrand v2.5.0
+  Downloaded fdeflate v0.3.7
+  Downloaded digest v0.11.3
+  Downloaded crc32c v0.6.8
+  Downloaded ouroboros v0.18.5
+  Downloaded enumflags2_derive v0.7.12
+  Downloaded byteorder-lite v0.1.0
+  Downloaded block-padding v0.4.2
+  Downloaded scroll v0.12.0
+  Downloaded errno v0.3.14
+  Downloaded crypto-common v0.2.2
+  Downloaded cpufeatures v0.3.0
+  Downloaded cpubits v0.1.1
+  Downloaded cfg-if v1.0.4
+  Downloaded askama v0.16.0
+  Downloaded ahash v0.8.12
+  Downloaded linux-raw-sys v0.12.1
+  Downloaded libsqlite3-sys v0.30.1
+  Downloaded printpdf v0.12.4
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+    Checking cfg-if v1.0.4
+   Compiling serde_core v1.0.229
+   Compiling libc v0.2.189
+   Compiling serde v1.0.229
+    Checking typenum v1.20.1
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling anyhow v1.0.104
+    Checking hybrid-array v0.4.13
+    Checking bitflags v2.13.1
+   Compiling version_check v0.9.5
+   Compiling autocfg v1.5.1
+    Checking memchr v2.8.3
+    Checking crypto-common v0.2.2
+   Compiling jobserver v0.1.35
+    Checking once_cell v1.21.4
+   Compiling shlex v2.0.1
+   Compiling semver v1.0.28
+   Compiling rustix v1.1.4
+   Compiling find-msvc-tools v0.1.9
+   Compiling getrandom v0.4.3
+    Checking rand_core v0.10.1
+   Compiling cc v1.4.0
+   Compiling rustc_version v0.4.1
+   Compiling serde_derive v1.0.229
+    Checking itoa v1.0.18
+   Compiling zmij v1.0.23
+   Compiling pkg-config v0.3.33
+   Compiling serde_json v1.0.151
+   Compiling glob v0.3.4
+   Compiling crc32fast v1.5.0
+    Checking simd-adler32 v0.3.10
+    Checking cpufeatures v0.3.0
+    Checking block-buffer v0.12.1
+    Checking adler2 v2.0.1
+   Compiling equivalent v1.0.2
+    Checking hashbrown v0.17.1
+    Checking const-oid v0.10.2
+    Checking indexmap v2.14.0
+    Checking digest v0.11.3
+   Compiling winnow v1.0.4
+    Checking miniz_oxide v0.8.9
+    Checking block-padding v0.4.2
+   Compiling thiserror v2.0.19
+    Checking log v0.4.33
+    Checking flate2 v1.1.9
+    Checking inout v0.2.2
+   Compiling uniffi_internal_macros v0.32.0
+   Compiling thiserror-impl v2.0.19
+   Compiling proc-macro2-diagnostics v0.10.1
+    Checking tinyvec_macros v0.1.1
+   Compiling zerocopy v0.8.55
+    Checking tinyvec v1.12.0
+    Checking cipher v0.5.2
+    Checking sha2 v0.11.0
+   Compiling pathfinder_simd v0.5.6
+   Compiling num-traits v0.2.19
+    Checking getrandom v0.2.17
+   Compiling ahash v0.8.12
+   Compiling yansi v1.0.1
+   Compiling either v1.17.0
+    Checking linux-raw-sys v0.12.1
+    Checking static_assertions v1.1.0
+   Compiling itertools v0.10.5
+    Checking a2d-domain v0.1.0 (/home/runner/work/a2d-smart-notebook/a2d-smart-notebook/crates/a2d-domain)
+   Compiling cmake v0.1.58
+   Compiling fs-err v3.3.1
+   Compiling heck v0.4.1
+    Checking fastrand v2.5.0
+    Checking alloc-no-stdlib v2.0.4
+   Compiling vcpkg v0.2.15
+   Compiling unicode-general-category v1.1.0
+   Compiling unicode-canonical-combining-class v1.0.0
+   Compiling unicode-joining-type v1.0.0
+   Compiling heck v0.5.0
+   Compiling rustc-hash v2.1.3
+   Compiling askama_parser v0.16.0
+   Compiling libsqlite3-sys v0.30.1
+    Checking tempfile v3.27.0
+    Checking alloc-stdlib v0.2.4
+   Compiling apriltag-sys v0.4.0
+   Compiling ouroboros_macro v0.18.5
+    Checking unicode-normalization v0.1.25
+   Compiling basic-toml v0.1.10
+    Checking smallvec v1.15.2
+    Checking chacha20 v0.10.1
+    Checking fdeflate v0.3.7
+   Compiling enumflags2_derive v0.7.12
+   Compiling crc32c v0.6.8
+    Checking encoding_rs v0.8.35
+    Checking aliasable v0.1.3
+    Checking unicode-bidi v0.3.18
+    Checking unicode-properties v0.1.4
+    Checking minimal-lexical v0.2.1
+    Checking cpubits v0.1.1
+    Checking pxfm v0.1.30
+   Compiling camino v1.2.4
+    Checking zune-core v0.5.1
+    Checking uniffi_pipeline v0.32.0
+    Checking zune-jpeg v0.5.15
+    Checking aes v0.9.1
+    Checking nom v7.1.3
+    Checking stringprep v0.1.5
+    Checking enumflags2 v0.7.12
+    Checking ouroboros v0.18.5
+    Checking png v0.18.1
+   Compiling askama_derive v0.16.0
+    Checking rand v0.10.2
+    Checking moxcms v0.8.1
+    Checking pathfinder_geometry v0.5.1
+    Checking hashbrown v0.14.5
+    Checking brotli-decompressor v5.0.3
+    Checking cbc v0.2.1
+    Checking ecb v0.2.0
+    Checking md-5 v0.11.0
+   Compiling scroll_derive v0.12.1
+    Checking nom v8.0.0
+    Checking bytemuck v1.25.2
+    Checking siphasher v1.0.3
+    Checking glyph-names v0.2.0
+    Checking deranged v0.5.8
+    Checking byteorder-lite v0.1.0
+    Checking rangemap v1.7.1
+    Checking num-conv v0.2.2
+    Checking time-core v0.1.9
+    Checking smawk v0.3.3
+    Checking ucd-trie v0.1.7
+    Checking weezl v0.2.1
+    Checking powerfmt v0.2.0
+    Checking lopdf v0.44.0
+    Checking time v0.3.54
+    Checking toml_parser v1.1.2+spec-1.1.0
+    Checking allsorts-azul v0.17.1
+    Checking textwrap v0.16.2
+    Checking image v0.25.10
+    Checking uniffi_meta v0.32.0
+    Checking scroll v0.12.0
+   Compiling askama_macros v0.16.0
+    Checking hashlink v0.9.1
+    Checking weedle2 v5.0.0
+    Checking a2d-layout v0.1.0 (/home/runner/work/a2d-smart-notebook/a2d-smart-notebook/crates/a2d-layout)
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling serde_spanned v1.1.1
+    Checking cargo-platform v0.3.3
+    Checking clap_lex v1.1.0
+    Checking strsim v0.11.1
+   Compiling toml_writer v1.1.2+spec-1.1.0
+    Checking fallible-streaming-iterator v0.1.9
+    Checking base64 v0.22.1
+    Checking fallible-iterator v0.3.0
+    Checking anstyle v1.0.14
+    Checking plain v0.2.3
+    Checking goblin v0.8.2
+    Checking rusqlite v0.32.1
+    Checking clap_builder v4.6.2
+    Checking printpdf v0.12.4
+    Checking toml v1.1.3+spec-1.1.0
+    Checking cargo_metadata v0.23.1
+    Checking uniffi_udl v0.32.0
+    Checking a2d-image v0.1.0 (/home/runner/work/a2d-smart-notebook/a2d-smart-notebook/crates/a2d-image)
+    Checking a2d-identity v0.1.0 (/home/runner/work/a2d-smart-notebook/a2d-smart-notebook/crates/a2d-identity)
+    Checking askama v0.16.0
+   Compiling clap_derive v4.6.4
+    Checking bytes v1.12.1
+    Checking qrcode v0.14.1
+    Checking uniffi_bindgen v0.32.0
+    Checking uniffi_core v0.32.0
+   Compiling uniffi_macros v0.32.0
+    Checking a2d-pdf v0.1.0 (/home/runner/work/a2d-smart-notebook/a2d-smart-notebook/crates/a2d-pdf)
+    Checking clap v4.6.4
+    Checking a2d-storage v0.1.0 (/home/runner/work/a2d-smart-notebook/a2d-smart-notebook/crates/a2d-storage)
+    Checking a2d-core v0.1.0 (/home/runner/work/a2d-smart-notebook/a2d-smart-notebook/crates/a2d-core)
+    Checking uniffi v0.32.0
+    Checking a2d-ffi v0.1.0 (/home/runner/work/a2d-smart-notebook/a2d-smart-notebook/crates/a2d-ffi)
+error: large size difference between variants
+  --> crates/a2d-ffi/src/milestone8.rs:76:1
+   |
+76 | /  pub enum ProcessEncodedPagePreviewOutcome {
+77 | |/     Completed {
+78 | ||         result: ProcessEncodedPagePreviewResult,
+79 | ||     },
+   | ||_____- the largest variant contains at least 240 bytes
+80 | |      Cancelled,
+   | |      --------- the second-largest variant carries no data at all
+81 | |  }
+   | |__^ the entire enum is at least 240 bytes
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#large_enum_variant
+   = note: `-D clippy::large-enum-variant` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::large_enum_variant)]`
+help: consider boxing the large fields or introducing indirection in some other way to reduce the total size of the enum
+   |
+78 -         result: ProcessEncodedPagePreviewResult,
+78 +         result: Box<ProcessEncodedPagePreviewResult>,
+   |
+
+error: enclosing `Ok` and `?` operator are unneeded
+   --> crates/a2d-ffi/src/milestone8.rs:303:13
+    |
+303 | /             Ok(SharpenConfig::new(
+304 | |                 value.amount,
+305 | |                 to_u8(value.threshold, "sharpening.threshold")?,
+306 | |                 to_u8(value.passes, "sharpening.passes")?,
+307 | |             )?)
+    | |_______________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.94.0/index.html#needless_question_mark
+    = note: `-D clippy::needless-question-mark` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_question_mark)]`
+help: remove the enclosing `Ok` and `?` operator
+    |
+303 ~             SharpenConfig::new(
+304 |                 value.amount,
+305 |                 to_u8(value.threshold, "sharpening.threshold")?,
+306 |                 to_u8(value.passes, "sharpening.passes")?,
+307 ~             )
+    |
+
+error: could not compile `a2d-ffi` (lib) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `a2d-ffi` (lib test) due to 2 previous errors
