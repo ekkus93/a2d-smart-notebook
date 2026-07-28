@@ -707,6 +707,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_set_active_notebook(
     ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_analyze_encoded_page(
+    ): Int
     external fun uniffi_a2d_ffi_checksum_constructor_a2dclient_open(
     ): Int
     external fun ffi_a2d_ffi_uniffi_contract_version(
@@ -766,6 +768,8 @@ internal object UniffiLib {
     external fun uniffi_a2d_ffi_fn_method_a2dclient_resolve_page_code(`ptr`: Long,`payload`: RustBuffer.ByValue,`confirmedNotebookId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_a2d_ffi_fn_method_a2dclient_set_active_notebook(`ptr`: Long,`notebookId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_analyze_encoded_page(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_a2d_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -935,6 +939,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_set_active_notebook() != 21117) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_analyze_encoded_page() != 10347) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_constructor_a2dclient_open() != 8661) {
@@ -1123,6 +1130,52 @@ public object FfiConverterUInt: FfiConverter<UInt, Int> {
 /**
  * @suppress
  */
+public object FfiConverterULong: FfiConverter<ULong, Long> {
+    override fun lift(value: Long): ULong {
+        return value.toULong()
+    }
+
+    override fun read(buf: ByteBuffer): ULong {
+        return lift(buf.getLong())
+    }
+
+    override fun lower(value: ULong): Long {
+        return value.toLong()
+    }
+
+    override fun allocationSize(value: ULong) = 8UL
+
+    override fun write(value: ULong, buf: ByteBuffer) {
+        buf.putLong(value.toLong())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterDouble: FfiConverter<Double, Double> {
+    override fun lift(value: Double): Double {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Double {
+        return buf.getDouble()
+    }
+
+    override fun lower(value: Double): Double {
+        return value
+    }
+
+    override fun allocationSize(value: Double) = 8UL
+
+    override fun write(value: Double, buf: ByteBuffer) {
+        buf.putDouble(value)
+    }
+}
+
+/**
+ * @suppress
+ */
 public object FfiConverterBoolean: FfiConverter<Boolean, Byte> {
     override fun lift(value: Byte): Boolean {
         return value.toInt() != 0
@@ -1197,6 +1250,25 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
         val byteBuf = toUtf8(value)
         buf.putInt(byteBuf.limit())
         buf.put(byteBuf)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
+    override fun read(buf: ByteBuffer): ByteArray {
+        val len = buf.getInt()
+        val byteArr = ByteArray(len)
+        buf.get(byteArr)
+        return byteArr
+    }
+    override fun allocationSize(value: ByteArray): ULong {
+        return 4UL + value.size.toULong()
+    }
+    override fun write(value: ByteArray, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        buf.put(value)
     }
 }
 
@@ -1343,6 +1415,8 @@ public interface A2dClientInterface {
     fun `resolvePageCode`(`payload`: kotlin.String, `confirmedNotebookId`: kotlin.String?): PageResolution
     
     fun `setActiveNotebook`(`notebookId`: kotlin.String?): NotebookSummary?
+    
+    fun `analyzeEncodedPage`(`request`: AnalyzeEncodedPageRequest): AnalyzeEncodedPageResult
     
     companion object
 }
@@ -1707,6 +1781,21 @@ open class A2dClient: Disposable, AutoCloseable, A2dClientInterface
     
 
     
+    @Throws(A2dFfiException::class)override fun `analyzeEncodedPage`(`request`: AnalyzeEncodedPageRequest): AnalyzeEncodedPageResult {
+            return FfiConverterTypeAnalyzeEncodedPageResult.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_analyze_encoded_page(
+        it,
+        
+        FfiConverterTypeAnalyzeEncodedPageRequest.lower(`request`),_status)
+}
+    }
+    )
+    }
+    
+
+    
 
     
 
@@ -1826,6 +1915,298 @@ public object FfiConverterTypeA2dFfiErrorDetails: FfiConverterRustBuffer<A2dFfiE
             FfiConverterString.write(value.`developerMessage`, buf)
             FfiConverterBoolean.write(value.`retryable`, buf)
             FfiConverterString.write(value.`correlationId`, buf)
+    }
+}
+
+
+
+data class AnalyzeEncodedPageRequest (
+    var `encodedBytes`: kotlin.ByteArray
+    , 
+    var `format`: ImageFileFormat
+    , 
+    var `rotation`: EncodedImageRotation
+    , 
+    var `maxEncodedBytes`: kotlin.ULong
+    , 
+    var `maxPixels`: kotlin.ULong
+    , 
+    var `maxDecodedBytes`: kotlin.ULong
+    , 
+    var `detectorThreadCount`: kotlin.UInt
+    , 
+    var `detectorQuadDecimate`: kotlin.Double
+    , 
+    var `detectorQuadSigma`: kotlin.Double
+    , 
+    var `detectorRefineEdges`: kotlin.Boolean
+    , 
+    var `detectorDecodeSharpening`: kotlin.Double
+    , 
+    var `detectorBitsCorrected`: kotlin.UInt
+    , 
+    var `darkLuminanceCutoff`: kotlin.UInt
+    , 
+    var `highlightLuminanceCutoff`: kotlin.UInt
+    , 
+    var `qualityTileColumns`: kotlin.UInt
+    , 
+    var `qualityTileRows`: kotlin.UInt
+    , 
+    var `topLeftTagId`: kotlin.UInt
+    , 
+    var `topRightTagId`: kotlin.UInt
+    , 
+    var `bottomRightTagId`: kotlin.UInt
+    , 
+    var `bottomLeftTagId`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAnalyzeEncodedPageRequest: FfiConverterRustBuffer<AnalyzeEncodedPageRequest> {
+    override fun read(buf: ByteBuffer): AnalyzeEncodedPageRequest {
+        return AnalyzeEncodedPageRequest(
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeImageFileFormat.read(buf),
+            FfiConverterTypeEncodedImageRotation.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AnalyzeEncodedPageRequest) = (
+            FfiConverterByteArray.allocationSize(value.`encodedBytes`) +
+            FfiConverterTypeImageFileFormat.allocationSize(value.`format`) +
+            FfiConverterTypeEncodedImageRotation.allocationSize(value.`rotation`) +
+            FfiConverterULong.allocationSize(value.`maxEncodedBytes`) +
+            FfiConverterULong.allocationSize(value.`maxPixels`) +
+            FfiConverterULong.allocationSize(value.`maxDecodedBytes`) +
+            FfiConverterUInt.allocationSize(value.`detectorThreadCount`) +
+            FfiConverterDouble.allocationSize(value.`detectorQuadDecimate`) +
+            FfiConverterDouble.allocationSize(value.`detectorQuadSigma`) +
+            FfiConverterBoolean.allocationSize(value.`detectorRefineEdges`) +
+            FfiConverterDouble.allocationSize(value.`detectorDecodeSharpening`) +
+            FfiConverterUInt.allocationSize(value.`detectorBitsCorrected`) +
+            FfiConverterUInt.allocationSize(value.`darkLuminanceCutoff`) +
+            FfiConverterUInt.allocationSize(value.`highlightLuminanceCutoff`) +
+            FfiConverterUInt.allocationSize(value.`qualityTileColumns`) +
+            FfiConverterUInt.allocationSize(value.`qualityTileRows`) +
+            FfiConverterUInt.allocationSize(value.`topLeftTagId`) +
+            FfiConverterUInt.allocationSize(value.`topRightTagId`) +
+            FfiConverterUInt.allocationSize(value.`bottomRightTagId`) +
+            FfiConverterUInt.allocationSize(value.`bottomLeftTagId`)
+    )
+
+    override fun write(value: AnalyzeEncodedPageRequest, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`encodedBytes`, buf)
+            FfiConverterTypeImageFileFormat.write(value.`format`, buf)
+            FfiConverterTypeEncodedImageRotation.write(value.`rotation`, buf)
+            FfiConverterULong.write(value.`maxEncodedBytes`, buf)
+            FfiConverterULong.write(value.`maxPixels`, buf)
+            FfiConverterULong.write(value.`maxDecodedBytes`, buf)
+            FfiConverterUInt.write(value.`detectorThreadCount`, buf)
+            FfiConverterDouble.write(value.`detectorQuadDecimate`, buf)
+            FfiConverterDouble.write(value.`detectorQuadSigma`, buf)
+            FfiConverterBoolean.write(value.`detectorRefineEdges`, buf)
+            FfiConverterDouble.write(value.`detectorDecodeSharpening`, buf)
+            FfiConverterUInt.write(value.`detectorBitsCorrected`, buf)
+            FfiConverterUInt.write(value.`darkLuminanceCutoff`, buf)
+            FfiConverterUInt.write(value.`highlightLuminanceCutoff`, buf)
+            FfiConverterUInt.write(value.`qualityTileColumns`, buf)
+            FfiConverterUInt.write(value.`qualityTileRows`, buf)
+            FfiConverterUInt.write(value.`topLeftTagId`, buf)
+            FfiConverterUInt.write(value.`topRightTagId`, buf)
+            FfiConverterUInt.write(value.`bottomRightTagId`, buf)
+            FfiConverterUInt.write(value.`bottomLeftTagId`, buf)
+    }
+}
+
+
+
+data class AnalyzeEncodedPageResult (
+    var `width`: kotlin.UInt
+    , 
+    var `height`: kotlin.UInt
+    , 
+    var `sourceRotationDegrees`: kotlin.UInt
+    , 
+    var `resolvedOrientationDegrees`: kotlin.UInt
+    , 
+    var `markers`: List<AnalyzedMarker>
+    , 
+    var `unexpectedTagIds`: List<kotlin.UInt>
+    , 
+    var `quality`: GrayQualityMeasurements
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAnalyzeEncodedPageResult: FfiConverterRustBuffer<AnalyzeEncodedPageResult> {
+    override fun read(buf: ByteBuffer): AnalyzeEncodedPageResult {
+        return AnalyzeEncodedPageResult(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeAnalyzedMarker.read(buf),
+            FfiConverterSequenceUInt.read(buf),
+            FfiConverterTypeGrayQualityMeasurements.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AnalyzeEncodedPageResult) = (
+            FfiConverterUInt.allocationSize(value.`width`) +
+            FfiConverterUInt.allocationSize(value.`height`) +
+            FfiConverterUInt.allocationSize(value.`sourceRotationDegrees`) +
+            FfiConverterUInt.allocationSize(value.`resolvedOrientationDegrees`) +
+            FfiConverterSequenceTypeAnalyzedMarker.allocationSize(value.`markers`) +
+            FfiConverterSequenceUInt.allocationSize(value.`unexpectedTagIds`) +
+            FfiConverterTypeGrayQualityMeasurements.allocationSize(value.`quality`)
+    )
+
+    override fun write(value: AnalyzeEncodedPageResult, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`width`, buf)
+            FfiConverterUInt.write(value.`height`, buf)
+            FfiConverterUInt.write(value.`sourceRotationDegrees`, buf)
+            FfiConverterUInt.write(value.`resolvedOrientationDegrees`, buf)
+            FfiConverterSequenceTypeAnalyzedMarker.write(value.`markers`, buf)
+            FfiConverterSequenceUInt.write(value.`unexpectedTagIds`, buf)
+            FfiConverterTypeGrayQualityMeasurements.write(value.`quality`, buf)
+    }
+}
+
+
+
+data class AnalyzedImagePoint (
+    var `x`: kotlin.Double
+    , 
+    var `y`: kotlin.Double
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAnalyzedImagePoint: FfiConverterRustBuffer<AnalyzedImagePoint> {
+    override fun read(buf: ByteBuffer): AnalyzedImagePoint {
+        return AnalyzedImagePoint(
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AnalyzedImagePoint) = (
+            FfiConverterDouble.allocationSize(value.`x`) +
+            FfiConverterDouble.allocationSize(value.`y`)
+    )
+
+    override fun write(value: AnalyzedImagePoint, buf: ByteBuffer) {
+            FfiConverterDouble.write(value.`x`, buf)
+            FfiConverterDouble.write(value.`y`, buf)
+    }
+}
+
+
+
+data class AnalyzedMarker (
+    var `role`: kotlin.String
+    , 
+    var `family`: kotlin.String
+    , 
+    var `id`: kotlin.UInt
+    , 
+    var `hammingErrors`: kotlin.UInt
+    , 
+    var `decisionMargin`: kotlin.Double
+    , 
+    var `center`: AnalyzedImagePoint
+    , 
+    var `corners`: List<AnalyzedImagePoint>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAnalyzedMarker: FfiConverterRustBuffer<AnalyzedMarker> {
+    override fun read(buf: ByteBuffer): AnalyzedMarker {
+        return AnalyzedMarker(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterTypeAnalyzedImagePoint.read(buf),
+            FfiConverterSequenceTypeAnalyzedImagePoint.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AnalyzedMarker) = (
+            FfiConverterString.allocationSize(value.`role`) +
+            FfiConverterString.allocationSize(value.`family`) +
+            FfiConverterUInt.allocationSize(value.`id`) +
+            FfiConverterUInt.allocationSize(value.`hammingErrors`) +
+            FfiConverterDouble.allocationSize(value.`decisionMargin`) +
+            FfiConverterTypeAnalyzedImagePoint.allocationSize(value.`center`) +
+            FfiConverterSequenceTypeAnalyzedImagePoint.allocationSize(value.`corners`)
+    )
+
+    override fun write(value: AnalyzedMarker, buf: ByteBuffer) {
+            FfiConverterString.write(value.`role`, buf)
+            FfiConverterString.write(value.`family`, buf)
+            FfiConverterUInt.write(value.`id`, buf)
+            FfiConverterUInt.write(value.`hammingErrors`, buf)
+            FfiConverterDouble.write(value.`decisionMargin`, buf)
+            FfiConverterTypeAnalyzedImagePoint.write(value.`center`, buf)
+            FfiConverterSequenceTypeAnalyzedImagePoint.write(value.`corners`, buf)
     }
 }
 
@@ -1975,6 +2356,74 @@ public object FfiConverterTypeGeneratedSmartPages: FfiConverterRustBuffer<Genera
             FfiConverterSequenceString.write(value.`smartPageIds`, buf)
             FfiConverterString.write(value.`pdfAssetId`, buf)
             FfiConverterString.write(value.`pdfPath`, buf)
+    }
+}
+
+
+
+data class GrayQualityMeasurements (
+    var `focusLaplacianVariance`: kotlin.Double?
+    , 
+    var `focusInteriorSampleCount`: kotlin.ULong?
+    , 
+    var `meanLuminance`: kotlin.Double
+    , 
+    var `luminanceStandardDeviation`: kotlin.Double
+    , 
+    var `darkFraction`: kotlin.Double
+    , 
+    var `highlightFraction`: kotlin.Double
+    , 
+    var `maxTileHighlightFraction`: kotlin.Double
+    , 
+    var `populatedTileCount`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGrayQualityMeasurements: FfiConverterRustBuffer<GrayQualityMeasurements> {
+    override fun read(buf: ByteBuffer): GrayQualityMeasurements {
+        return GrayQualityMeasurements(
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GrayQualityMeasurements) = (
+            FfiConverterOptionalDouble.allocationSize(value.`focusLaplacianVariance`) +
+            FfiConverterOptionalULong.allocationSize(value.`focusInteriorSampleCount`) +
+            FfiConverterDouble.allocationSize(value.`meanLuminance`) +
+            FfiConverterDouble.allocationSize(value.`luminanceStandardDeviation`) +
+            FfiConverterDouble.allocationSize(value.`darkFraction`) +
+            FfiConverterDouble.allocationSize(value.`highlightFraction`) +
+            FfiConverterDouble.allocationSize(value.`maxTileHighlightFraction`) +
+            FfiConverterUInt.allocationSize(value.`populatedTileCount`)
+    )
+
+    override fun write(value: GrayQualityMeasurements, buf: ByteBuffer) {
+            FfiConverterOptionalDouble.write(value.`focusLaplacianVariance`, buf)
+            FfiConverterOptionalULong.write(value.`focusInteriorSampleCount`, buf)
+            FfiConverterDouble.write(value.`meanLuminance`, buf)
+            FfiConverterDouble.write(value.`luminanceStandardDeviation`, buf)
+            FfiConverterDouble.write(value.`darkFraction`, buf)
+            FfiConverterDouble.write(value.`highlightFraction`, buf)
+            FfiConverterDouble.write(value.`maxTileHighlightFraction`, buf)
+            FfiConverterUInt.write(value.`populatedTileCount`, buf)
     }
 }
 
@@ -2226,6 +2675,76 @@ public object FfiConverterTypeA2dFfiError : FfiConverterRustBuffer<A2dFfiExcepti
     }
 
 }
+
+
+
+
+enum class EncodedImageRotation {
+    
+    DEGREES0,
+    DEGREES90,
+    DEGREES180,
+    DEGREES270;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeEncodedImageRotation: FfiConverterRustBuffer<EncodedImageRotation> {
+    override fun read(buf: ByteBuffer) = try {
+        EncodedImageRotation.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: EncodedImageRotation) = 4UL
+
+    override fun write(value: EncodedImageRotation, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class ImageFileFormat {
+    
+    JPEG,
+    PNG;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeImageFileFormat: FfiConverterRustBuffer<ImageFileFormat> {
+    override fun read(buf: ByteBuffer) = try {
+        ImageFileFormat.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ImageFileFormat) = 4UL
+
+    override fun write(value: ImageFileFormat, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -2534,6 +3053,70 @@ public object FfiConverterOptionalUInt: FfiConverterRustBuffer<kotlin.UInt?> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalULong: FfiConverterRustBuffer<kotlin.ULong?> {
+    override fun read(buf: ByteBuffer): kotlin.ULong? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterULong.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.ULong?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterULong.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.ULong?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterULong.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalDouble: FfiConverterRustBuffer<kotlin.Double?> {
+    override fun read(buf: ByteBuffer): kotlin.Double? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterDouble.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Double?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterDouble.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Double?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterDouble.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -2598,6 +3181,34 @@ public object FfiConverterOptionalTypeNotebookSummary: FfiConverterRustBuffer<No
 /**
  * @suppress
  */
+public object FfiConverterSequenceUInt: FfiConverterRustBuffer<List<kotlin.UInt>> {
+    override fun read(buf: ByteBuffer): List<kotlin.UInt> {
+        val len = buf.getInt()
+        return List<kotlin.UInt>(len) {
+            FfiConverterUInt.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.UInt>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterUInt.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.UInt>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterUInt.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
     override fun read(buf: ByteBuffer): List<kotlin.String> {
         val len = buf.getInt()
@@ -2616,6 +3227,62 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeAnalyzedImagePoint: FfiConverterRustBuffer<List<AnalyzedImagePoint>> {
+    override fun read(buf: ByteBuffer): List<AnalyzedImagePoint> {
+        val len = buf.getInt()
+        return List<AnalyzedImagePoint>(len) {
+            FfiConverterTypeAnalyzedImagePoint.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<AnalyzedImagePoint>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeAnalyzedImagePoint.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<AnalyzedImagePoint>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeAnalyzedImagePoint.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeAnalyzedMarker: FfiConverterRustBuffer<List<AnalyzedMarker>> {
+    override fun read(buf: ByteBuffer): List<AnalyzedMarker> {
+        val len = buf.getInt()
+        return List<AnalyzedMarker>(len) {
+            FfiConverterTypeAnalyzedMarker.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<AnalyzedMarker>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeAnalyzedMarker.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<AnalyzedMarker>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeAnalyzedMarker.write(it, buf)
         }
     }
 }

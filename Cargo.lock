@@ -35,6 +35,8 @@ dependencies = [
  "a2d-core",
  "a2d-domain",
  "a2d-identity",
+ "a2d-image",
+ "a2d-layout",
  "uniffi",
 ]
 
