@@ -117,7 +117,7 @@ struct PreviewResult {
 }
 
 enum PreviewOutcome {
-    Completed(PreviewResult),
+    Completed(Box<PreviewResult>),
     Cancelled,
 }
 
@@ -385,7 +385,7 @@ fn process_preview(
         matrix_rows[2][1],
         matrix_rows[2][2],
     ];
-    Ok(PreviewOutcome::Completed(PreviewResult {
+    Ok(PreviewOutcome::Completed(Box::new(PreviewResult {
         analysis,
         corrected: PreviewRgbImage {
             width: derived.corrected_color.width(),
@@ -399,7 +399,7 @@ fn process_preview(
         },
         pipeline_version: derived.provenance.pipeline_version,
         source_to_corrected_matrix,
-    }))
+    })))
 }
 
 struct BinaryWriter {
