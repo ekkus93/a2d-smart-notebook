@@ -73,13 +73,15 @@ fn install_current_kotlin_binding_and_remove_one_use_machinery() {
     assert!(status.success(), "Kotlin binding generation failed");
 
     let generated = output.join("uniffi/a2d_ffi/a2d_ffi.kt");
-    let destination =
-        repo.join("apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt");
+    let destination = repo.join("apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt");
     assert!(generated.is_file(), "generated Kotlin binding is missing");
     std::fs::copy(&generated, &destination).expect("generated Kotlin binding must be installable");
     git(
         &repo,
-        &["add", "apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt"],
+        &[
+            "add",
+            "apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt",
+        ],
     );
 
     for path in [
