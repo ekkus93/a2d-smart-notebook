@@ -19,6 +19,8 @@ use a2d_storage::{AssetRepository, AssetStore, PageRepository, PageSetRepository
 
 mod milestone6;
 pub use milestone6::*;
+mod milestone9;
+pub use milestone9::*;
 
 pub struct OpenLibraryRequest {
     pub library_path: String,
