@@ -186,18 +186,17 @@ impl From<core::RegisteredScan> for RegisteredScan {
             quality_status: value.quality_status.into(),
             preferred: value.preferred,
             warnings: value.warnings.into_iter().map(Into::into).collect(),
-            required_actions: value
-                .required_actions
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            required_actions: value.required_actions.into_iter().map(Into::into).collect(),
         }
     }
 }
 
 #[uniffi::export]
 impl A2dClient {
-    pub fn register_scan(&self, request: RegisterScanRequest) -> Result<RegisteredScan, A2dFfiError> {
+    pub fn register_scan(
+        &self,
+        request: RegisterScanRequest,
+    ) -> Result<RegisteredScan, A2dFfiError> {
         let expected_page_id = PageId::parse(&request.expected_page_id)?;
         let active_notebook_id = request
             .active_notebook_id
