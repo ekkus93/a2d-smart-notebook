@@ -1,0 +1,37 @@
+name: Reconcile Milestone 9 registration TODO
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - tools/reconcile-m9-registration-todo.py
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-m9-registration-todo-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Reconcile authoritative TODO
+        run: python tools/reconcile-m9-registration-todo.py
+      - name: Verify no stale Milestone 9.1 checkbox remains
+        run: |
+          ! grep -A10 '^## 9.1 Final scan registration' docs/A2D_SMART_NOTEBOOK_V01_TODO.md | grep -- '- \[ \]'
+          ! grep -q 'Milestone 9 durable registration does not yet exist' docs/A2D_SMART_NOTEBOOK_V01_TODO.md
+      - name: Commit reconciled TODO to the pull request
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm tools/reconcile-m9-registration-todo.py
+          git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md
+          git commit -m "Reconcile Milestone 9 durable registration status"
+          git push origin "HEAD:${{ github.head_ref }}"
