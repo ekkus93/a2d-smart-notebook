@@ -21,9 +21,9 @@ use a2d_image::{
     AprilTagDetector, ContrastNormalizationConfig, DerivedImageConfig, DerivedImageLimits,
     DerivedImagePipeline, DetectorConfig, EncodedImage, EncodedImageFormat, EncodedImageLimits,
     GrayQualityMetrics, ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerIdLayout,
-    OwnedGrayImage, OwnedRgbImage, ProcessingCancellation, RectificationLimits, RectificationPlan,
-    RectifiedImageSize, ResolvedPageMarkers, ThumbnailConfig, measure_gray_quality,
-    resolve_page_markers,
+    OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,
+    RectificationLimits, RectificationPlan, RectifiedImageSize, ResolvedPageMarkers,
+    ThumbnailConfig, measure_gray_quality, resolve_page_markers,
 };
 use a2d_layout::{MarkerRole, writable_page_layout};
 use a2d_storage::{AssetRepository, AuditEventRepository, PageRepository, ScanRepository};
@@ -171,6 +171,7 @@ struct ProcessedCapture {
     pipeline_version: u32,
     resolved_markers: ResolvedPageMarkers,
     quality: GrayQualityMetrics,
+    perceptual_fingerprint: PerceptualFingerprintV1,
 }
 
 struct RegistrationJournal {
@@ -478,7 +479,11 @@ impl A2dCore {
                 .collect(),
             preferred,
             None,
-            format!("exact-sha256-v1:{}", corrected.sha256),
+            format!(
+                "scan-content-v1;corrected-sha256={};perceptual={}",
+                corrected.sha256,
+                processed.perceptual_fingerprint.encode()
+            ),
         );
         let audit = scan_audit_event(&scan, request.active_notebook_id.as_ref());
 
@@ -827,6 +832,7 @@ fn process_capture(
         DerivedImageLimits::new(2_000_000, 6_000_000, 12_000_000, 96_000_000)?,
     )?)
     .process(&source, &rectification, &ProcessingCancellation::active())?;
+    let perceptual_fingerprint = PerceptualFingerprintV1::from_gray_image(&derived.ocr_optimized)?;
 
     Ok(ProcessedCapture {
         corrected_png: encode_rgb_png(&derived.corrected_color)?,
@@ -835,6 +841,7 @@ fn process_capture(
         pipeline_version: derived.provenance.pipeline_version,
         resolved_markers,
         quality,
+        perceptual_fingerprint,
     })
 }
 

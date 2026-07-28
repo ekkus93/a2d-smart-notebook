@@ -1,22 +1,4 @@
-from pathlib import Path
-
-ROOT = Path(".")
-fingerprint_path = ROOT / "crates/a2d-image/src/fingerprint.rs"
-lib_path = ROOT / "crates/a2d-image/src/lib.rs"
-milestone_path = ROOT / "crates/a2d-core/src/milestone9.rs"
-tests_path = ROOT / "crates/a2d-core/src/milestone9_tests.rs"
-todo_path = ROOT / "docs/A2D_SMART_NOTEBOOK_V01_TODO.md"
-
-
-def replace_once(path: Path, old: str, new: str) -> None:
-    text = path.read_text()
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{path}: expected one match, found {count}: {old[:120]!r}")
-    path.write_text(text.replace(old, new))
-
-
-fingerprint_path.write_text(r'''use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
+use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
 use crate::OwnedGrayImage;
 
@@ -50,9 +32,7 @@ impl PerceptualFingerprintV1 {
                 "fingerprint source height does not fit this platform",
             )
         })?;
-        if width < PERCEPTUAL_FINGERPRINT_V1_WIDTH
-            || height < PERCEPTUAL_FINGERPRINT_V1_HEIGHT
-        {
+        if width < PERCEPTUAL_FINGERPRINT_V1_WIDTH || height < PERCEPTUAL_FINGERPRINT_V1_HEIGHT {
             return Err(fingerprint_error(
                 "IMAGE_FINGERPRINT_SOURCE_TOO_SMALL",
                 format!(
@@ -135,8 +115,7 @@ impl PerceptualFingerprintV1 {
     }
 
     pub fn encode(&self) -> String {
-        let mut encoded =
-            String::with_capacity(SERIALIZATION_PREFIX.len() + self.cells.len() * 2);
+        let mut encoded = String::with_capacity(SERIALIZATION_PREFIX.len() + self.cells.len() * 2);
         encoded.push_str(SERIALIZATION_PREFIX);
         for cell in &self.cells {
             use std::fmt::Write as _;
@@ -161,11 +140,8 @@ impl PerceptualFingerprintV1 {
             .iter()
             .map(|value| u64::from(*value))
             .sum::<u64>();
-        let maximum_absolute_difference = cell_absolute_differences
-            .iter()
-            .copied()
-            .max()
-            .unwrap_or(0);
+        let maximum_absolute_difference =
+            cell_absolute_differences.iter().copied().max().unwrap_or(0);
         PerceptualFingerprintDifference {
             mean_absolute_difference: total as f32 / cell_absolute_differences.len() as f32,
             maximum_absolute_difference,
@@ -239,13 +215,8 @@ mod tests {
                 }
             }
         }
-        OwnedGrayImage::from_tight(
-            width as u32,
-            height as u32,
-            ImageRotation::Degrees0,
-            bytes,
-        )
-        .unwrap()
+        OwnedGrayImage::from_tight(width as u32, height as u32, ImageRotation::Degrees0, bytes)
+            .unwrap()
     }
 
     #[test]
@@ -266,11 +237,12 @@ mod tests {
         .unwrap();
         let encoded = fingerprint.encode();
         assert!(encoded.starts_with(SERIALIZATION_PREFIX));
-        assert_eq!(PerceptualFingerprintV1::parse(&encoded).unwrap(), fingerprint);
-        assert!(PerceptualFingerprintV1::parse("legacy:00").is_err());
-        assert!(
-            PerceptualFingerprintV1::parse(&format!("{SERIALIZATION_PREFIX}zz")).is_err()
+        assert_eq!(
+            PerceptualFingerprintV1::parse(&encoded).unwrap(),
+            fingerprint
         );
+        assert!(PerceptualFingerprintV1::parse("legacy:00").is_err());
+        assert!(PerceptualFingerprintV1::parse(&format!("{SERIALIZATION_PREFIX}zz")).is_err());
     }
 
     #[test]
@@ -299,92 +271,3 @@ mod tests {
         );
     }
 }
-''')
-
-replace_once(
-    lib_path,
-    "mod error;\nmod input;\n",
-    "mod error;\nmod fingerprint;\nmod input;\n",
-)
-replace_once(
-    lib_path,
-    "pub use encoded::{\n    EncodedImage, EncodedImageFormat, EncodedImageLimits, OwnedGrayImage, OwnedRgbImage,\n};\n",
-    "pub use encoded::{\n    EncodedImage, EncodedImageFormat, EncodedImageLimits, OwnedGrayImage, OwnedRgbImage,\n};\npub use fingerprint::{\n    PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT, PERCEPTUAL_FINGERPRINT_V1_HEIGHT,\n    PERCEPTUAL_FINGERPRINT_V1_WIDTH, PerceptualFingerprintDifference,\n    PerceptualFingerprintV1,\n};\n",
-)
-
-replace_once(
-    milestone_path,
-    "    OwnedGrayImage, OwnedRgbImage, ProcessingCancellation, RectificationLimits, RectificationPlan,\n",
-    "    OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,\n    RectificationLimits, RectificationPlan,\n",
-)
-replace_once(
-    milestone_path,
-    "    quality: GrayQualityMetrics,\n}\n",
-    "    quality: GrayQualityMetrics,\n    perceptual_fingerprint: PerceptualFingerprintV1,\n}\n",
-)
-replace_once(
-    milestone_path,
-    '            format!("exact-sha256-v1:{}", corrected.sha256),\n',
-    '''            format!(
-                "scan-content-v1;corrected-sha256={};perceptual={}",
-                corrected.sha256,
-                processed.perceptual_fingerprint.encode()
-            ),
-''',
-)
-replace_once(
-    milestone_path,
-    '''    )?)
-    .process(&source, &rectification, &ProcessingCancellation::active())?;
-
-    Ok(ProcessedCapture {
-''',
-    '''    )?)
-    .process(&source, &rectification, &ProcessingCancellation::active())?;
-    let perceptual_fingerprint =
-        PerceptualFingerprintV1::from_gray_image(&derived.ocr_optimized)?;
-
-    Ok(ProcessedCapture {
-''',
-)
-replace_once(
-    milestone_path,
-    '''        resolved_markers,
-        quality,
-    })
-''',
-    '''        resolved_markers,
-        quality,
-        perceptual_fingerprint,
-    })
-''',
-)
-
-replace_once(
-    tests_path,
-    '''    let scan = storage.get_scan(&registered.scan_id).unwrap().unwrap();
-    assert!(scan.preferred);
-''',
-    '''    let scan = storage.get_scan(&registered.scan_id).unwrap().unwrap();
-    assert!(scan.preferred);
-    assert!(
-        scan.content_fingerprint
-            .starts_with("scan-content-v1;corrected-sha256=")
-    );
-    assert!(
-        scan.content_fingerprint
-            .contains(";perceptual=mean-grid-16x24-v1:")
-    );
-''',
-)
-
-replace_once(
-    todo_path,
-    "- [ ] Cryptographic asset hash.\n- [ ] Versioned perceptual fingerprint.\n",
-    '''- [x] Cryptographic asset hash. The immutable corrected asset's verified SHA-256 is embedded in the
-      versioned scan content fingerprint.
-- [x] Versioned perceptual fingerprint. Rust stores a deterministic `mean-grid-16x24-v1` luminance
-      signature derived from the aligned, contrast-normalized OCR image. The representation exposes
-      raw per-cell differences only; it does not invent duplicate/revision thresholds.
-''',
-)

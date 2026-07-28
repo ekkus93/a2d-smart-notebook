@@ -1612,8 +1612,11 @@ Needs Review resolution APIs, or version UI.
 
 ## 9.2 Fingerprints and comparison
 
-- [ ] Cryptographic asset hash.
-- [ ] Versioned perceptual fingerprint.
+- [x] Cryptographic asset hash. The immutable corrected asset's verified SHA-256 is embedded in the
+      versioned scan content fingerprint.
+- [x] Versioned perceptual fingerprint. Rust stores a deterministic `mean-grid-16x24-v1` luminance
+      signature derived from the aligned, contrast-normalized OCR image. The representation exposes
+      raw per-cell differences only; it does not invent duplicate/revision thresholds.
 - [ ] Aligned change-region comparison.
 - [ ] Confidence and reason reporting.
 - [ ] Fixture-based threshold tuning only.
