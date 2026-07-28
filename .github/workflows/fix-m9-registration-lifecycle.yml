@@ -1,0 +1,44 @@
+name: One-use Milestone 9 registration lifecycle hardening
+
+on:
+  push:
+    branches: [automation/milestone9-registration-apply]
+    paths:
+      - tools/apply-m9-registration-lifecycle-fix.py
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-m9-registration-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  apply-test-and-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "15859902"
+      - name: Apply lifecycle hardening
+        run: python tools/apply-m9-registration-lifecycle-fix.py
+      - name: Run focused Android verification
+        working-directory: apps/android
+        run: ./gradlew testDebugUnitTest lintDebug --no-daemon
+      - name: Commit verified lifecycle hardening and remove one-use files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-m9-registration-lifecycle.yml
+          git rm tools/apply-m9-registration-lifecycle-fix.py
+          if test -e .github/tmp/run-milestone9-full-ci; then
+            git rm .github/tmp/run-milestone9-full-ci
+          fi
+          git add -A
+          git commit -m "Harden durable registration lifecycle"
+          git push origin HEAD:automation/milestone9-registration-apply
