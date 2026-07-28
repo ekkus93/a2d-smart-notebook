@@ -76,15 +76,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ])?;
     let mut detector = AprilTagDetector::new(DetectorConfig::default())?;
 
-    let mut report = String::from(
-        "path\twidth\theight\tfocus_laplacian_variance\tmean_luminance\t"
-    );
-    report.push_str(
-        "luminance_standard_deviation\tdark_fraction\thighlight_fraction\t"
-    );
-    report.push_str(
-        "max_tile_highlight_fraction\tdetection_count\tdetected_ids\t"
-    );
+    let mut report =
+        String::from("path\twidth\theight\tfocus_laplacian_variance\tmean_luminance\t");
+    report.push_str("luminance_standard_deviation\tdark_fraction\thighlight_fraction\t");
+    report.push_str("max_tile_highlight_fraction\tdetection_count\tdetected_ids\t");
     report.push_str(
         "minimum_decision_margin\tmean_decision_margin\tmaximum_hamming_errors\tresolution\n",
     );
@@ -159,6 +154,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::create_dir_all(parent)?;
     }
     fs::write(&output_path, report)?;
-    println!("wrote synthetic fixture measurements to {}", output_path.display());
+    println!(
+        "wrote synthetic fixture measurements to {}",
+        output_path.display()
+    );
     Ok(())
 }
