@@ -23,4 +23,9 @@ pub static MIGRATIONS: &[Migration] = &[
         name: "milestone6_notebook_workflows",
         sql: include_str!("migrations/0003_milestone6_notebook_workflows.sql"),
     },
+    Migration {
+        version: 4,
+        name: "scan_registration_invariants",
+        sql: include_str!("migrations/0004_scan_registration_invariants.sql"),
+    },
 ];
