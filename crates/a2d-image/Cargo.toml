@@ -25,3 +25,8 @@ qrcode = { version = "0.14.1", default-features = false, optional = true }
 name = "a2d-fixture-support"
 path = "src/bin/a2d_fixture_support.rs"
 required-features = ["fixture-tools"]
+
+[[bin]]
+name = "a2d-fixture-measurements"
+path = "src/bin/a2d_fixture_measurements.rs"
+required-features = ["fixture-tools"]
