@@ -8,8 +8,8 @@
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 use a2d_image::{
     AprilTagDetector, DetectorConfig, EncodedImage, EncodedImageFormat, EncodedImageLimits,
-    ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerIdLayout, measure_gray_quality,
-    resolve_page_markers,
+    ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerIdLayout, ResolvedPageMarkers,
+    measure_gray_quality, resolve_page_markers,
 };
 use a2d_layout::MarkerRole;
 
@@ -157,6 +157,18 @@ fn to_u16(value: u32, field: &'static str) -> Result<u16, A2dError> {
     })
 }
 
+fn to_f32(value: f64, field: &'static str) -> Result<f32, A2dError> {
+    if !value.is_finite() || value < f64::from(f32::MIN) || value > f64::from(f32::MAX) {
+        return Err(request_error(
+            "IMAGE_FFI_PARAMETER_OUT_OF_RANGE",
+            format!("{field} value {value} is not representable as a finite 32-bit float"),
+        )
+        .with_detail("field", field)
+        .with_detail("value", value.to_string()));
+    }
+    Ok(value as f32)
+}
+
 fn point(value: a2d_image::ImagePoint) -> AnalyzedImagePoint {
     AnalyzedImagePoint {
         x: value.x,
@@ -198,8 +210,8 @@ fn analyze_encoded_page_impl(
 
     let mut detector = AprilTagDetector::new(DetectorConfig {
         thread_count: to_u8(request.detector_thread_count, "detector_thread_count")?,
-        quad_decimate: request.detector_quad_decimate as f32,
-        quad_sigma: request.detector_quad_sigma as f32,
+        quad_decimate: to_f32(request.detector_quad_decimate, "detector_quad_decimate")?,
+        quad_sigma: to_f32(request.detector_quad_sigma, "detector_quad_sigma")?,
         refine_edges: request.detector_refine_edges,
         decode_sharpening: request.detector_decode_sharpening,
         bits_corrected: to_u8(request.detector_bits_corrected, "detector_bits_corrected")?,
@@ -211,10 +223,13 @@ fn analyze_encoded_page_impl(
         (request.bottom_right_tag_id, MarkerRole::BottomRight),
         (request.bottom_left_tag_id, MarkerRole::BottomLeft),
     ])?;
-    let resolved = resolve_page_markers(&detections, &marker_layout)?;
+    let ResolvedPageMarkers {
+        markers: resolved_markers,
+        orientation,
+        unexpected_tag_ids,
+    } = resolve_page_markers(&detections, &marker_layout)?;
 
-    let markers = resolved
-        .markers
+    let markers = resolved_markers
         .into_iter()
         .map(|resolved_marker| {
             let detection = resolved_marker.detection;
@@ -234,9 +249,9 @@ fn analyze_encoded_page_impl(
         width: image.width(),
         height: image.height(),
         source_rotation_degrees: u32::from(image.rotation().degrees()),
-        resolved_orientation_degrees: u32::from(resolved.orientation.degrees()),
+        resolved_orientation_degrees: u32::from(orientation.degrees()),
         markers,
-        unexpected_tag_ids: resolved.unexpected_tag_ids,
+        unexpected_tag_ids,
         quality: GrayQualityMeasurements {
             focus_laplacian_variance: quality.focus.map(|value| value.laplacian_variance),
             focus_interior_sample_count: quality.focus.map(|value| value.interior_sample_count),
@@ -305,12 +320,7 @@ mod tests {
                 .iter()
                 .map(|marker| (marker.role.as_str(), marker.id))
                 .collect::<Vec<_>>(),
-            [
-                ("top-left", 0),
-                ("top-right", 1),
-                ("bottom-left", 3),
-                ("bottom-right", 2),
-            ]
+            [("TL", 0), ("TR", 1), ("BL", 3), ("BR", 2)]
         );
         assert!(result.unexpected_tag_ids.is_empty());
         assert!(result.quality.focus_laplacian_variance.unwrap() > 0.0);
