@@ -49,20 +49,13 @@ where
     })
 }
 
-fn parse_range(
-    minimum: &str,
-    maximum: &str,
-    field: &str,
-    line_number: usize,
-) -> NumericRange {
+fn parse_range(minimum: &str, maximum: &str, field: &str, line_number: usize) -> NumericRange {
     let range = NumericRange {
         minimum: parse_number(minimum, &format!("{field}_minimum"), line_number),
         maximum: parse_number(maximum, &format!("{field}_maximum"), line_number),
     };
     assert!(
-        range.minimum.is_finite()
-            && range.maximum.is_finite()
-            && range.minimum <= range.maximum,
+        range.minimum.is_finite() && range.maximum.is_finite() && range.minimum <= range.maximum,
         "invalid {field} range on expectations line {line_number}: {range:?}"
     );
     range
@@ -91,7 +84,9 @@ fn load_expectations() -> Vec<ProcessingExpectation> {
         .lines()
         .enumerate()
         .filter(|(_, line)| !line.starts_with('#'));
-    let (header_line_number, header) = lines.next().expect("expectations file must contain a header");
+    let (header_line_number, header) = lines
+        .next()
+        .expect("expectations file must contain a header");
     assert_eq!(
         header,
         EXPECTED_HEADER,
@@ -131,24 +126,14 @@ fn load_expectations() -> Vec<ProcessingExpectation> {
                 width: parse_number(fields[1], "width", line_number),
                 height: parse_number(fields[2], "height", line_number),
                 focus: parse_range(fields[3], fields[4], "focus", line_number),
-                mean_luminance: parse_range(
-                    fields[5],
-                    fields[6],
-                    "mean_luminance",
-                    line_number,
-                ),
+                mean_luminance: parse_range(fields[5], fields[6], "mean_luminance", line_number),
                 luminance_standard_deviation: parse_range(
                     fields[7],
                     fields[8],
                     "luminance_standard_deviation",
                     line_number,
                 ),
-                dark_fraction: parse_range(
-                    fields[9],
-                    fields[10],
-                    "dark_fraction",
-                    line_number,
-                ),
+                dark_fraction: parse_range(fields[9], fields[10], "dark_fraction", line_number),
                 highlight_fraction: parse_range(
                     fields[11],
                     fields[12],
@@ -235,8 +220,18 @@ fn synthetic_fixture_processing_stays_inside_committed_regression_envelopes() {
 
     for expectation in load_expectations() {
         let gray = decode_png(&expectation.path);
-        assert_eq!(gray.width(), expectation.width, "{} width", expectation.path);
-        assert_eq!(gray.height(), expectation.height, "{} height", expectation.path);
+        assert_eq!(
+            gray.width(),
+            expectation.width,
+            "{} width",
+            expectation.path
+        );
+        assert_eq!(
+            gray.height(),
+            expectation.height,
+            "{} height",
+            expectation.path
+        );
         let frame = gray.as_frame(image_limits).unwrap();
         let quality = measure_gray_quality(frame, quality_config).unwrap();
         let focus = quality
@@ -303,12 +298,9 @@ fn synthetic_fixture_processing_stays_inside_committed_regression_envelopes() {
             minimum_decision_margin,
             expectation.minimum_decision_margin.as_ref(),
         ) {
-            (Some(value), Some(range)) => assert_in_range(
-                &expectation.path,
-                "minimum_decision_margin",
-                value,
-                range,
-            ),
+            (Some(value), Some(range)) => {
+                assert_in_range(&expectation.path, "minimum_decision_margin", value, range)
+            }
             (None, None) => {}
             (actual, expected) => panic!(
                 "{} minimum decision margin availability mismatch: actual={actual:?}, expected={expected:?}",
