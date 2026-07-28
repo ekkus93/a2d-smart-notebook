@@ -225,9 +225,10 @@ impl RegistrationJournal {
     }
 
     fn record(&mut self, value: serde_json::Value) -> Result<(), A2dError> {
-        let file = self.file.as_mut().ok_or_else(|| {
-            A2dError::internal_unknown("asset commit journal was already closed")
-        })?;
+        let file = self
+            .file
+            .as_mut()
+            .ok_or_else(|| A2dError::internal_unknown("asset commit journal was already closed"))?;
         serde_json::to_writer(&mut *file, &value).map_err(|error| {
             A2dError::new(
                 ErrorCode::new("CORE_SCAN_JOURNAL_ENCODING_FAILED"),
@@ -342,11 +343,8 @@ impl A2dCore {
             ));
         }
 
-        let processed = process_capture(
-            &staged.bytes,
-            request.image_format,
-            request.image_rotation,
-        )?;
+        let processed =
+            process_capture(&staged.bytes, request.image_format, request.image_rotation)?;
         validate_observed_markers(&request.observed_markers, &processed.resolved_markers)?;
         let mut warnings = quality_warnings(&processed);
         merge_preview_warnings(&request.preview_warnings, &mut warnings)?;
@@ -409,11 +407,8 @@ impl A2dCore {
         };
 
         let scan_id = ScanId::generate();
-        let mut journal = RegistrationJournal::begin(
-            &self.library_path,
-            &scan_id,
-            &staged.canonical_path,
-        )?;
+        let mut journal =
+            RegistrationJournal::begin(&self.library_path, &scan_id, &staged.canonical_path)?;
         let journal_path = journal.path_string();
 
         let asset_result = (|| {
@@ -466,7 +461,10 @@ impl A2dCore {
             Some(thumbnail.id().clone()),
             processed.pipeline_version.to_string(),
             quality_status,
-            warnings.iter().map(|warning| warning.code().to_string()).collect(),
+            warnings
+                .iter()
+                .map(|warning| warning.code().to_string())
+                .collect(),
             preferred,
             None,
             format!("exact-sha256-v1:{}", corrected.sha256),
@@ -474,15 +472,13 @@ impl A2dCore {
         let audit = scan_audit_event(&scan, request.active_notebook_id.as_ref());
 
         let transaction_result = storage.transaction(|tx| {
-            let current_page = tx
-                .get_page(&request.expected_page_id)?
-                .ok_or_else(|| {
-                    registration_error(
-                        "CORE_SCAN_PAGE_NOT_FOUND_IN_TRANSACTION",
-                        ErrorCategory::Integrity,
-                        "the page disappeared before the registration transaction",
-                    )
-                })?;
+            let current_page = tx.get_page(&request.expected_page_id)?.ok_or_else(|| {
+                registration_error(
+                    "CORE_SCAN_PAGE_NOT_FOUND_IN_TRANSACTION",
+                    ErrorCategory::Integrity,
+                    "the page disappeared before the registration transaction",
+                )
+            })?;
             validate_page_target(
                 &current_page,
                 &page_code,
@@ -692,11 +688,7 @@ impl A2dCore {
             &bytes,
             format.encoded(),
             rotation.image(),
-            EncodedImageLimits::new(
-                MAX_ENCODED_BYTES,
-                MAX_DECODED_PIXELS,
-                MAX_DECODED_BYTES,
-            )?,
+            EncodedImageLimits::new(MAX_ENCODED_BYTES, MAX_DECODED_PIXELS, MAX_DECODED_BYTES)?,
         )?;
         Ok(StagedCapture {
             canonical_path,
@@ -730,15 +722,20 @@ fn validate_page_target(
                 logical_page_number: code_number,
                 layout_id,
             },
-        ) if notebook_id == active_notebook_id.ok_or_else(|| {
-            registration_error(
-                "CORE_SCAN_NOTEBOOK_REQUIRED",
-                ErrorCategory::Identity,
-                "Notebook page registration requires the confirmed Notebook",
-            )
-        })? && design_id == code_design
+        ) if notebook_id
+            == active_notebook_id.ok_or_else(|| {
+                registration_error(
+                    "CORE_SCAN_NOTEBOOK_REQUIRED",
+                    ErrorCategory::Identity,
+                    "Notebook page registration requires the confirmed Notebook",
+                )
+            })?
+            && design_id == code_design
             && logical_page_number == code_number
-            && &page.layout_id == layout_id => Ok(()),
+            && &page.layout_id == layout_id =>
+        {
+            Ok(())
+        }
         (
             PageKind::SmartPage {
                 smart_page_id,
@@ -755,7 +752,10 @@ fn validate_page_target(
             && smart_page_id == code_id
             && page_set_id == code_set
             && visible_page_number == code_visible
-            && &page.layout_id == layout_id => Ok(()),
+            && &page.layout_id == layout_id =>
+        {
+            Ok(())
+        }
         _ => Err(registration_error(
             "CORE_SCAN_PAGE_RECORD_CONFLICT",
             ErrorCategory::Integrity,
@@ -775,19 +775,12 @@ fn process_capture(
         encoded_bytes,
         format.encoded(),
         rotation.image(),
-        EncodedImageLimits::new(
-            MAX_ENCODED_BYTES,
-            MAX_DECODED_PIXELS,
-            MAX_DECODED_BYTES,
-        )?,
+        EncodedImageLimits::new(MAX_ENCODED_BYTES, MAX_DECODED_PIXELS, MAX_DECODED_BYTES)?,
     )?
     .decode_rgb8()?;
     let gray = source.clone().into_gray8(image_limits)?;
     let frame = gray.as_frame(image_limits)?;
-    let quality = measure_gray_quality(
-        frame,
-        LuminanceMeasurementConfig::new(32, 245, 8, 8)?,
-    )?;
+    let quality = measure_gray_quality(frame, LuminanceMeasurementConfig::new(32, 245, 8, 8)?)?;
     let mut detector = AprilTagDetector::new(DetectorConfig {
         thread_count: 1,
         quad_decimate: 2.0,
@@ -835,28 +828,32 @@ fn process_capture(
 }
 
 fn encode_rgb_png(image: &OwnedRgbImage) -> Result<Vec<u8>, A2dError> {
-    let rgb = RgbImage::from_raw(image.width(), image.height(), image.bytes().to_vec()).ok_or_else(
-        || A2dError::internal_unknown("validated corrected RGB image could not be reconstructed"),
-    )?;
+    let rgb = RgbImage::from_raw(image.width(), image.height(), image.bytes().to_vec())
+        .ok_or_else(|| {
+            A2dError::internal_unknown("validated corrected RGB image could not be reconstructed")
+        })?;
     encode_dynamic_png(DynamicImage::ImageRgb8(rgb))
 }
 
 fn encode_gray_png(image: &OwnedGrayImage) -> Result<Vec<u8>, A2dError> {
-    let gray = GrayImage::from_raw(image.width(), image.height(), image.bytes().to_vec()).ok_or_else(
-        || A2dError::internal_unknown("validated OCR grayscale image could not be reconstructed"),
-    )?;
+    let gray = GrayImage::from_raw(image.width(), image.height(), image.bytes().to_vec())
+        .ok_or_else(|| {
+            A2dError::internal_unknown("validated OCR grayscale image could not be reconstructed")
+        })?;
     encode_dynamic_png(DynamicImage::ImageLuma8(gray))
 }
 
 fn encode_dynamic_png(image: DynamicImage) -> Result<Vec<u8>, A2dError> {
     let mut output = Cursor::new(Vec::new());
-    image.write_to(&mut output, ImageFormat::Png).map_err(|error| {
-        registration_error(
-            "CORE_SCAN_DERIVED_ENCODE_FAILED",
-            ErrorCategory::ImageProcessing,
-            format!("failed to encode a derived PNG: {error}"),
-        )
-    })?;
+    image
+        .write_to(&mut output, ImageFormat::Png)
+        .map_err(|error| {
+            registration_error(
+                "CORE_SCAN_DERIVED_ENCODE_FAILED",
+                ErrorCategory::ImageProcessing,
+                format!("failed to encode a derived PNG: {error}"),
+            )
+        })?;
     Ok(output.into_inner())
 }
 
@@ -885,12 +882,7 @@ fn validate_observed_markers(
     let resolved_map = resolved
         .markers
         .iter()
-        .map(|marker| {
-            (
-                marker.role.as_id_str().to_string(),
-                marker.detection.id,
-            )
-        })
+        .map(|marker| (marker.role.as_id_str().to_string(), marker.detection.id))
         .collect::<BTreeMap<_, _>>();
     if observed_map != resolved_map {
         return Err(registration_error(
@@ -1014,7 +1006,7 @@ fn scan_audit_event(scan: &Scan, notebook_id: Option<&NotebookId>) -> AuditEvent
 #[cfg(test)]
 mod tests {
     use a2d_domain::{
-        LayoutId, Notebook, NotebookDesign, NotebookDesignId, Page, TrustState, TrimSizeMm,
+        LayoutId, Notebook, NotebookDesign, NotebookDesignId, Page, TrimSizeMm, TrustState,
     };
     use a2d_storage::{NotebookDesignRepository, NotebookRepository};
 
@@ -1199,13 +1191,7 @@ mod tests {
     #[test]
     fn first_registration_commits_assets_scan_and_preferred_page_atomically() {
         let (core, root, page_id, notebook_id, payload) = test_core();
-        let request = request(
-            &root,
-            page_id.clone(),
-            notebook_id,
-            payload,
-            "first.png",
-        );
+        let request = request(&root, page_id.clone(), notebook_id, payload, "first.png");
         let staging = PathBuf::from(&request.staging_path);
         let registered = core.register_scan(request).unwrap();
         assert!(registered.preferred);
@@ -1254,10 +1240,17 @@ mod tests {
             .unwrap();
         assert!(!second.preferred);
         assert_eq!(second.quality_status, QualityStatus::NeedsReview);
-        assert!(second
-            .required_actions
-            .contains(&RegistrationRequiredAction::ReviewExistingPage));
-        let page = core.lock_storage().unwrap().get_page(&page_id).unwrap().unwrap();
+        assert!(
+            second
+                .required_actions
+                .contains(&RegistrationRequiredAction::ReviewExistingPage)
+        );
+        let page = core
+            .lock_storage()
+            .unwrap()
+            .get_page(&page_id)
+            .unwrap()
+            .unwrap();
         assert_eq!(page.state, PageState::NeedsReview);
         assert_eq!(page.preferred_scan_id, Some(first.scan_id));
         std::fs::remove_dir_all(root).ok();
@@ -1271,7 +1264,10 @@ mod tests {
         let mut request = request(&root, page_id, notebook_id, payload, "inside.png");
         request.staging_path = outside.to_string_lossy().into_owned();
         let error = core.register_scan(request).unwrap_err();
-        assert_eq!(error.code.to_string(), "CORE_SCAN_STAGING_PATH_ESCAPES_LIBRARY");
+        assert_eq!(
+            error.code.to_string(),
+            "CORE_SCAN_STAGING_PATH_ESCAPES_LIBRARY"
+        );
         assert!(outside.exists());
         std::fs::remove_file(outside).ok();
         std::fs::remove_dir_all(root).ok();
@@ -1283,7 +1279,10 @@ mod tests {
         let mut request = request(&root, page_id, notebook_id, payload, "marker.png");
         request.observed_markers[0].id = 99;
         let error = core.register_scan(request).unwrap_err();
-        assert_eq!(error.code.to_string(), "CORE_SCAN_MARKERS_CHANGED_SINCE_REVIEW");
+        assert_eq!(
+            error.code.to_string(),
+            "CORE_SCAN_MARKERS_CHANGED_SINCE_REVIEW"
+        );
         std::fs::remove_dir_all(root).ok();
     }
 
