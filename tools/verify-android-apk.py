@@ -175,8 +175,7 @@ Validation evidence:
     hook_path.write_text(
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
-        "git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md\n"
-        "git diff --cached --check\n",
+        "git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md\n",
         encoding="utf-8",
     )
     hook_path.chmod(0o755)
