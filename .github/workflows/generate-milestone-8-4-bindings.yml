@@ -7,12 +7,17 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: milestone-8-4-bindings
+  cancel-in-progress: true
+
 env:
   A2D_ANDROID_NDK_VERSION: "27.0.12077973"
   A2D_CARGO_NDK_VERSION: "4.1.2"
 
 jobs:
   generate:
+    if: ${{ !contains(github.event.head_commit.message, '[skip m8-4-bindings]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,21 +43,47 @@ jobs:
           } >> "$GITHUB_ENV"
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Format and test new Rust API
+        id: rust
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          {
+            cargo fmt --all
+            cargo clippy -p a2d-ffi --all-targets --all-features -- -D warnings
+            cargo test -p a2d-ffi --all-features
+          } 2>&1 | tee milestone-8-4-bindings.log
+      - name: Generate Kotlin bindings from packaged native library
+        id: bindings
+        if: steps.rust.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bash ./tools/build-android-native.sh "x86_64" 2>&1 | tee -a milestone-8-4-bindings.log
+      - name: Record generation failure
+        if: steps.rust.outcome != 'success' || steps.bindings.outcome != 'success'
         run: |
           set -euo pipefail
-          cargo fmt --all
-          cargo clippy -p a2d-ffi --all-targets --all-features -- -D warnings
-          cargo test -p a2d-ffi --all-features
-      - name: Generate Kotlin bindings from packaged native library
-        run: bash ./tools/build-android-native.sh "x86_64"
+          mkdir -p .github/tmp
+          cp milestone-8-4-bindings.log .github/tmp/milestone-8-4-bindings-failure.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/tmp/milestone-8-4-bindings-failure.log crates/a2d-ffi/src/lib.rs crates/a2d-ffi/src/milestone8.rs
+          git commit -m "Record Milestone 8.4 binding failure [skip m8-4-bindings]"
+          git fetch origin master
+          git rebase origin/master
+          git push origin HEAD:master
+          exit 1
       - name: Commit generated binding and remove workflow
+        if: steps.rust.outcome == 'success' && steps.bindings.outcome == 'success'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/generate-milestone-8-4-bindings.yml
+          git rm -f .github/tmp/milestone-8-4-bindings-failure.log || true
           git add crates/a2d-ffi/src/lib.rs crates/a2d-ffi/src/milestone8.rs \
             apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
-          git diff --cached --quiet && { echo "expected generated or formatted changes"; exit 1; }
           git commit -m "Generate Milestone 8.4 scanner preview bindings [skip ci]"
+          git fetch origin master
+          git rebase origin/master
           git push origin HEAD:master
