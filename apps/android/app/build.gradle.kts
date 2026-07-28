@@ -4,6 +4,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val generatedLicenseAssets = layout.buildDirectory.dir("generated/licenseAssets")
+val prepareLicenseAssets by tasks.registering(Copy::class) {
+    from(rootProject.file("../../LICENSE"))
+    into(generatedLicenseAssets)
+    rename { "APACHE-2.0.txt" }
+}
+
 android {
     namespace = "com.a2d.notebook"
     compileSdk = 35
@@ -15,6 +22,10 @@ android {
         versionCode = 1
         versionName = "0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += setOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -35,6 +46,15 @@ android {
     buildFeatures {
         compose = true
     }
+
+    sourceSets {
+        getByName("main").assets.srcDir(generatedLicenseAssets)
+        getByName("androidTest").assets.srcDir(rootProject.file("../../fixtures/scans/generated"))
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(prepareLicenseAssets)
 }
 
 dependencies {
