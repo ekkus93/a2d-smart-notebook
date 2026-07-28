@@ -1080,9 +1080,11 @@ Validation evidence:
       `cargo-ndk 4.1.2` and builds `arm64-v8a` plus `x86_64` directly against `a2d-image`.
 - [x] Wrap ownership and errors safely for Rust. Native detector, family, image, and detection-array
       lifetimes are private RAII guards; public results own their data and failures are typed.
-- [ ] Measure detection on representative grayscale fixtures. The generated four-tag smoke test is
-      deterministic, but photographed/perturbed fixtures and Android device-tier measurements are
-      still required.
+- [ ] Measure detection on representative grayscale fixtures. A deterministic synthetic corpus now
+      covers a canonical page plus rotation, perspective, exposure, blur, glare, missing-marker,
+      wrong-layout, duplicate-marker, revision, and corrupt-input variants. Desktop tests detect and
+      resolve the canonical page, but photographed fixtures and Android device-tier measurements are
+      still required before this evidence gate is complete.
 - [x] Confirm future iOS build feasibility. The same crate compiles for `aarch64-apple-ios` and
       `aarch64-apple-ios-sim`; this is compile feasibility only, not iOS application work.
 - [x] Compare a pure-Rust alternative only if it materially reduces packaging risk. The contingency
@@ -1127,6 +1129,9 @@ Return marker ID, four corners, center, decision margin, and error-quality data.
 - [x] Always send decoded payload text to Rust for canonical grammar, version, bounds, layout, and
       CRC validation.
 - [ ] Add legally usable blur, rotation, scale, glare, and damage fixtures for the shipped decoder.
+      The synthetic page corpus now contains valid A2D QR codes under rotation, blur, glare,
+      perspective, exposure, wrong-layout, and corruption transforms, but Android ZXing conformance,
+      explicit scale cases, and controlled QR damage cases are not yet implemented.
 - [x] Never accept a decoder result without Rust validation; decoder success alone cannot trigger an
       A2D identity or workflow success state.
 
@@ -1248,7 +1253,7 @@ Validation evidence:
 
 ## 7.8 Fixture corpus
 
-Create legally usable fixtures under:
+The deterministic synthetic foundation is committed under:
 
 ```text
 fixtures/scans/
@@ -1263,12 +1268,42 @@ fixtures/scans/
 └── corrupted/
 ```
 
-Every fixture records source/license, expected identity, quality state, marker roles, warnings, and tolerances.
+- [x] Generate a content-bearing notebook page with the pinned official `tagStandard41h12` marker
+      family and a canonical A2D Notebook Page QR payload. The fixture-only Rust helper renders the
+      official tags and uses the existing `PageCode` encoder; Python does not reimplement either wire
+      format.
+- [x] Generate deterministic rotation, perspective, underexposure, overexposure, Gaussian blur,
+      localized glare, missing-marker, wrong-layout QR, wrong marker-set, duplicate-marker, revision,
+      truncated-image, and non-image controls with pinned Pillow `11.3.0`.
+- [x] Record project-generated/Apache-2.0 provenance, expected QR identity, expected marker roles,
+      intended quality state, warnings, transformation parameters, dimensions, mode, byte length, and
+      SHA-256 in `fixtures/scans/manifest.json`.
+- [x] Keep `fixtures/scans/photographed/` separate and protected from synthetic regeneration. Synthetic
+      controls never claim photographed provenance.
+- [x] Verify every manifest entry, digest, dimension, decode-success/decode-failure expectation, category,
+      and provenance field through `tools/verify_scan_fixtures.py`.
+- [x] Regenerate the corpus in read-only CI and compare every generated category plus the manifest
+      byte-for-byte against committed assets so generator drift fails explicitly.
+- [ ] Add calibrated processing tolerances for each relevant fixture. Current CI enforces byte-exact asset
+      regeneration plus exact discrete marker/decode expectations; it does not invent production quality
+      thresholds or physical-camera tolerances.
+- [ ] Add real photographed Android fixtures with source/consent/license, device, camera, lighting,
+      print/page, and capture-condition metadata.
 
 Acceptance:
 
-- [ ] A desktop Rust test/CLI processes fixtures without Android.
-- [ ] Android calls the same shared processing path.
+- [x] A desktop Rust integration test processes all generated PNGs without Android through bounded
+      encoded-image decoding, Gray8 conversion, and quality measurement; detects/resolves marker IDs
+      `0..=3` on the canonical page; and confirms corrupt controls fail without fabricated success.
+- [ ] Android calls the same shared processing path. This remains a Milestone 8 integration task.
+
+Validation evidence:
+
+- GitHub Actions native/fixture run `30315949013` passed deterministic regeneration and byte-drift
+  comparison, fixture clippy/tests, pinned Android `arm64-v8a`/`x86_64` native builds, and future Apple
+  compile-feasibility checks.
+- GitHub Actions full CI run `30315948996` passed workspace formatting/clippy/tests,
+  dependency/license checks, Android lint/tests/debug APK assembly, and Kotlin binding drift.
 
 ---
 
