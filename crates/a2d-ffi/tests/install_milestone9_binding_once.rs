@@ -86,7 +86,7 @@ fn install_current_kotlin_binding_and_remove_one_use_machinery() {
 
     for path in [
         "crates/a2d-ffi/tests/install_milestone9_binding_once.rs",
-        ".github/workflows/generate-milestone9-registration-bindings.yml",
+        ".github/workflows/validate-camerax-adapter.yml",
         ".github/tmp/trigger-milestone9-registration-bindings",
     ] {
         git(&repo, &["rm", "--force", path]);
