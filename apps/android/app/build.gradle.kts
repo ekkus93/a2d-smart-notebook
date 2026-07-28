@@ -68,6 +68,13 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+
+    val cameraXVersion = "1.6.1"
+    implementation("androidx.camera:camera-core:$cameraXVersion")
+    implementation("androidx.camera:camera-camera2:$cameraXVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
+    implementation("androidx.camera:camera-view:$cameraXVersion")
+
     implementation("com.google.zxing:core:3.5.3")
 
     // UniFFI's generated Kotlin bindings load the Rust cdylib through JNA.
