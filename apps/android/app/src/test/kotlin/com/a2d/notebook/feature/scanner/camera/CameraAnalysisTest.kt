@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class CameraAnalysisTest {
@@ -81,6 +82,23 @@ class CameraAnalysisTest {
         )
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun bytesBeyondTheSourceLimitAreNeverRead() {
+        val source = ByteBuffer.wrap(byteArrayOf(1, 2, 3, 4, 5, 6)).apply {
+            position(1)
+            limit(3)
+        }
+
+        copyLuminancePlane(
+            source = source,
+            imageWidth = 3,
+            imageHeight = 2,
+            crop = LuminanceCrop(left = 0, top = 0, width = 3, height = 2),
+            rowStride = 3,
+            pixelStride = 1,
+        )
+    }
+
     @Test
     fun closeAfterClosesOnSuccess() {
         val resource = FakeCloseable()
@@ -115,6 +133,21 @@ class CameraAnalysisTest {
         assertFalse(result.isSuccess)
         assertSame(processingFailure, result.exceptionOrNull())
         assertArrayEquals(arrayOf(closeFailure), processingFailure.suppressed)
+    }
+
+    @Test
+    fun fatalProcessingErrorsPropagateAfterTheResourceIsClosed() {
+        val resource = FakeCloseable()
+        val fatalFailure = AssertionError("fatal")
+
+        try {
+            closeAfter(resource) { throw fatalFailure }
+            fail("fatal processing errors must not become recoverable Result failures")
+        } catch (actual: AssertionError) {
+            assertSame(fatalFailure, actual)
+        }
+
+        assertTrue(resource.closed)
     }
 
     private class FakeCloseable(
