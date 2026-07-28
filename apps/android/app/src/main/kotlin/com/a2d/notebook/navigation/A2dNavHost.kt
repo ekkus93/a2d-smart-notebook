@@ -10,10 +10,12 @@ import com.a2d.notebook.feature.home.HomeScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
+import com.a2d.notebook.feature.scanner.singlepage.SinglePageScannerScreen
 import com.a2d.notebook.feature.smartpage.SmartPagesScreen
 
 object A2dDestinations {
     const val HOME = "home"
+    const val SINGLE_PAGE_SCANNER = "scanner/single"
     const val NOTEBOOKS = "notebooks"
     const val ADD_NOTEBOOK = "notebooks/add"
     const val SMART_PAGES = "smart-pages"
@@ -27,9 +29,13 @@ fun A2dNavHost(navController: NavHostController) {
     NavHost(navController = navController, startDestination = A2dDestinations.HOME) {
         composable(A2dDestinations.HOME) {
             HomeScreen(
+                onScanPage = { navController.navigate(A2dDestinations.SINGLE_PAGE_SCANNER) },
                 onOpenNotebooks = { navController.navigate(A2dDestinations.NOTEBOOKS) },
                 onCreateSmartPages = { navController.navigate(A2dDestinations.SMART_PAGES) },
             )
+        }
+        composable(A2dDestinations.SINGLE_PAGE_SCANNER) {
+            SinglePageScannerScreen(onBack = { navController.navigateUp() })
         }
         composable(A2dDestinations.NOTEBOOKS) {
             NotebookLibraryScreen(
