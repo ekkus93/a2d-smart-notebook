@@ -709,6 +709,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_analyze_encoded_page(
     ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_register_scan(
+    ): Int
     external fun uniffi_a2d_ffi_checksum_constructor_a2dclient_open(
     ): Int
     external fun ffi_a2d_ffi_uniffi_contract_version(
@@ -770,6 +772,8 @@ internal object UniffiLib {
     external fun uniffi_a2d_ffi_fn_method_a2dclient_set_active_notebook(`ptr`: Long,`notebookId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_a2d_ffi_fn_method_a2dclient_analyze_encoded_page(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_register_scan(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_a2d_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -942,6 +946,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_analyze_encoded_page() != 10347) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_register_scan() != 14263) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_constructor_a2dclient_open() != 8661) {
@@ -1147,6 +1154,29 @@ public object FfiConverterULong: FfiConverter<ULong, Long> {
 
     override fun write(value: ULong, buf: ByteBuffer) {
         buf.putLong(value.toLong())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterLong: FfiConverter<Long, Long> {
+    override fun lift(value: Long): Long {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Long {
+        return buf.getLong()
+    }
+
+    override fun lower(value: Long): Long {
+        return value
+    }
+
+    override fun allocationSize(value: Long) = 8UL
+
+    override fun write(value: Long, buf: ByteBuffer) {
+        buf.putLong(value)
     }
 }
 
@@ -1417,6 +1447,8 @@ public interface A2dClientInterface {
     fun `setActiveNotebook`(`notebookId`: kotlin.String?): NotebookSummary?
     
     fun `analyzeEncodedPage`(`request`: AnalyzeEncodedPageRequest): AnalyzeEncodedPageResult
+    
+    fun `registerScan`(`request`: RegisterScanRequest): RegisteredScan
     
     companion object
 }
@@ -1789,6 +1821,21 @@ open class A2dClient: Disposable, AutoCloseable, A2dClientInterface
         it,
         
         FfiConverterTypeAnalyzeEncodedPageRequest.lower(`request`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `registerScan`(`request`: RegisterScanRequest): RegisteredScan {
+            return FfiConverterTypeRegisteredScan.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_register_scan(
+        it,
+        
+        FfiConverterTypeRegisterScanRequest.lower(`request`),_status)
 }
     }
     )
@@ -2568,6 +2615,225 @@ public object FfiConverterTypeOpenLibraryRequest: FfiConverterRustBuffer<OpenLib
 
 
 
+data class RegisterScanRequest (
+    var `stagingPath`: kotlin.String
+    , 
+    var `pageCodePayload`: kotlin.String
+    , 
+    var `expectedPageId`: kotlin.String
+    , 
+    var `activeNotebookId`: kotlin.String?
+    , 
+    var `captureSource`: ScanCaptureSource
+    , 
+    var `imageFormat`: RegistrationImageFormat
+    , 
+    var `imageRotation`: RegistrationImageRotation
+    , 
+    var `capturedAtMs`: kotlin.Long
+    , 
+    var `observedMarkers`: List<RegistrationMarker>
+    , 
+    var `previewWarnings`: List<kotlin.String>
+    , 
+    var `userApproved`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegisterScanRequest: FfiConverterRustBuffer<RegisterScanRequest> {
+    override fun read(buf: ByteBuffer): RegisterScanRequest {
+        return RegisterScanRequest(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterTypeScanCaptureSource.read(buf),
+            FfiConverterTypeRegistrationImageFormat.read(buf),
+            FfiConverterTypeRegistrationImageRotation.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterSequenceTypeRegistrationMarker.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RegisterScanRequest) = (
+            FfiConverterString.allocationSize(value.`stagingPath`) +
+            FfiConverterString.allocationSize(value.`pageCodePayload`) +
+            FfiConverterString.allocationSize(value.`expectedPageId`) +
+            FfiConverterOptionalString.allocationSize(value.`activeNotebookId`) +
+            FfiConverterTypeScanCaptureSource.allocationSize(value.`captureSource`) +
+            FfiConverterTypeRegistrationImageFormat.allocationSize(value.`imageFormat`) +
+            FfiConverterTypeRegistrationImageRotation.allocationSize(value.`imageRotation`) +
+            FfiConverterLong.allocationSize(value.`capturedAtMs`) +
+            FfiConverterSequenceTypeRegistrationMarker.allocationSize(value.`observedMarkers`) +
+            FfiConverterSequenceString.allocationSize(value.`previewWarnings`) +
+            FfiConverterBoolean.allocationSize(value.`userApproved`)
+    )
+
+    override fun write(value: RegisterScanRequest, buf: ByteBuffer) {
+            FfiConverterString.write(value.`stagingPath`, buf)
+            FfiConverterString.write(value.`pageCodePayload`, buf)
+            FfiConverterString.write(value.`expectedPageId`, buf)
+            FfiConverterOptionalString.write(value.`activeNotebookId`, buf)
+            FfiConverterTypeScanCaptureSource.write(value.`captureSource`, buf)
+            FfiConverterTypeRegistrationImageFormat.write(value.`imageFormat`, buf)
+            FfiConverterTypeRegistrationImageRotation.write(value.`imageRotation`, buf)
+            FfiConverterLong.write(value.`capturedAtMs`, buf)
+            FfiConverterSequenceTypeRegistrationMarker.write(value.`observedMarkers`, buf)
+            FfiConverterSequenceString.write(value.`previewWarnings`, buf)
+            FfiConverterBoolean.write(value.`userApproved`, buf)
+    }
+}
+
+
+
+data class RegisteredScan (
+    var `scanId`: kotlin.String
+    , 
+    var `pageId`: kotlin.String
+    , 
+    var `originalAssetId`: kotlin.String
+    , 
+    var `correctedAssetId`: kotlin.String
+    , 
+    var `ocrAssetId`: kotlin.String
+    , 
+    var `thumbnailAssetId`: kotlin.String
+    , 
+    var `originalPath`: kotlin.String
+    , 
+    var `correctedPath`: kotlin.String
+    , 
+    var `ocrPath`: kotlin.String
+    , 
+    var `thumbnailPath`: kotlin.String
+    , 
+    var `qualityStatus`: RegisteredScanQualityStatus
+    , 
+    var `preferred`: kotlin.Boolean
+    , 
+    var `warnings`: List<RegisteredScanWarning>
+    , 
+    var `requiredActions`: List<RegisteredScanRequiredAction>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegisteredScan: FfiConverterRustBuffer<RegisteredScan> {
+    override fun read(buf: ByteBuffer): RegisteredScan {
+        return RegisteredScan(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeRegisteredScanQualityStatus.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterSequenceTypeRegisteredScanWarning.read(buf),
+            FfiConverterSequenceTypeRegisteredScanRequiredAction.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RegisteredScan) = (
+            FfiConverterString.allocationSize(value.`scanId`) +
+            FfiConverterString.allocationSize(value.`pageId`) +
+            FfiConverterString.allocationSize(value.`originalAssetId`) +
+            FfiConverterString.allocationSize(value.`correctedAssetId`) +
+            FfiConverterString.allocationSize(value.`ocrAssetId`) +
+            FfiConverterString.allocationSize(value.`thumbnailAssetId`) +
+            FfiConverterString.allocationSize(value.`originalPath`) +
+            FfiConverterString.allocationSize(value.`correctedPath`) +
+            FfiConverterString.allocationSize(value.`ocrPath`) +
+            FfiConverterString.allocationSize(value.`thumbnailPath`) +
+            FfiConverterTypeRegisteredScanQualityStatus.allocationSize(value.`qualityStatus`) +
+            FfiConverterBoolean.allocationSize(value.`preferred`) +
+            FfiConverterSequenceTypeRegisteredScanWarning.allocationSize(value.`warnings`) +
+            FfiConverterSequenceTypeRegisteredScanRequiredAction.allocationSize(value.`requiredActions`)
+    )
+
+    override fun write(value: RegisteredScan, buf: ByteBuffer) {
+            FfiConverterString.write(value.`scanId`, buf)
+            FfiConverterString.write(value.`pageId`, buf)
+            FfiConverterString.write(value.`originalAssetId`, buf)
+            FfiConverterString.write(value.`correctedAssetId`, buf)
+            FfiConverterString.write(value.`ocrAssetId`, buf)
+            FfiConverterString.write(value.`thumbnailAssetId`, buf)
+            FfiConverterString.write(value.`originalPath`, buf)
+            FfiConverterString.write(value.`correctedPath`, buf)
+            FfiConverterString.write(value.`ocrPath`, buf)
+            FfiConverterString.write(value.`thumbnailPath`, buf)
+            FfiConverterTypeRegisteredScanQualityStatus.write(value.`qualityStatus`, buf)
+            FfiConverterBoolean.write(value.`preferred`, buf)
+            FfiConverterSequenceTypeRegisteredScanWarning.write(value.`warnings`, buf)
+            FfiConverterSequenceTypeRegisteredScanRequiredAction.write(value.`requiredActions`, buf)
+    }
+}
+
+
+
+data class RegistrationMarker (
+    var `role`: kotlin.String
+    , 
+    var `id`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegistrationMarker: FfiConverterRustBuffer<RegistrationMarker> {
+    override fun read(buf: ByteBuffer): RegistrationMarker {
+        return RegistrationMarker(
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RegistrationMarker) = (
+            FfiConverterString.allocationSize(value.`role`) +
+            FfiConverterUInt.allocationSize(value.`id`)
+    )
+
+    override fun write(value: RegistrationMarker, buf: ByteBuffer) {
+            FfiConverterString.write(value.`role`, buf)
+            FfiConverterUInt.write(value.`id`, buf)
+    }
+}
+
+
+
 data class SmartPageGenerationRequest (
     var `paperSize`: SmartPagePaperSize
     , 
@@ -2948,6 +3214,223 @@ public object FfiConverterTypePageResolution : FfiConverterRustBuffer<PageResolu
 
 
 
+enum class RegisteredScanQualityStatus {
+    
+    ACCEPTED,
+    ACCEPTED_WITH_WARNINGS,
+    NEEDS_REVIEW,
+    REJECTED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegisteredScanQualityStatus: FfiConverterRustBuffer<RegisteredScanQualityStatus> {
+    override fun read(buf: ByteBuffer) = try {
+        RegisteredScanQualityStatus.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: RegisteredScanQualityStatus) = 4UL
+
+    override fun write(value: RegisteredScanQualityStatus, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class RegisteredScanRequiredAction {
+    
+    REVIEW_EXISTING_PAGE,
+    INSPECT_INCOMPLETE_ASSET_COMMIT,
+    REMOVE_STAGING_FILE;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegisteredScanRequiredAction: FfiConverterRustBuffer<RegisteredScanRequiredAction> {
+    override fun read(buf: ByteBuffer) = try {
+        RegisteredScanRequiredAction.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: RegisteredScanRequiredAction) = 4UL
+
+    override fun write(value: RegisteredScanRequiredAction, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class RegisteredScanWarning {
+    
+    UNEXPECTED_MARKERS,
+    LOW_MARKER_CONFIDENCE,
+    LOW_FOCUS,
+    TOO_DARK,
+    TOO_MUCH_DARK_AREA,
+    TOO_MUCH_HIGHLIGHT,
+    LOCALIZED_GLARE,
+    EXISTING_PAGE_SCAN_REQUIRES_REVIEW,
+    ASSET_COMMIT_JOURNAL_CLEANUP_PENDING,
+    STAGING_CLEANUP_PENDING;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegisteredScanWarning: FfiConverterRustBuffer<RegisteredScanWarning> {
+    override fun read(buf: ByteBuffer) = try {
+        RegisteredScanWarning.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: RegisteredScanWarning) = 4UL
+
+    override fun write(value: RegisteredScanWarning, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class RegistrationImageFormat {
+    
+    JPEG,
+    PNG;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegistrationImageFormat: FfiConverterRustBuffer<RegistrationImageFormat> {
+    override fun read(buf: ByteBuffer) = try {
+        RegistrationImageFormat.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: RegistrationImageFormat) = 4UL
+
+    override fun write(value: RegistrationImageFormat, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class RegistrationImageRotation {
+    
+    DEGREES0,
+    DEGREES90,
+    DEGREES180,
+    DEGREES270;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegistrationImageRotation: FfiConverterRustBuffer<RegistrationImageRotation> {
+    override fun read(buf: ByteBuffer) = try {
+        RegistrationImageRotation.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: RegistrationImageRotation) = 4UL
+
+    override fun write(value: RegistrationImageRotation, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class ScanCaptureSource {
+    
+    CAMERA,
+    IMPORT;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeScanCaptureSource: FfiConverterRustBuffer<ScanCaptureSource> {
+    override fun read(buf: ByteBuffer) = try {
+        ScanCaptureSource.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ScanCaptureSource) = 4UL
+
+    override fun write(value: ScanCaptureSource, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class SmartPageContentStyle {
     
     BLANK,
@@ -3311,6 +3794,90 @@ public object FfiConverterSequenceTypeNotebookSummary: FfiConverterRustBuffer<Li
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeNotebookSummary.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRegistrationMarker: FfiConverterRustBuffer<List<RegistrationMarker>> {
+    override fun read(buf: ByteBuffer): List<RegistrationMarker> {
+        val len = buf.getInt()
+        return List<RegistrationMarker>(len) {
+            FfiConverterTypeRegistrationMarker.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RegistrationMarker>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRegistrationMarker.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RegistrationMarker>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRegistrationMarker.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRegisteredScanRequiredAction: FfiConverterRustBuffer<List<RegisteredScanRequiredAction>> {
+    override fun read(buf: ByteBuffer): List<RegisteredScanRequiredAction> {
+        val len = buf.getInt()
+        return List<RegisteredScanRequiredAction>(len) {
+            FfiConverterTypeRegisteredScanRequiredAction.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RegisteredScanRequiredAction>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRegisteredScanRequiredAction.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RegisteredScanRequiredAction>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRegisteredScanRequiredAction.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRegisteredScanWarning: FfiConverterRustBuffer<List<RegisteredScanWarning>> {
+    override fun read(buf: ByteBuffer): List<RegisteredScanWarning> {
+        val len = buf.getInt()
+        return List<RegisteredScanWarning>(len) {
+            FfiConverterTypeRegisteredScanWarning.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RegisteredScanWarning>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRegisteredScanWarning.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RegisteredScanWarning>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRegisteredScanWarning.write(it, buf)
         }
     }
 }
