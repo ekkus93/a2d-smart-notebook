@@ -6,21 +6,27 @@ import androidx.camera.core.ImageProxy
 import java.nio.ByteBuffer
 
 /**
- * One tightly packed luminance frame copied from CameraX's Y plane.
+ * One tightly packed luminance frame copied from CameraX's Y plane into owned direct memory.
  *
- * Source stride metadata is retained so the Rust/native boundary can be audited without assuming
- * that camera rows or pixels were packed in the source image. [luminance] itself is always
- * `width * height` bytes and is independent of the lifetime of the CameraX [ImageProxy].
+ * Source stride metadata is retained so the native boundary can be audited without assuming that
+ * camera rows or pixels were packed in the source image. [luminanceBuffer] always exposes exactly
+ * `width * height` bytes with a packed row stride of [width], and its lifetime is independent of the
+ * CameraX [ImageProxy]. The returned buffer is read-only and each call receives an independent
+ * position/limit view over the same owned bytes.
  */
-data class CameraAnalysisFrame(
+class CameraAnalysisFrame(
     val width: Int,
     val height: Int,
     val sourceRowStride: Int,
     val sourcePixelStride: Int,
     val rotationDegrees: Int,
     val timestampNanos: Long,
-    val luminance: ByteArray,
+    val extractionDurationNanos: Long,
+    val pixelBufferCopyCount: Int,
+    luminance: ByteBuffer,
 ) {
+    private val ownedLuminance: ByteBuffer
+
     init {
         require(width > 0 && height > 0) { "analysis frame dimensions must be positive" }
         require(sourceRowStride > 0) { "source row stride must be positive" }
@@ -28,10 +34,25 @@ data class CameraAnalysisFrame(
         require(rotationDegrees in setOf(0, 90, 180, 270)) {
             "rotation must be one of 0, 90, 180, or 270 degrees"
         }
-        require(luminance.size == Math.multiplyExact(width, height)) {
+        require(extractionDurationNanos >= 0L) { "extraction duration must not be negative" }
+        require(pixelBufferCopyCount == 1) {
+            "CameraX luminance extraction must report exactly one owned pixel-buffer copy"
+        }
+        require(luminance.isDirect) { "luminance buffer must use owned direct memory" }
+        require(luminance.position() == 0) { "luminance buffer must start at position zero" }
+        require(luminance.remaining() == Math.multiplyExact(width, height)) {
             "luminance buffer must contain exactly width * height bytes"
         }
+        ownedLuminance = luminance.asReadOnlyBuffer()
     }
+
+    val luminanceByteCount: Int
+        get() = ownedLuminance.limit()
+
+    val packedRowStride: Int
+        get() = width
+
+    fun luminanceBuffer(): ByteBuffer = ownedLuminance.asReadOnlyBuffer()
 }
 
 sealed interface CameraAnalysisEvent {
@@ -59,21 +80,21 @@ internal data class LuminanceCrop(
 }
 
 /**
- * Copies a cropped Y plane while respecting row and pixel stride. The source buffer is never
- * mutated. Invalid geometry is rejected rather than truncated, clamped, or represented as an empty
- * successful frame.
+ * Copies a cropped Y plane once into tightly packed direct memory while respecting row and pixel
+ * stride. The source buffer is never mutated. Invalid geometry is rejected rather than truncated,
+ * clamped, or represented as an empty successful frame.
  *
  * Camera plane geometry is indexed from the start of the plane buffer. The duplicate is rewound but
  * keeps the source limit, so inaccessible bytes between limit and capacity are never read.
  */
-internal fun copyLuminancePlane(
+internal fun copyLuminancePlaneToDirectBuffer(
     source: ByteBuffer,
     imageWidth: Int,
     imageHeight: Int,
     crop: LuminanceCrop,
     rowStride: Int,
     pixelStride: Int,
-): ByteArray {
+): ByteBuffer {
     require(imageWidth > 0 && imageHeight > 0) { "image dimensions must be positive" }
     require(rowStride > 0) { "row stride must be positive" }
     require(pixelStride > 0) { "pixel stride must be positive" }
@@ -94,16 +115,17 @@ internal fun copyLuminancePlane(
         "Y plane buffer is too small for its declared dimensions and strides"
     }
 
-    val output = ByteArray(outputSize)
-    var destination = 0
-
+    val output = ByteBuffer.allocateDirect(outputSize)
     for (row in crop.top until crop.bottom) {
         val rowStart = Math.multiplyExact(row.toLong(), rowStride.toLong())
         if (pixelStride == 1) {
             val sourceOffset = Math.toIntExact(Math.addExact(rowStart, crop.left.toLong()))
-            input.position(sourceOffset)
-            input.get(output, destination, crop.width)
-            destination += crop.width
+            val sourceEnd = Math.addExact(sourceOffset, crop.width)
+            val sourceRow = input.duplicate().apply {
+                position(sourceOffset)
+                limit(sourceEnd)
+            }
+            output.put(sourceRow)
         } else {
             for (column in crop.left until crop.right) {
                 val sourceOffset = Math.toIntExact(
@@ -112,11 +134,33 @@ internal fun copyLuminancePlane(
                         Math.multiplyExact(column.toLong(), pixelStride.toLong()),
                     ),
                 )
-                output[destination++] = input.get(sourceOffset)
+                output.put(input.get(sourceOffset))
             }
         }
     }
-    return output
+    output.flip()
+    return output.asReadOnlyBuffer()
+}
+
+/** Test-friendly heap projection of [copyLuminancePlaneToDirectBuffer]. Production analysis uses the
+ * direct-buffer function and does not incur this second copy. */
+internal fun copyLuminancePlane(
+    source: ByteBuffer,
+    imageWidth: Int,
+    imageHeight: Int,
+    crop: LuminanceCrop,
+    rowStride: Int,
+    pixelStride: Int,
+): ByteArray {
+    val direct = copyLuminancePlaneToDirectBuffer(
+        source = source,
+        imageWidth = imageWidth,
+        imageHeight = imageHeight,
+        crop = crop,
+        rowStride = rowStride,
+        pixelStride = pixelStride,
+    )
+    return ByteArray(direct.remaining()).also(direct::get)
 }
 
 /**
@@ -172,6 +216,7 @@ internal fun <T : AutoCloseable, R> closeAfter(
  */
 class CameraFrameAnalyzer(
     private val onEvent: (CameraAnalysisEvent) -> Unit,
+    private val clockNanos: () -> Long = System::nanoTime,
 ) : ImageAnalysis.Analyzer {
     override fun analyze(image: ImageProxy) {
         val result = closeAfter(image) { proxy ->
@@ -187,6 +232,16 @@ class CameraFrameAnalyzer(
                 width = cropRect.width(),
                 height = cropRect.height(),
             )
+            val extractionStartedNanos = clockNanos()
+            val luminance = copyLuminancePlaneToDirectBuffer(
+                source = plane.buffer,
+                imageWidth = proxy.width,
+                imageHeight = proxy.height,
+                crop = crop,
+                rowStride = plane.rowStride,
+                pixelStride = plane.pixelStride,
+            )
+            val extractionCompletedNanos = clockNanos()
             CameraAnalysisFrame(
                 width = crop.width,
                 height = crop.height,
@@ -194,14 +249,12 @@ class CameraFrameAnalyzer(
                 sourcePixelStride = plane.pixelStride,
                 rotationDegrees = proxy.imageInfo.rotationDegrees,
                 timestampNanos = proxy.imageInfo.timestamp,
-                luminance = copyLuminancePlane(
-                    source = plane.buffer,
-                    imageWidth = proxy.width,
-                    imageHeight = proxy.height,
-                    crop = crop,
-                    rowStride = plane.rowStride,
-                    pixelStride = plane.pixelStride,
+                extractionDurationNanos = Math.subtractExact(
+                    extractionCompletedNanos,
+                    extractionStartedNanos,
                 ),
+                pixelBufferCopyCount = 1,
+                luminance = luminance,
             )
         }
         result.fold(
