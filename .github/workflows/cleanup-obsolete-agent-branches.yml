@@ -1,0 +1,58 @@
+name: Cleanup obsolete agent branches
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cleanup-obsolete-agent-branches
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Delete obsolete assistant-created branches
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branches=(
+            agent/milestone-7-native-validation
+            agent/manual-lint-test-post-refactor
+            agent/refactor-repository-entities
+            agent/code-line-count
+            agent/manual-lint-test-20260726
+            agent/unit-test-coverage
+            agent/source-snapshot
+            cleanup-temp
+          )
+
+          for branch in "${branches[@]}"; do
+            if git ls-remote --exit-code --heads origin "refs/heads/${branch}" >/dev/null 2>&1; then
+              echo "Deleting ${branch}"
+              git push origin --delete "${branch}"
+            else
+              echo "Already absent: ${branch}"
+            fi
+          done
+
+          remaining="$(git ls-remote --heads origin 'refs/heads/agent/*')"
+          if [[ -n "${remaining}" ]]; then
+            echo "Unexpected agent branches remain:" >&2
+            echo "${remaining}" >&2
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --heads origin refs/heads/cleanup-temp >/dev/null 2>&1; then
+            echo "cleanup-temp still exists" >&2
+            exit 1
+          fi
+
+          echo "All obsolete assistant-created branches are gone."
