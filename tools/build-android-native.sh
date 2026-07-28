@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ABIS="${1:-${A2D_ANDROID_ABIS:-arm64-v8a x86_64}}"
-./tools/build-android-native-libs.sh "$ABIS"
+bash ./tools/build-android-native-libs.sh "$ABIS"
 
 first_abi=$(echo "$ABIS" | awk '{print $1}')
 lib_path="apps/android/app/src/main/jniLibs/$first_abi/liba2d_ffi.so"
