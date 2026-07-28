@@ -86,5 +86,12 @@ data class SinglePageScannerUiState(
         get() = (cameraState as? CameraAdapterState.Bound)?.torchEnabled == true
 
     val canCaptureManually: Boolean
-        get() = activeNotebook != null && !processing && reviewArtifact == null
+        get() =
+            activeNotebook != null &&
+                cameraState is CameraAdapterState.Bound &&
+                !processing &&
+                reviewArtifact == null
+
+    val canApprove: Boolean
+        get() = reviewArtifact?.approvalAllowed == true && !processing
 }
