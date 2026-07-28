@@ -1,18 +1,20 @@
 name: Reconcile CameraX adapter TODO
 
 on:
-  push:
-    branches: [master]
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   reconcile:
+    if: github.event.issue.title == '[A2D_INTERNAL] Reconcile CameraX TODO'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: master
           fetch-depth: 1
 
       - name: Reconcile authoritative TODO
