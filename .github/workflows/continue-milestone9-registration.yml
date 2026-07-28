@@ -1,7 +1,8 @@
 name: Continue Milestone 9 durable registration
 
 on:
-  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
     paths:
       - .github/tmp/continue-milestone9.trigger
 
@@ -9,14 +10,17 @@ permissions:
   contents: write
 
 concurrency:
-  group: continue-milestone9-registration
+  group: continue-milestone9-registration-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   apply-and-verify:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -34,7 +38,7 @@ jobs:
       - name: Verify Android unit tests and lint
         working-directory: apps/android
         run: ./gradlew testDebugUnitTest lintDebug --no-daemon
-      - name: Commit verified continuation
+      - name: Commit verified continuation to the pull request
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -42,5 +46,5 @@ jobs:
           git rm .github/tmp/apply-milestone9-registration.py.gz
           git rm .github/tmp/continue-milestone9.trigger
           git add -A
-          git commit -m "Wire durable scan registration into Android review"
-          git push
+          git commit -m "Wire durable scan registration into Android review [skip ci]"
+          git push origin "HEAD:${{ github.head_ref }}"
