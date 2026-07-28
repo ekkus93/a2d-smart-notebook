@@ -1,0 +1,52 @@
+name: Apply Milestone 9 lifecycle hardening
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - tools/apply-m9-registration-lifecycle-fix.py
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-m9-lifecycle-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  apply-test-and-clean:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "15859902"
+      - name: Apply lifecycle hardening
+        run: python tools/apply-m9-registration-lifecycle-fix.py
+      - name: Run focused Android verification
+        working-directory: apps/android
+        run: ./gradlew testDebugUnitTest lintDebug --no-daemon
+      - name: Commit verified lifecycle hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for path in \
+            tools/apply-m9-registration-lifecycle-fix.py \
+            .github/workflows/fix-m9-registration-lifecycle.yml \
+            .github/workflows/continue-milestone9-registration.yml \
+            .github/tmp/apply-milestone9-registration.py.gz \
+            .github/tmp/continue-milestone9.trigger \
+            .github/tmp/run-milestone9-full-ci
+          do
+            if test -e "$path"; then git rm --force "$path"; fi
+          done
+          git add -A
+          git commit -m "Harden durable registration lifecycle"
+          git push origin "HEAD:${{ github.head_ref }}"
