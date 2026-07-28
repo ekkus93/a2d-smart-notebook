@@ -11,6 +11,7 @@ mod detection;
 mod detector;
 mod encoded;
 mod error;
+mod fingerprint;
 mod input;
 mod quality;
 mod rectification;
@@ -27,6 +28,10 @@ pub use detection::{
 pub use detector::{AprilTagDetector, DetectorConfig, RenderedTag};
 pub use encoded::{
     EncodedImage, EncodedImageFormat, EncodedImageLimits, OwnedGrayImage, OwnedRgbImage,
+};
+pub use fingerprint::{
+    PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT, PERCEPTUAL_FINGERPRINT_V1_HEIGHT,
+    PERCEPTUAL_FINGERPRINT_V1_WIDTH, PerceptualFingerprintDifference, PerceptualFingerprintV1,
 };
 pub use input::{GrayFrame, ImageLimits, ImageRotation, PixelFormat};
 pub use quality::{

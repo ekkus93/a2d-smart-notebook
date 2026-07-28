@@ -205,6 +205,14 @@ fn first_registration_commits_assets_scan_and_preferred_page_atomically() {
     assert_eq!(page.preferred_scan_id.as_ref(), Some(&registered.scan_id));
     let scan = storage.get_scan(&registered.scan_id).unwrap().unwrap();
     assert!(scan.preferred);
+    assert!(
+        scan.content_fingerprint
+            .starts_with("scan-content-v1;corrected-sha256=")
+    );
+    assert!(
+        scan.content_fingerprint
+            .contains(";perceptual=mean-grid-16x24-v1:")
+    );
     for path in [
         registered.original_path,
         registered.corrected_path,
