@@ -1,19 +1,15 @@
 //! Binding-generation drift test (TODO 2.4). Not a golden-file diff against checked-in bindings
-//! — codegen formatting/version changes would make that brittle, and generated bindings aren't
-//! committed (they're build output; see `tools/generate-bindings.sh`). Instead this proves, on
-//! every test run, that the current FFI interface can still be turned into Kotlin and Swift
-//! bindings exposing the expected public API. If this stops passing, the interface has drifted
-//! into something UniFFI can no longer bind.
+//! — codegen formatting/version changes would make that brittle. Instead this proves, on every test
+//! run, that the current FFI interface can still be turned into Kotlin and Swift bindings exposing
+//! the expected public API. If this stops passing, the interface has drifted into something UniFFI
+//! can no longer bind.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Builds `a2d-ffi`'s cdylib and returns its path. Explicit, not assumed: `cargo test
 /// --workspace` alone does NOT reliably build the cdylib flavor of a `crate-type = ["lib",
-/// "cdylib"]` package (test binaries only need the rlib flavor to link against) — this test
-/// previously assumed the `.so` was already sitting in `target/debug/` from some earlier,
-/// unrelated `cargo build`/`cargo ndk` invocation, which happened to be true in local dev but
-/// not on a fresh CI checkout. Building it here makes the test self-sufficient.
+/// "cdylib"]` package (test binaries only need the rlib flavor to link against).
 fn build_cdylib() -> PathBuf {
     let status = Command::new(env!("CARGO"))
         .args(["build", "-p", "a2d-ffi", "--lib"])
@@ -85,12 +81,18 @@ fn temp_out_dir(label: &str) -> PathBuf {
     dir
 }
 
-const EXPECTED_API_SYMBOLS: [&str; 5] = [
+const EXPECTED_API_SYMBOLS: [&str; 11] = [
     "A2dClient",
     "OpenLibraryRequest",
     "generatePageId",
     "parsePageId",
     "generateExampleSmartPageQrPayload",
+    "registerScan",
+    "RegisterScanRequest",
+    "RegisteredScan",
+    "RegistrationMarker",
+    "RegisteredScanWarning",
+    "RegisteredScanRequiredAction",
 ];
 
 #[test]
