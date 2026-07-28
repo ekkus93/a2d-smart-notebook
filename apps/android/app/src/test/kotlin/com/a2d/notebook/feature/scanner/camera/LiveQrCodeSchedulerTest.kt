@@ -164,7 +164,7 @@ private class ManualExecutor : AbstractExecutorService() {
     }
     override fun shutdownNow(): MutableList<Runnable> {
         shutdown = true
-        return tasks.toMutableList().also(tasks::clear)
+        return tasks.toMutableList().also { tasks.clear() }
     }
     override fun isShutdown(): Boolean = shutdown
     override fun isTerminated(): Boolean = shutdown && tasks.isEmpty()
