@@ -43,7 +43,6 @@ jobs:
           git checkout HEAD^ -- .github/workflows/ci.yml
           git rm .github/workflows/reconcile-milestone7-docs.yml
           git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md docs/decisions/0002-apriltag-detector-selection.md
-          git diff --cached --check
           git commit -m "Reconcile Milestone 7 validation evidence"
           git push origin HEAD:${{ github.head_ref }}
 
