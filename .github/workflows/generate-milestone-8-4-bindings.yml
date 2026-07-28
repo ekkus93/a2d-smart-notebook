@@ -30,128 +30,120 @@ jobs:
           java-version: "21"
       - uses: Swatinem/rust-cache@v2
       - uses: android-actions/setup-android@v3
-      - name: Apply reviewed Rust fixes
+      - name: Replace mismatched synthetic preview fixture
         run: |
+          set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
+          cargo = Path("crates/a2d-ffi/Cargo.toml")
+          cargo_text = cargo.read_text(encoding="utf-8")
+          if "[dev-dependencies]" not in cargo_text:
+              cargo_text += '\n[dev-dependencies]\nimage = "0.25"\n'
+          elif 'image = "0.25"' not in cargo_text:
+              raise SystemExit("a2d-ffi already has an unexpected dev-dependencies section")
+          cargo.write_text(cargo_text, encoding="utf-8")
+
           path = Path("crates/a2d-ffi/src/milestone8.rs")
           text = path.read_text(encoding="utf-8")
-          replacements = [
-              (
-                  """#[derive(Clone, Debug, uniffi::Enum)]
-          pub enum ProcessEncodedPagePreviewOutcome {
-              Completed {
-                  result: ProcessEncodedPagePreviewResult,
-              },
-              Cancelled,
-          }
-          """,
-                  """#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
-          pub enum ProcessEncodedPagePreviewStatus {
-              Completed,
-              Cancelled,
-          }
+          if "fn encoded_notebook_page()" not in text:
+              old_import = """    use super::*;
+              use crate::{EncodedImageRotation, ImageFileFormat};
+          """
+              new_import = """    use std::io::Cursor;
 
-          #[derive(Clone, Debug, uniffi::Record)]
-          pub struct ProcessEncodedPagePreviewOutcome {
-              pub status: ProcessEncodedPagePreviewStatus,
-              pub result: Option<ProcessEncodedPagePreviewResult>,
-          }
-          """,
-                  1,
-              ),
-              (
-                  """fn is_cancelled(error: &A2dError) -> bool {
-              error.code.to_string() == "DERIVED_PROCESSING_CANCELLED"
-          }
-          """,
-                  """fn is_cancelled(error: &A2dError) -> bool {
-              error.code.to_string() == "DERIVED_PROCESSING_CANCELLED"
-          }
+              use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 
-          fn cancelled_outcome() -> ProcessEncodedPagePreviewOutcome {
-              ProcessEncodedPagePreviewOutcome {
-                  status: ProcessEncodedPagePreviewStatus::Cancelled,
-                  result: None,
+              use super::*;
+              use crate::{EncodedImageRotation, ImageFileFormat};
+          """
+              if text.count(old_import) != 1:
+                  raise SystemExit("milestone8 test import anchor changed")
+              text = text.replace(old_import, new_import, 1)
+
+              request_anchor = """    fn request() -> ProcessEncodedPagePreviewRequest {
+          """
+              helper = """    fn encoded_notebook_page() -> Vec<u8> {
+                  const PAGE_WIDTH: u32 = 1_216;
+                  const PAGE_HEIGHT: u32 = 1_832;
+                  const BORDER: u32 = 64;
+
+                  let layout = writable_page_layout();
+                  let source_width = PAGE_WIDTH + 2 * BORDER;
+                  let source_height = PAGE_HEIGHT + 2 * BORDER;
+                  let mut image = RgbImage::from_pixel(source_width, source_height, Rgb([45, 48, 56]));
+                  for y in BORDER..BORDER + PAGE_HEIGHT {
+                      for x in BORDER..BORDER + PAGE_WIDTH {
+                          image.put_pixel(x, y, Rgb([250, 249, 246]));
+                      }
+                  }
+
+                  let detector = AprilTagDetector::new(DetectorConfig::default()).unwrap();
+                  let marker_ids = [
+                      (MarkerRole::TopLeft, 0),
+                      (MarkerRole::TopRight, 1),
+                      (MarkerRole::BottomRight, 2),
+                      (MarkerRole::BottomLeft, 3),
+                  ];
+                  for (role, id) in marker_ids {
+                      let placement = layout
+                          .markers
+                          .iter()
+                          .find(|placement| placement.role == role)
+                          .expect("production layout must contain every marker role");
+                      let tag = detector.render_tag(id).unwrap();
+                      let left = BORDER
+                          + (placement.rect.left() / layout.physical_size.width_mm
+                              * f64::from(PAGE_WIDTH - 1))
+                              .round() as u32;
+                      let top = BORDER
+                          + (placement.rect.top() / layout.physical_size.height_mm
+                              * f64::from(PAGE_HEIGHT - 1))
+                              .round() as u32;
+                      let target_width = (placement.rect.size.width_mm
+                          / layout.physical_size.width_mm
+                          * f64::from(PAGE_WIDTH - 1))
+                          .round() as u32;
+                      let target_height = (placement.rect.size.height_mm
+                          / layout.physical_size.height_mm
+                          * f64::from(PAGE_HEIGHT - 1))
+                          .round() as u32;
+                      assert!(target_width > 0 && target_height > 0);
+                      assert!(left + target_width <= source_width);
+                      assert!(top + target_height <= source_height);
+
+                      for y in 0..target_height {
+                          let source_y = y as usize * tag.height() / target_height as usize;
+                          for x in 0..target_width {
+                              let source_x = x as usize * tag.width() / target_width as usize;
+                              let value = tag.pixel(source_x, source_y).unwrap();
+                              image.put_pixel(left + x, top + y, Rgb([value, value, value]));
+                          }
+                      }
+                  }
+
+                  let mut encoded = Cursor::new(Vec::new());
+                  DynamicImage::ImageRgb8(image)
+                      .write_to(&mut encoded, ImageFormat::Png)
+                      .unwrap();
+                  encoded.into_inner()
               }
-          }
-          """,
-                  1,
-              ),
-              (
-                  "return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);",
-                  "return Ok(cancelled_outcome());",
-                  4,
-              ),
-              (
-                  """        .map(|value| {
-                      Ok(SharpenConfig::new(
-                          value.amount,
-                          to_u8(value.threshold, "sharpening.threshold")?,
-                          to_u8(value.passes, "sharpening.passes")?,
-                      )?)
-                  })
-          """,
-                  """        .map(|value| {
-                      SharpenConfig::new(
-                          value.amount,
-                          to_u8(value.threshold, "sharpening.threshold")?,
-                          to_u8(value.passes, "sharpening.passes")?,
-                      )
-                  })
-          """,
-                  1,
-              ),
-              (
-                  """    Ok(ProcessEncodedPagePreviewOutcome::Completed {
-                  result: ProcessEncodedPagePreviewResult {
-          """,
-                  """    Ok(ProcessEncodedPagePreviewOutcome {
-                  status: ProcessEncodedPagePreviewStatus::Completed,
-                  result: Some(ProcessEncodedPagePreviewResult {
-          """,
-                  1,
-              ),
-              (
-                  """            source_to_corrected_matrix: matrix,
-                  },
-              })
-          """,
-                  """            source_to_corrected_matrix: matrix,
-                  }),
-              })
-          """,
-                  1,
-              ),
-              (
-                  """        let ProcessEncodedPagePreviewOutcome::Completed { result } = outcome else {
-                      panic!("expected completed preview processing");
-                  };
-          """,
-                  """        assert_eq!(outcome.status, ProcessEncodedPagePreviewStatus::Completed);
-                  let result = outcome.result.expect("completed processing must return a result");
-          """,
-                  1,
-              ),
-              (
-                  """        assert!(matches!(
-                      outcome,
-                      ProcessEncodedPagePreviewOutcome::Cancelled
-                  ));
-          """,
-                  """        assert_eq!(outcome.status, ProcessEncodedPagePreviewStatus::Cancelled);
-                  assert!(outcome.result.is_none());
-          """,
-                  1,
-              ),
-          ]
-          for old, new, expected in replacements:
-              actual = text.count(old)
-              if actual != expected:
-                  raise SystemExit(f"expected {expected} occurrences, found {actual}: {old[:80]!r}")
-              text = text.replace(old, new)
-          path.write_text(text, encoding="utf-8")
+
+              fn request() -> ProcessEncodedPagePreviewRequest {
+          """
+              if text.count(request_anchor) != 1:
+                  raise SystemExit("milestone8 request anchor changed")
+              text = text.replace(request_anchor, helper, 1)
+
+              old_bytes = """                encoded_bytes: include_bytes!("../../../fixtures/scans/generated/base-page.png")
+                                  .to_vec(),
+          """
+              new_bytes = """                encoded_bytes: encoded_notebook_page(),
+          """
+              if text.count(old_bytes) != 1:
+                  raise SystemExit("mismatched synthetic fixture anchor changed")
+              text = text.replace(old_bytes, new_bytes, 1)
+              path.write_text(text, encoding="utf-8")
           PY
       - name: Install pinned Android native toolchain
         run: |
@@ -190,7 +182,8 @@ jobs:
           cp milestone-8-4-bindings.log .github/tmp/milestone-8-4-bindings-failure.log
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/tmp/milestone-8-4-bindings-failure.log crates/a2d-ffi/src/lib.rs crates/a2d-ffi/src/milestone8.rs
+          git add Cargo.lock crates/a2d-ffi/Cargo.toml crates/a2d-ffi/src/lib.rs \
+            crates/a2d-ffi/src/milestone8.rs .github/tmp/milestone-8-4-bindings-failure.log
           git commit -m "Record Milestone 8.4 binding failure [skip m8-4-bindings]"
           git fetch origin master
           git rebase origin/master
@@ -204,7 +197,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/generate-milestone-8-4-bindings.yml
           git rm -f .github/tmp/milestone-8-4-bindings-failure.log || true
-          git add crates/a2d-ffi/src/lib.rs crates/a2d-ffi/src/milestone8.rs \
+          git add Cargo.lock crates/a2d-ffi/Cargo.toml crates/a2d-ffi/src/lib.rs \
+            crates/a2d-ffi/src/milestone8.rs \
             apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
           git commit -m "Generate Milestone 8.4 scanner preview bindings [skip ci]"
           git fetch origin master
