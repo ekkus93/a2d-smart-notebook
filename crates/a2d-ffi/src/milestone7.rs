@@ -281,10 +281,8 @@ mod tests {
 
     fn canonical_request() -> AnalyzeEncodedPageRequest {
         AnalyzeEncodedPageRequest {
-            encoded_bytes: include_bytes!(
-                "../../../fixtures/scans/generated/base-page.png"
-            )
-            .to_vec(),
+            encoded_bytes: include_bytes!("../../../fixtures/scans/generated/base-page.png")
+                .to_vec(),
             format: ImageFileFormat::Png,
             rotation: EncodedImageRotation::Degrees0,
             max_encoded_bytes: 1_000_000,
@@ -333,9 +331,6 @@ mod tests {
         request.detector_thread_count = 256;
 
         let error = analyze_encoded_page_impl(request).unwrap_err();
-        assert_eq!(
-            error.code.to_string(),
-            "IMAGE_FFI_PARAMETER_OUT_OF_RANGE"
-        );
+        assert_eq!(error.code.to_string(), "IMAGE_FFI_PARAMETER_OUT_OF_RANGE");
     }
 }
