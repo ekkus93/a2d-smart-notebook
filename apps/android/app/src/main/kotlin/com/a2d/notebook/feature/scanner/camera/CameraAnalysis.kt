@@ -39,7 +39,7 @@ sealed interface CameraAnalysisEvent {
 
     data class Failure(
         val message: String,
-        val cause: Throwable,
+        val cause: Exception,
     ) : CameraAnalysisEvent
 }
 
@@ -62,6 +62,9 @@ internal data class LuminanceCrop(
  * Copies a cropped Y plane while respecting row and pixel stride. The source buffer is never
  * mutated. Invalid geometry is rejected rather than truncated, clamped, or represented as an empty
  * successful frame.
+ *
+ * Camera plane geometry is indexed from the start of the plane buffer. The duplicate is rewound but
+ * keeps the source limit, so inaccessible bytes between limit and capacity are never read.
  */
 internal fun copyLuminancePlane(
     source: ByteBuffer,
@@ -85,27 +88,30 @@ internal fun copyLuminancePlane(
         Math.multiplyExact(lastRow.toLong(), rowStride.toLong()),
         Math.multiplyExact(lastColumn.toLong(), pixelStride.toLong()),
     )
-    require(lastIndex < source.capacity().toLong()) {
+
+    val input = source.duplicate().apply { rewind() }
+    require(lastIndex < input.limit().toLong()) {
         "Y plane buffer is too small for its declared dimensions and strides"
     }
 
-    val input = source.duplicate().apply { clear() }
     val output = ByteArray(outputSize)
     var destination = 0
 
     for (row in crop.top until crop.bottom) {
-        val rowStart = row.toLong() * rowStride.toLong()
+        val rowStart = Math.multiplyExact(row.toLong(), rowStride.toLong())
         if (pixelStride == 1) {
-            val sourceOffset = Math.addExact(rowStart, crop.left.toLong()).toInt()
+            val sourceOffset = Math.toIntExact(Math.addExact(rowStart, crop.left.toLong()))
             input.position(sourceOffset)
             input.get(output, destination, crop.width)
             destination += crop.width
         } else {
             for (column in crop.left until crop.right) {
-                val sourceOffset = Math.addExact(
-                    rowStart,
-                    column.toLong() * pixelStride.toLong(),
-                ).toInt()
+                val sourceOffset = Math.toIntExact(
+                    Math.addExact(
+                        rowStart,
+                        Math.multiplyExact(column.toLong(), pixelStride.toLong()),
+                    ),
+                )
                 output[destination++] = input.get(sourceOffset)
             }
         }
@@ -113,26 +119,56 @@ internal fun copyLuminancePlane(
     return output
 }
 
-/** Always closes [resource], preserving a processing failure and suppressing any close failure. */
+/**
+ * Always closes [resource]. Ordinary processing/close exceptions become [Result] failures; fatal
+ * JVM errors are never converted into recoverable camera events and are rethrown after closure.
+ */
 internal fun <T : AutoCloseable, R> closeAfter(
     resource: T,
     block: (T) -> R,
 ): Result<R> {
-    val result = runCatching { block(resource) }
-    return try {
-        resource.close()
-        result
-    } catch (closeFailure: Throwable) {
-        result.exceptionOrNull()?.let { original ->
-            original.addSuppressed(closeFailure)
-            Result.failure(original)
-        } ?: Result.failure(closeFailure)
+    var result: Result<R>? = null
+    var fatalFailure: Throwable? = null
+
+    try {
+        result = try {
+            Result.success(block(resource))
+        } catch (failure: Exception) {
+            Result.failure(failure)
+        } catch (failure: Throwable) {
+            fatalFailure = failure
+            throw failure
+        }
+    } finally {
+        try {
+            resource.close()
+        } catch (closeFailure: Throwable) {
+            val processingFailure = fatalFailure ?: result?.exceptionOrNull()
+            when {
+                closeFailure !is Exception -> {
+                    processingFailure?.let(closeFailure::addSuppressed)
+                    throw closeFailure
+                }
+
+                processingFailure != null -> {
+                    processingFailure.addSuppressed(closeFailure)
+                    if (fatalFailure == null) {
+                        result = Result.failure(processingFailure)
+                    }
+                }
+
+                else -> result = Result.failure(closeFailure)
+            }
+        }
     }
+
+    return checkNotNull(result) { "camera frame processing completed without a result" }
 }
 
 /**
- * CameraX analyzer that owns no frame after [analyze] returns. Every success and failure is surfaced
- * through [onEvent], and every [ImageProxy] is closed even if validation or copying fails.
+ * CameraX analyzer that owns no frame after [analyze] returns. Every recoverable success and failure
+ * is surfaced through [onEvent], and every [ImageProxy] is closed even if validation or copying
+ * fails. Fatal JVM errors propagate after the frame is closed.
  */
 class CameraFrameAnalyzer(
     private val onEvent: (CameraAnalysisEvent) -> Unit,
@@ -170,11 +206,13 @@ class CameraFrameAnalyzer(
         }
         result.fold(
             onSuccess = { onEvent(CameraAnalysisEvent.Frame(it)) },
-            onFailure = {
+            onFailure = { failure ->
+                val exception = failure as? Exception
+                    ?: throw failure
                 onEvent(
                     CameraAnalysisEvent.Failure(
-                        message = it.message ?: "CameraX analysis failed",
-                        cause = it,
+                        message = exception.message ?: "CameraX analysis failed",
+                        cause = exception,
                     ),
                 )
             },
