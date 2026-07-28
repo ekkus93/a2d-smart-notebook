@@ -1,6 +1,6 @@
 # 0002. Corner-marker (AprilTag) detector selection
 
-**Status:** Proposed — official detector selected; native portability confirmed; fixture and packaging evidence pending  
+**Status:** Proposed — official detector selected; synthetic/runtime/packaging evidence complete; physical-device evidence pending  
 **Date:** 2026-07-27  
 **Decision owners/authors:** A2D project
 
@@ -8,7 +8,7 @@
 
 Spec §17.3 requires evaluating the official AprilTag 3 native detector library as the primary option for reading the four Corner Markers on every writable page, with a pure-Rust alternative considered only if it materially reduces packaging risk. The selected implementation must build reproducibly for the required Android ABIs, have a documented license review, produce deterministic fixture results within tolerance, expose marker ID/corners/quality data, and be structured so the same native implementation can target iOS later.
 
-The first Milestone 7 implementation uses `apriltag-sys = 0.4.0` to compile the bundled official AprilTag C source and exposes a narrow safe Rust API from `a2d-image`. Pinned CI validation now confirms the desktop detector path, both required Android ABIs, and future iOS device/simulator compile feasibility. This ADR remains Proposed because representative photographed fixtures, device-tier performance measurements, final APK packaging, and release notices are still incomplete.
+The Milestone 7 implementation uses `apriltag-sys = 0.4.0` to compile the bundled official AprilTag C source and exposes a narrow safe Rust API from `a2d-image`. Pinned CI now confirms the desktop detector path, both required Android ABIs, future iOS device/simulator compile feasibility, deterministic synthetic regression envelopes, final APK packaging and notices, and packaged `x86_64` execution through the Android UniFFI/JNA boundary. This ADR remains Proposed only because representative photographed fixtures and physical Android device-tier performance measurements are still incomplete.
 
 ## Constraints
 
@@ -37,7 +37,7 @@ Advantages:
 Risks:
 
 - Adds a C FFI memory-safety boundary.
-- Final Android application packaging still must be proven.
+- Final APK packaging is proven for `arm64-v8a` and `x86_64`; physical `arm64-v8a` runtime and device-tier performance still must be proven.
 - The crate is not itself an Android/iOS product integration layer; A2D owns that validation and packaging.
 
 ### Option 2 — Pure-Rust AprilTag-compatible detector
@@ -55,8 +55,8 @@ The decision becomes Accepted only after:
 1. the desktop detector test passes in CI — **complete**;
 2. bundled-source builds pass for `arm64-v8a` and `x86_64` — **complete**;
 3. the same crate compiles for an iOS device target and Apple Silicon simulator target — **complete**;
-4. performance evidence is recorded from representative fixtures and target Android device tiers — **pending**; and
-5. final APK packaging and third-party notice obligations are demonstrated — **pending**.
+4. performance evidence is recorded from representative photographed fixtures and target physical Android device tiers — **pending**; and
+5. final APK packaging and third-party notice obligations are demonstrated — **complete**.
 
 A pure-Rust alternative will be evaluated only if later fixture, performance, or application-packaging validation exposes a material risk.
 
@@ -101,13 +101,13 @@ GitHub Actions run [`30308722258`](https://github.com/ekkus93/a2d-smart-notebook
 
 ## Compatibility/fixture implications
 
-The detector test renders four `tagStandard41h12` tags through the same official library, places them into a generated grayscale frame, detects them, resolves semantic roles, and verifies orientation and quality fields.
+The deterministic corpus contains a content-bearing canonical notebook page plus rotation, perspective, exposure, blur, glare, missing-marker, wrong-layout, wrong-tag-set, duplicate-marker, revision, truncated-image, and non-image controls. It uses the pinned official `tagStandard41h12` renderer and canonical Rust Page Code encoder rather than reimplementing either format in Python.
 
-In run `30308722258`, that generated four-tag frame was detected in `9.505117 ms` on the GitHub-hosted desktop runner. This is a deterministic smoke measurement, not a representative Android-device benchmark and not an auto-capture threshold.
+Versioned synthetic processing envelopes in `fixtures/scans/processing-expectations.tsv` constrain dimensions, raw luminance/focus measurements, detector counts and IDs, decision margins, Hamming errors, and explicit resolution/error behavior. These envelopes prevent regression drift; they are not physical-camera tolerances, Android performance targets, or production auto-capture policy.
 
-The generated test is necessary but not sufficient. Milestone 7 still requires legally usable photographed, blur, glare, missing-marker, wrong-layout, duplicate, revision, and corrupted fixtures with explicit source/license metadata and tolerances.
+GitHub Actions native run `30326733326` regenerated the corpus byte-for-byte, enforced the processing envelopes, emitted raw measurements, built both Android ABIs, and confirmed future Apple compile feasibility. Full CI run `30326733320` exercised the canonical PNG through the packaged `x86_64` Android library and typed UniFFI/JNA boundary.
 
-Changing detector implementation or family after those fixtures are committed will require explicit compatibility review and may require re-deriving tolerances.
+Representative photographed captures remain necessary before this decision can be Accepted. Changing detector implementation or family after those fixtures are committed will require explicit compatibility review and may require re-deriving tolerances.
 
 ## License review
 
@@ -115,7 +115,7 @@ The committed engineering review is:
 
 `docs/reviews/APRILTAG_LICENSE_REVIEW_2026-07-27.md`
 
-Both `apriltag-sys 0.4.0` and the bundled official AprilTag source use BSD-2-Clause terms compatible with the Apache-2.0 A2D project. Binary distribution must reproduce the required notices and disclaimer. Release packaging must include third-party notices before an APK is distributed.
+Both `apriltag-sys 0.4.0` and the bundled official AprilTag source use BSD-2-Clause terms compatible with the Apache-2.0 A2D project. Binary distribution must reproduce the required notices and disclaimer. The verified debug APK now includes the required third-party notices and the project Apache-2.0 license; permanent CI rejects absent or mismatched notice/license assets.
 
 ## Consequences and tradeoffs
 
@@ -133,7 +133,8 @@ Costs and risks:
 - Native mobile builds add CI time and toolchain complexity.
 - The current safe boundary performs one frame copy.
 - Physical fixture thresholds remain unmeasured and cannot yet drive auto-capture policy.
-- Successful library cross-compilation does not prove final APK packaging or runtime loading.
+- APK structure and packaged `x86_64` runtime loading are proven, but physical `arm64-v8a` loading,
+  latency, and memory behavior remain unmeasured.
 
 ## Validation evidence
 
@@ -149,21 +150,20 @@ Costs and risks:
 - [x] Reproducible `x86_64` Android build confirmed with NDK `27.0.12077973` and `cargo-ndk 4.1.2`.
 - [x] iOS device-target compile feasibility confirmed by CI.
 - [x] iOS simulator-target compile feasibility confirmed by CI.
+- [x] Deterministic synthetic fixture results and versioned regression envelopes committed.
+- [x] Packaged shared-Rust analysis executed successfully on an Android `x86_64` emulator.
 - [ ] Representative photographed fixture results committed.
-- [ ] Performance measurements recorded for representative fixture/device tiers.
-- [ ] Final Android packaging into the application APK demonstrated.
-- [ ] Third-party notices included in release packaging.
+- [ ] Performance measurements recorded for representative physical device tiers.
+- [x] Final Android packaging into the application APK demonstrated for `arm64-v8a` and `x86_64`.
+- [x] Third-party notices and the project license included and verified in APK packaging.
 
 ## Follow-up tasks
 
-1. Create the Milestone 7 fixture corpus and metadata format.
-2. Add photographed/perturbed detector fixtures and tolerance assertions.
-3. Measure representative analysis latency on supported Android device tiers.
-4. Demonstrate `a2d-image`/AprilTag packaging and runtime loading in the Android APK when the shared analysis path reaches `a2d-ffi`.
-5. Add required BSD-2-Clause notices to release packaging before distribution.
-6. Expose the validated analysis path through `a2d-core`/UniFFI when Milestone 8 CameraX integration begins.
-7. Move this ADR to Accepted only after the remaining required evidence is committed.
-8. Update `docs/decisions/README.md` when the status changes.
+1. Commit representative photographed Android fixtures with source/consent/license and device/capture metadata.
+2. Add physical-fixture tolerance assertions without converting synthetic envelopes into production thresholds.
+3. Prove packaged `arm64-v8a` runtime loading and measure representative latency and memory behavior on supported Android device tiers.
+4. Move this ADR to Accepted only after the remaining physical evidence is committed.
+5. Update `docs/decisions/README.md` when the status changes.
 
 ## Superseding ADR reference
 

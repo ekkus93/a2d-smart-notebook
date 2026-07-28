@@ -1,8 +1,8 @@
 # A2D Smart Notebook v0.1 — Implementation TODO
 
-**Status:** Milestones 1–6 implemented; Milestone 7 is next  
+**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence  
 **Version:** 0.1  
-**Date:** 2026-07-27  
+**Date:** 2026-07-28  
 **Repository:** `ekkus93/a2d-smart-notebook`  
 **Authoritative specification:** `docs/A2D_SMART_NOTEBOOK_V01_SPEC.md`
 
@@ -164,9 +164,10 @@ Acceptance:
       MPL-2.0 wasn't allow-listed (uniffi's license) and workspace-internal path dependencies
       were flagged as "wildcard" — fixed by marking all 15 crates `publish = false`, which
       `allow-wildcard-paths` requires.)
-- [ ] Fixture compatibility checks after fixtures exist. (No fixtures exist yet — blocked on
-      ADR 0001 reaching Accepted, which needs Milestone 5's physical layout. Add this job when
-      Milestone 4.3 lands.)
+- [x] Fixture compatibility checks. Permanent CI regenerates the deterministic scan corpus,
+      verifies manifest metadata and hashes, fails on byte drift, enforces versioned synthetic
+      processing envelopes, runs Android ZXing conformance tests, and exercises the packaged shared
+      Rust analysis path on an Android emulator.
 
 Required commands:
 
@@ -1080,21 +1081,21 @@ Validation evidence:
       `cargo-ndk 4.1.2` and builds `arm64-v8a` plus `x86_64` directly against `a2d-image`.
 - [x] Wrap ownership and errors safely for Rust. Native detector, family, image, and detection-array
       lifetimes are private RAII guards; public results own their data and failures are typed.
-- [ ] Measure detection on representative grayscale fixtures. A deterministic synthetic corpus now
-      covers a canonical page plus rotation, perspective, exposure, blur, glare, missing-marker,
-      wrong-layout, duplicate-marker, revision, and corrupt-input variants. Desktop tests detect and
-      resolve the canonical page, but photographed fixtures and Android device-tier measurements are
-      still required before this evidence gate is complete.
+- [ ] Complete representative photographed-fixture and physical Android device-tier measurements.
+      The deterministic synthetic corpus now has calibrated regression envelopes and runs through
+      desktop Rust plus the packaged `x86_64` Android integration boundary. Photographed fixtures and
+      physical `arm64-v8a` measurements remain required before this evidence gate is complete.
 - [x] Confirm future iOS build feasibility. The same crate compiles for `aarch64-apple-ios` and
       `aarch64-apple-ios-sim`; this is compile feasibility only, not iOS application work.
 - [x] Compare a pure-Rust alternative only if it materially reduces packaging risk. The contingency
       was reviewed and not triggered because the pinned official implementation cross-compiles for
       every required native target; a comparison remains conditional on later material risk.
 - [ ] Accept `docs/decisions/0002-apriltag-detector-selection.md`, naming the selected
-      implementation and recording license review, Android ABI build results, desktop fixture
-      results, performance measurements, the memory-safety boundary, packaging strategy, and
-      future iOS feasibility. The ADR remains Proposed until representative fixtures, Android
-      device measurements, final APK packaging, and third-party notices are proven.
+      implementation and recording license review, Android ABI build results, fixture results,
+      performance measurements, the memory-safety boundary, packaging strategy, and future iOS
+      feasibility. The ADR remains Proposed until representative photographed fixtures and physical
+      Android device-tier performance measurements are committed. APK packaging, third-party notices,
+      synthetic fixture envelopes, and emulator runtime loading are already proven.
 
 The spike ends with code, tests, pinned CI, and committed evidence rather than prose only.
 
@@ -1128,23 +1129,22 @@ Return marker ID, four corners, center, decision margin, and error-quality data.
       payload trust boundary. See `docs/decisions/0003-qr-image-decoder-boundary.md`.
 - [x] Always send decoded payload text to Rust for canonical grammar, version, bounds, layout, and
       CRC validation.
-- [ ] Add legally usable blur, rotation, scale, glare, and damage fixtures for the shipped decoder.
-      The synthetic page corpus now contains valid A2D QR codes under rotation, blur, glare,
-      perspective, exposure, wrong-layout, and corruption transforms, but Android ZXing conformance,
-      explicit scale cases, and controlled QR damage cases are not yet implemented.
+- [x] Add legally usable blur, rotation, scale, glare, distortion, and controlled-damage cases for
+      the shipped ZXing decoder. Deterministic JVM conformance tests exercise pixel-buffer decoding
+      separately from Android file I/O, while Rust remains the canonical payload trust boundary.
 - [x] Never accept a decoder result without Rust validation; decoder success alone cannot trigger an
       A2D identity or workflow success state.
 
 Validation evidence for the reconciled work:
 
-- GitHub Actions native run `30309797591` completed successfully on 2026-07-27.
-- GitHub Actions full CI run `30309797600` completed successfully on 2026-07-27.
-- Rust formatting, clippy with warnings denied, and the full workspace test suite passed.
-- Dependency/license checks passed.
-- Android lint, unit tests, and debug APK assembly passed.
-- Kotlin UniFFI binding-drift validation passed.
-- Pinned Android `arm64-v8a`/`x86_64` native builds and future Apple device/simulator compile checks
-  passed.
+- GitHub Actions native run `30326733326` completed successfully on 2026-07-28.
+- GitHub Actions full CI run `30326733320` completed successfully on 2026-07-28.
+- Android ZXing conformance tests cover scale, rotation, blur, glare, distortion, and controlled damage.
+- Rust formatting, clippy with warnings denied, the full workspace test suite, and dependency/license
+  checks passed.
+- Android lint, unit tests, debug APK assembly, Kotlin UniFFI binding drift, both packaged native ABIs,
+  detector linkage, and packaged notices passed verification.
+- Future Apple device/simulator compile-feasibility checks passed; no iOS application work is claimed.
 
 ## 7.5 Homography and rectification
 
@@ -1284,9 +1284,11 @@ fixtures/scans/
       and provenance field through `tools/verify_scan_fixtures.py`.
 - [x] Regenerate the corpus in read-only CI and compare every generated category plus the manifest
       byte-for-byte against committed assets so generator drift fails explicitly.
-- [ ] Add calibrated processing tolerances for each relevant fixture. Current CI enforces byte-exact asset
-      regeneration plus exact discrete marker/decode expectations; it does not invent production quality
-      thresholds or physical-camera tolerances.
+- [x] Add calibrated processing tolerances for each relevant synthetic fixture. Versioned entries in
+      `fixtures/scans/processing-expectations.tsv` enforce fixture-specific dimensions, luminance/focus
+      ranges, detector counts and IDs, decision-margin/Hamming bounds, and explicit resolution/error
+      behavior. These are deterministic synthetic regression envelopes, not production quality thresholds
+      or physical-camera tolerances.
 - [ ] Add real photographed Android fixtures with source/consent/license, device, camera, lighting,
       print/page, and capture-condition metadata.
 
@@ -1295,15 +1297,28 @@ Acceptance:
 - [x] A desktop Rust integration test processes all generated PNGs without Android through bounded
       encoded-image decoding, Gray8 conversion, and quality measurement; detects/resolves marker IDs
       `0..=3` on the canonical page; and confirms corrupt controls fail without fabricated success.
-- [ ] Android calls the same shared processing path. This remains a Milestone 8 integration task.
+- [x] Android calls the same shared processing path. An Android instrumentation test reads the canonical
+      synthetic PNG from the test APK and executes the typed Kotlin façade, generated UniFFI/JNA binding,
+      packaged `x86_64` Rust library, bounded decoder, Gray8 conversion, official AprilTag detector,
+      semantic marker resolution, and quality measurement without mocked detector results.
 
 Validation evidence:
 
-- GitHub Actions native/fixture run `30315949013` passed deterministic regeneration and byte-drift
-  comparison, fixture clippy/tests, pinned Android `arm64-v8a`/`x86_64` native builds, and future Apple
-  compile-feasibility checks.
-- GitHub Actions full CI run `30315948996` passed workspace formatting/clippy/tests,
-  dependency/license checks, Android lint/tests/debug APK assembly, and Kotlin binding drift.
+- GitHub Actions native/fixture run `30326733326` passed deterministic regeneration and byte-drift
+  comparison, synthetic processing envelopes, raw-measurement artifact generation, pinned Android
+  `arm64-v8a`/`x86_64` native builds, and future Apple compile-feasibility checks.
+- GitHub Actions full CI run `30326733320` passed workspace formatting/clippy/tests,
+  dependency/license checks, Android lint/tests/debug APK assembly, Kotlin binding drift, APK native
+  ABI/linkage/notices verification, and the packaged shared-Rust Android emulator integration test.
+
+Remaining Milestone 7 evidence:
+
+- [ ] Commit real photographed Android fixtures with source/consent/license and device/capture metadata.
+- [ ] Record representative physical `arm64-v8a` runtime, latency, and memory measurements across the
+      supported Android device tiers.
+- [ ] Recalibrate any production capture policy only from physical evidence; do not promote synthetic
+      regression envelopes into production thresholds.
+- [ ] Move ADR 0002 to Accepted after the physical evidence gates above pass.
 
 ---
 
