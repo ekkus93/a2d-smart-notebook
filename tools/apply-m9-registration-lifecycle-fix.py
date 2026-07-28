@@ -70,3 +70,4 @@ replace_once(
 )
 
 path.write_text(text)
+# Merge-triggered validation run.
