@@ -1,7 +1,6 @@
 package com.a2d.notebook.feature.scanner.camera
 
 import android.graphics.ImageFormat
-import android.graphics.Rect
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import java.nio.ByteBuffer
@@ -29,7 +28,7 @@ data class CameraAnalysisFrame(
         require(rotationDegrees in setOf(0, 90, 180, 270)) {
             "rotation must be one of 0, 90, 180, or 270 degrees"
         }
-        require(luminance.size == width * height) {
+        require(luminance.size == Math.multiplyExact(width, height)) {
             "luminance buffer must contain exactly width * height bytes"
         }
     }
@@ -44,6 +43,21 @@ sealed interface CameraAnalysisEvent {
     ) : CameraAnalysisEvent
 }
 
+internal data class LuminanceCrop(
+    val left: Int,
+    val top: Int,
+    val width: Int,
+    val height: Int,
+) {
+    init {
+        require(left >= 0 && top >= 0) { "crop origin must not be negative" }
+        require(width > 0 && height > 0) { "crop dimensions must be positive" }
+    }
+
+    val right: Int = Math.addExact(left, width)
+    val bottom: Int = Math.addExact(top, height)
+}
+
 /**
  * Copies a cropped Y plane while respecting row and pixel stride. The source buffer is never
  * mutated. Invalid geometry is rejected rather than truncated, clamped, or represented as an empty
@@ -53,25 +67,20 @@ internal fun copyLuminancePlane(
     source: ByteBuffer,
     imageWidth: Int,
     imageHeight: Int,
-    cropRect: Rect,
+    crop: LuminanceCrop,
     rowStride: Int,
     pixelStride: Int,
 ): ByteArray {
     require(imageWidth > 0 && imageHeight > 0) { "image dimensions must be positive" }
     require(rowStride > 0) { "row stride must be positive" }
     require(pixelStride > 0) { "pixel stride must be positive" }
-    require(
-        cropRect.left >= 0 &&
-            cropRect.top >= 0 &&
-            cropRect.right <= imageWidth &&
-            cropRect.bottom <= imageHeight &&
-            cropRect.width() > 0 &&
-            cropRect.height() > 0
-    ) { "crop rectangle must be non-empty and inside the image" }
+    require(crop.right <= imageWidth && crop.bottom <= imageHeight) {
+        "crop rectangle must be inside the image"
+    }
 
-    val outputSize = Math.multiplyExact(cropRect.width(), cropRect.height())
-    val lastRow = cropRect.bottom - 1
-    val lastColumn = cropRect.right - 1
+    val outputSize = Math.multiplyExact(crop.width, crop.height)
+    val lastRow = crop.bottom - 1
+    val lastColumn = crop.right - 1
     val lastIndex = Math.addExact(
         Math.multiplyExact(lastRow.toLong(), rowStride.toLong()),
         Math.multiplyExact(lastColumn.toLong(), pixelStride.toLong()),
@@ -84,15 +93,15 @@ internal fun copyLuminancePlane(
     val output = ByteArray(outputSize)
     var destination = 0
 
-    for (row in cropRect.top until cropRect.bottom) {
+    for (row in crop.top until crop.bottom) {
         val rowStart = row.toLong() * rowStride.toLong()
         if (pixelStride == 1) {
-            val sourceOffset = Math.addExact(rowStart, cropRect.left.toLong()).toInt()
+            val sourceOffset = Math.addExact(rowStart, crop.left.toLong()).toInt()
             input.position(sourceOffset)
-            input.get(output, destination, cropRect.width())
-            destination += cropRect.width()
+            input.get(output, destination, crop.width)
+            destination += crop.width
         } else {
-            for (column in cropRect.left until cropRect.right) {
+            for (column in crop.left until crop.right) {
                 val sourceOffset = Math.addExact(
                     rowStart,
                     column.toLong() * pixelStride.toLong(),
@@ -135,10 +144,16 @@ class CameraFrameAnalyzer(
             }
             val plane = proxy.planes.firstOrNull()
                 ?: error("CameraX analysis frame has no luminance plane")
-            val crop = proxy.cropRect
+            val cropRect = proxy.cropRect
+            val crop = LuminanceCrop(
+                left = cropRect.left,
+                top = cropRect.top,
+                width = cropRect.width(),
+                height = cropRect.height(),
+            )
             CameraAnalysisFrame(
-                width = crop.width(),
-                height = crop.height(),
+                width = crop.width,
+                height = crop.height,
                 sourceRowStride = plane.rowStride,
                 sourcePixelStride = plane.pixelStride,
                 rotationDegrees = proxy.imageInfo.rotationDegrees,
@@ -147,7 +162,7 @@ class CameraFrameAnalyzer(
                     source = plane.buffer,
                     imageWidth = proxy.width,
                     imageHeight = proxy.height,
-                    cropRect = crop,
+                    crop = crop,
                     rowStride = plane.rowStride,
                     pixelStride = plane.pixelStride,
                 ),
