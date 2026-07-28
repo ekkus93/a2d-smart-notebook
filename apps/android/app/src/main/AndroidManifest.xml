@@ -1,5 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- The app remains installable on devices without camera or flash hardware and surfaces
+         camera-unavailable/torch-unavailable states explicitly at runtime. -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.flash"
+        android:required="false" />
+
     <!-- Built-in Android backup remains disabled; canonical data uses explicit encrypted backup. -->
     <application
         android:allowBackup="false"
