@@ -22,12 +22,22 @@ class PagePreviewProcessingException(
     "${details.code} [${details.correlationId}]: ${details.developerMessage}",
 )
 
+/**
+ * Opaque Rust cancellation token with explicit borrow tracking.
+ *
+ * [close] cancels immediately but cannot free the native allocation until every synchronous JNA
+ * call that borrowed the pointer has returned. This makes ViewModel destruction and navigation
+ * cancellation safe even when Rust is in the middle of decoding or rectifying a full-resolution
+ * capture.
+ */
 class PagePreviewCancellation : AutoCloseable {
     private val lock = Any()
     private var handle: Pointer? =
         requireNotNull(previewNativeLibrary.a2d_preview_cancellation_new()) {
             "Rust preview cancellation allocation returned null"
         }
+    private var activeBorrows = 0
+    private var closeRequested = false
 
     fun cancel() {
         synchronized(lock) {
@@ -35,15 +45,41 @@ class PagePreviewCancellation : AutoCloseable {
         }
     }
 
-    internal fun pointer(): Pointer =
-        synchronized(lock) {
-            requireNotNull(handle) { "preview cancellation has already been closed" }
+    internal fun <T> withPointer(block: (Pointer) -> T): T {
+        val pointer =
+            synchronized(lock) {
+                check(!closeRequested) { "preview cancellation has already been closed" }
+                activeBorrows = Math.incrementExact(activeBorrows)
+                requireNotNull(handle) { "preview cancellation native handle is unavailable" }
+            }
+        try {
+            return block(pointer)
+        } finally {
+            val released =
+                synchronized(lock) {
+                    check(activeBorrows > 0) { "preview cancellation borrow count underflow" }
+                    activeBorrows--
+                    if (closeRequested && activeBorrows == 0) {
+                        handle.also { handle = null }
+                    } else {
+                        null
+                    }
+                }
+            released?.let(previewNativeLibrary::a2d_preview_cancellation_free)
         }
+    }
 
     override fun close() {
         val released =
             synchronized(lock) {
-                handle.also { handle = null }
+                if (closeRequested) return
+                closeRequested = true
+                handle?.let(previewNativeLibrary::a2d_preview_cancellation_cancel)
+                if (activeBorrows == 0) {
+                    handle.also { handle = null }
+                } else {
+                    null
+                }
             }
         released?.let(previewNativeLibrary::a2d_preview_cancellation_free)
     }
@@ -108,124 +144,133 @@ fun A2dClient.processPagePreview(
     cancellation: PagePreviewCancellation,
 ): PagePreviewProcessingOutcome {
     validateRequest(request)
-    val status = PreviewProcessingStatus()
-    val output =
-        previewNativeLibrary.a2d_process_encoded_page_preview(
-            bytes = request.encodedBytes,
-            bytesLen = request.encodedBytes.size.toLong(),
-            formatCode = if (request.format == EncodedPageFormat.JPEG) 0 else 1,
-            rotationDegrees = request.rotation.degrees,
-            maxEncodedBytes = request.maximumEncodedBytes,
-            maxPixels = request.maximumPixels,
-            maxDecodedBytes = request.maximumDecodedBytes,
-            detectorThreadCount = request.analysisPolicy.detectorThreadCount.checkedUIntBits(
-                "detectorThreadCount",
-            ),
-            detectorQuadDecimate = request.analysisPolicy.detectorQuadDecimate,
-            detectorQuadSigma = request.analysisPolicy.detectorQuadSigma,
-            detectorRefineEdges = if (request.analysisPolicy.detectorRefineEdges) 1 else 0,
-            detectorDecodeSharpening = request.analysisPolicy.detectorDecodeSharpening,
-            detectorBitsCorrected = request.analysisPolicy.detectorBitsCorrected.checkedUIntBits(
-                "detectorBitsCorrected",
-            ),
-            darkLuminanceCutoff = request.analysisPolicy.darkLuminanceCutoff.checkedUIntBits(
-                "darkLuminanceCutoff",
-            ),
-            highlightLuminanceCutoff =
-                request.analysisPolicy.highlightLuminanceCutoff.checkedUIntBits(
-                    "highlightLuminanceCutoff",
+    return cancellation.withPointer { cancellationPointer ->
+        val status = PreviewProcessingStatus()
+        val output =
+            previewNativeLibrary.a2d_process_encoded_page_preview(
+                bytes = request.encodedBytes,
+                bytesLen = request.encodedBytes.size.toLong(),
+                formatCode = if (request.format == EncodedPageFormat.JPEG) 0 else 1,
+                rotationDegrees = request.rotation.degrees,
+                maxEncodedBytes = request.maximumEncodedBytes,
+                maxPixels = request.maximumPixels,
+                maxDecodedBytes = request.maximumDecodedBytes,
+                detectorThreadCount = request.analysisPolicy.detectorThreadCount.checkedUIntBits(
+                    "detectorThreadCount",
                 ),
-            qualityTileColumns = request.analysisPolicy.qualityTileColumns.checkedUIntBits(
-                "qualityTileColumns",
-            ),
-            qualityTileRows = request.analysisPolicy.qualityTileRows.checkedUIntBits(
-                "qualityTileRows",
-            ),
-            topLeftTagId = request.analysisPolicy.markerIds.topLeft.checkedUIntBits("topLeftTagId"),
-            topRightTagId = request.analysisPolicy.markerIds.topRight.checkedUIntBits("topRightTagId"),
-            bottomRightTagId =
-                request.analysisPolicy.markerIds.bottomRight.checkedUIntBits("bottomRightTagId"),
-            bottomLeftTagId =
-                request.analysisPolicy.markerIds.bottomLeft.checkedUIntBits("bottomLeftTagId"),
-            correctedWidth = request.correctedWidth.checkedUIntBits("correctedWidth"),
-            correctedHeight = request.correctedHeight.checkedUIntBits("correctedHeight"),
-            rectificationMaxOutputPixels = request.rectificationMaximumOutputPixels,
-            rectificationMaxOutputBytes = request.rectificationMaximumOutputBytes,
-            pipelineVersion = request.pipelineVersion.checkedUIntBits("pipelineVersion"),
-            contrastLowPercentilePerMillion =
-                request.contrastLowPercentilePerMillion.checkedUIntBits(
-                    "contrastLowPercentilePerMillion",
+                detectorQuadDecimate = request.analysisPolicy.detectorQuadDecimate,
+                detectorQuadSigma = request.analysisPolicy.detectorQuadSigma,
+                detectorRefineEdges =
+                    (if (request.analysisPolicy.detectorRefineEdges) 1 else 0).toByte(),
+                detectorDecodeSharpening = request.analysisPolicy.detectorDecodeSharpening,
+                detectorBitsCorrected = request.analysisPolicy.detectorBitsCorrected.checkedUIntBits(
+                    "detectorBitsCorrected",
                 ),
-            contrastHighPercentilePerMillion =
-                request.contrastHighPercentilePerMillion.checkedUIntBits(
-                    "contrastHighPercentilePerMillion",
+                darkLuminanceCutoff = request.analysisPolicy.darkLuminanceCutoff.checkedUIntBits(
+                    "darkLuminanceCutoff",
                 ),
-            contrastMaximumGain = request.contrastMaximumGain,
-            thumbnailMaxWidth = request.thumbnailMaximumWidth.checkedUIntBits("thumbnailMaximumWidth"),
-            thumbnailMaxHeight =
-                request.thumbnailMaximumHeight.checkedUIntBits("thumbnailMaximumHeight"),
-            derivedMaxPixelsPerImage = request.derivedMaximumPixelsPerImage,
-            derivedMaxBytesPerImage = request.derivedMaximumBytesPerImage,
-            derivedMaxTotalOutputBytes = request.derivedMaximumTotalOutputBytes,
-            derivedMaxWorkingBytes = request.derivedMaximumWorkingBytes,
-            cancellation = cancellation.pointer(),
-            status = status,
-        )
-    status.read()
-    output.read()
-    status.error.read()
-
-    try {
-        return when (status.code) {
-            PREVIEW_STATUS_SUCCESS -> {
-                require(status.error.data == null && status.error.len == 0L) {
-                    "preview processing reported success with an error buffer"
-                }
-                val maximumPayload = Math.addExact(
-                    request.derivedMaximumTotalOutputBytes,
-                    MAX_PREVIEW_METADATA_BYTES,
-                )
-                PagePreviewProcessingOutcome.Completed(
-                    decodePreviewResult(readRequiredBuffer(output, "preview result", maximumPayload)),
-                )
-            }
-
-            PREVIEW_STATUS_CANCELLED -> {
-                require(output.data == null && output.len == 0L) {
-                    "cancelled preview processing returned a result buffer"
-                }
-                require(status.error.data == null && status.error.len == 0L) {
-                    "cancelled preview processing returned an error buffer"
-                }
-                PagePreviewProcessingOutcome.Cancelled
-            }
-
-            PREVIEW_STATUS_ERROR,
-            PREVIEW_STATUS_PANIC,
-            -> {
-                require(output.data == null && output.len == 0L) {
-                    "failed preview processing returned an unexpected result buffer"
-                }
-                throw PagePreviewProcessingException(
-                    details =
-                        decodePreviewError(
-                            readRequiredBuffer(
-                                status.error,
-                                "preview error",
-                                MAX_PREVIEW_ERROR_BYTES,
-                            ),
-                        ),
-                    nativePanic = status.code == PREVIEW_STATUS_PANIC,
-                )
-            }
-
-            else -> throw IllegalStateException(
-                "preview processing returned unknown status code ${status.code}",
+                highlightLuminanceCutoff =
+                    request.analysisPolicy.highlightLuminanceCutoff.checkedUIntBits(
+                        "highlightLuminanceCutoff",
+                    ),
+                qualityTileColumns = request.analysisPolicy.qualityTileColumns.checkedUIntBits(
+                    "qualityTileColumns",
+                ),
+                qualityTileRows = request.analysisPolicy.qualityTileRows.checkedUIntBits(
+                    "qualityTileRows",
+                ),
+                topLeftTagId =
+                    request.analysisPolicy.markerIds.topLeft.checkedUIntBits("topLeftTagId"),
+                topRightTagId =
+                    request.analysisPolicy.markerIds.topRight.checkedUIntBits("topRightTagId"),
+                bottomRightTagId =
+                    request.analysisPolicy.markerIds.bottomRight.checkedUIntBits("bottomRightTagId"),
+                bottomLeftTagId =
+                    request.analysisPolicy.markerIds.bottomLeft.checkedUIntBits("bottomLeftTagId"),
+                correctedWidth = request.correctedWidth.checkedUIntBits("correctedWidth"),
+                correctedHeight = request.correctedHeight.checkedUIntBits("correctedHeight"),
+                rectificationMaxOutputPixels = request.rectificationMaximumOutputPixels,
+                rectificationMaxOutputBytes = request.rectificationMaximumOutputBytes,
+                pipelineVersion = request.pipelineVersion.checkedUIntBits("pipelineVersion"),
+                contrastLowPercentilePerMillion =
+                    request.contrastLowPercentilePerMillion.checkedUIntBits(
+                        "contrastLowPercentilePerMillion",
+                    ),
+                contrastHighPercentilePerMillion =
+                    request.contrastHighPercentilePerMillion.checkedUIntBits(
+                        "contrastHighPercentilePerMillion",
+                    ),
+                contrastMaximumGain = request.contrastMaximumGain,
+                thumbnailMaxWidth =
+                    request.thumbnailMaximumWidth.checkedUIntBits("thumbnailMaximumWidth"),
+                thumbnailMaxHeight =
+                    request.thumbnailMaximumHeight.checkedUIntBits("thumbnailMaximumHeight"),
+                derivedMaxPixelsPerImage = request.derivedMaximumPixelsPerImage,
+                derivedMaxBytesPerImage = request.derivedMaximumBytesPerImage,
+                derivedMaxTotalOutputBytes = request.derivedMaximumTotalOutputBytes,
+                derivedMaxWorkingBytes = request.derivedMaximumWorkingBytes,
+                cancellation = cancellationPointer,
+                status = status,
             )
+        status.read()
+        output.read()
+        status.error.read()
+
+        try {
+            when (status.code) {
+                PREVIEW_STATUS_SUCCESS -> {
+                    require(status.error.data == null && status.error.len == 0L) {
+                        "preview processing reported success with an error buffer"
+                    }
+                    val maximumPayload =
+                        Math.addExact(
+                            request.derivedMaximumTotalOutputBytes,
+                            MAX_PREVIEW_METADATA_BYTES,
+                        )
+                    PagePreviewProcessingOutcome.Completed(
+                        decodePreviewResult(
+                            readRequiredBuffer(output, "preview result", maximumPayload),
+                        ),
+                    )
+                }
+
+                PREVIEW_STATUS_CANCELLED -> {
+                    require(output.data == null && output.len == 0L) {
+                        "cancelled preview processing returned a result buffer"
+                    }
+                    require(status.error.data == null && status.error.len == 0L) {
+                        "cancelled preview processing returned an error buffer"
+                    }
+                    PagePreviewProcessingOutcome.Cancelled
+                }
+
+                PREVIEW_STATUS_ERROR,
+                PREVIEW_STATUS_PANIC,
+                -> {
+                    require(output.data == null && output.len == 0L) {
+                        "failed preview processing returned an unexpected result buffer"
+                    }
+                    throw PagePreviewProcessingException(
+                        details =
+                            decodePreviewError(
+                                readRequiredBuffer(
+                                    status.error,
+                                    "preview error",
+                                    MAX_PREVIEW_ERROR_BYTES,
+                                ),
+                            ),
+                        nativePanic = status.code == PREVIEW_STATUS_PANIC,
+                    )
+                }
+
+                else -> throw IllegalStateException(
+                    "preview processing returned unknown status code ${status.code}",
+                )
+            }
+        } finally {
+            freeIfOwned(output)
+            freeIfOwned(status.error)
         }
-    } finally {
-        freeIfOwned(output)
-        freeIfOwned(status.error)
     }
 }
 
@@ -359,9 +404,10 @@ private fun decodePreviewResult(bytes: ByteArray): ProcessedPagePreview {
     reader.requireHeader("A2DP")
     val pipelineVersion = reader.readInt("pipeline version")
     require(pipelineVersion > 0) { "preview pipeline version must be positive" }
-    val matrix = List(reader.readInt("matrix element count")) { index ->
-        reader.readDouble("matrix[$index]")
-    }
+    val matrix =
+        List(reader.readInt("matrix element count")) { index ->
+            reader.readDouble("matrix[$index]")
+        }
     require(matrix.size == 9) { "source-to-corrected matrix must contain 9 values" }
 
     val analysis = decodeAnalysis(reader)
