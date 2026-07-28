@@ -5,10 +5,17 @@ on:
     paths:
       - ".cargo/config.toml"
       - "Cargo.lock"
+      - "crates/a2d-ffi/**"
       - "crates/a2d-image/**"
+      - "crates/a2d-layout/**"
+      - "apps/android/app/build.gradle.kts"
+      - "apps/android/app/src/main/assets/**"
       - "fixtures/scans/**"
+      - "tools/build-android-native-libs.sh"
+      - "tools/build-android-native.sh"
       - "tools/generate_scan_fixtures.py"
       - "tools/scan-fixtures-requirements.txt"
+      - "tools/verify-android-apk.py"
       - "tools/verify_scan_fixtures.py"
       - "tools/validate-milestone7-native.sh"
       - ".github/workflows/milestone7-native.yml"
@@ -73,6 +80,19 @@ jobs:
         run: |
           cargo clippy -p a2d-image --all-targets --all-features -- -D warnings
           cargo test -p a2d-image --all-features
+
+      - name: Record raw synthetic processing measurements
+        run: >-
+          cargo run -p a2d-image --features fixture-tools
+          --bin a2d-fixture-measurements --
+          fixtures/scans target/synthetic-fixture-measurements.tsv
+
+      - name: Upload synthetic processing measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-fixture-measurements
+          path: target/synthetic-fixture-measurements.tsv
+          if-no-files-found: error
 
   desktop-and-android:
     name: Desktop detector and Android native ABIs
