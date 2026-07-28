@@ -1,6 +1,6 @@
 # A2D Smart Notebook v0.1 — Implementation TODO
 
-**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence  
+**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence; Milestone 8.1 CameraX adapter complete  
 **Version:** 0.1  
 **Date:** 2026-07-28  
 **Repository:** `ekkus93/a2d-smart-notebook`  
@@ -1305,16 +1305,40 @@ Remaining Milestone 7 evidence:
 
 ## 8.1 Camera adapter
 
-- [ ] CameraX preview.
-- [ ] Image analysis.
-- [ ] Full-resolution capture.
-- [ ] Correct lifecycle binding.
-- [ ] Permission-denied handling.
-- [ ] Background/foreground recovery.
-- [ ] Rotation handling.
-- [ ] Torch control where available.
-- [ ] Bounded analysis backpressure.
-- [ ] Reliably close every frame.
+- [x] CameraX preview. `CameraPreviewSurface` hosts `PreviewView` in Compose and binds only after
+      view attachment so initial display rotation is authoritative without a delayed callback that
+      can outlive disposal.
+- [x] Image analysis. `CameraXAdapter` binds a YUV `ImageAnalysis` use case and emits owned,
+      tightly packed luminance frames through explicit success/failure events.
+- [x] Full-resolution capture. `ImageCapture` writes only to a caller-selected new staging file;
+      existing files are rejected rather than overwritten silently.
+- [x] Correct lifecycle binding. Preview, analysis, and capture bind together through
+      `bindToLifecycle`; disposal and lifecycle destruction invalidate stale work, clear the
+      analyzer, unbind use cases, and close the analysis executor.
+- [x] Permission-denied handling. The Compose permission state distinguishes not requested,
+      retryable denial, permanent denial, and granted states, with an explicit application-settings
+      action.
+- [x] Background/foreground recovery. CameraX lifecycle binding owns stop/start transitions, while
+      permission state is refreshed on lifecycle resume.
+- [x] Rotation handling. Preview, analysis, and capture target rotations are validated and updated
+      together; invalid rotations surface an explicit adapter error.
+- [x] Torch control where available. Torch requests reject absent flash hardware explicitly and
+      stale asynchronous completions cannot publish state after rebind or closure.
+- [x] Bounded analysis backpressure. Analysis uses `STRATEGY_KEEP_ONLY_LATEST` on a dedicated
+      single-thread executor.
+- [x] Reliably close every frame. Every `ImageProxy` is closed on success and recoverable failure;
+      fatal JVM errors propagate only after frame closure. Unit tests cover row/pixel stride, crop,
+      source buffer limits, ordinary failures, close failures, and fatal-error propagation.
+
+Validation evidence:
+
+- GitHub Actions CameraX adapter run `30339511067` passed workspace formatting/clippy/tests,
+  permanent printable QR/page compatibility regeneration, both packaged Android native-library
+  ABIs, Android lint and JVM tests, debug APK assembly, and APK native packaging verification.
+- This completes only the platform adapter in Milestone 8.1. Live shared-Rust analysis, latency
+  measurement, stale native-work cancellation, overlays/guidance, and auto-capture remain in
+  Milestones 8.2 and 8.3; physical printer/camera and representative Android-device evidence also
+  remain open.
 
 ## 8.2 Live Rust/native analysis
 
