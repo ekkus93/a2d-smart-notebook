@@ -105,12 +105,17 @@ jobs:
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Regenerate the native library and Kotlin bindings
         run: bash ./tools/build-android-native.sh "x86_64"
-      - name: Upload regenerated Kotlin binding for review
+      - name: Upload exact generated files for review
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: regenerated-kotlin-uniffi-binding
-          path: apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
+          name: regenerated-android-ffi-files
+          path: |
+            apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
+            Cargo.lock
           if-no-files-found: error
-      - name: Fail if the generated bindings drifted from what is committed
-        run: git diff --exit-code -- apps/android/app/src/main/kotlin/uniffi/
+      - name: Fail if generated files drifted from what is committed
+        run: >-
+          git diff --exit-code --
+          apps/android/app/src/main/kotlin/uniffi/
+          Cargo.lock
