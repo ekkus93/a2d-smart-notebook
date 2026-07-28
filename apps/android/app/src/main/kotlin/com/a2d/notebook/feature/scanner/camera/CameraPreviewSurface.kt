@@ -11,7 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
-/** Creates one adapter per lifecycle owner and closes its executors when composition is disposed. */
+/** Creates one adapter per lifecycle owner and closes its executor when composition is disposed. */
 @Composable
 fun rememberCameraXAdapter(
     onAnalysisEvent: (CameraAnalysisEvent) -> Unit,
@@ -56,12 +56,10 @@ fun CameraPreviewSurface(
             PreviewView(context).apply {
                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 scaleType = PreviewView.ScaleType.FILL_CENTER
-                post {
-                    adapter.bind(
-                        surfaceProvider = surfaceProvider,
-                        targetRotation = display?.rotation ?: Surface.ROTATION_0,
-                    )
-                }
+                adapter.bind(
+                    surfaceProvider = surfaceProvider,
+                    targetRotation = display?.rotation ?: Surface.ROTATION_0,
+                )
             }
         },
         update = { previewView ->
