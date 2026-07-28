@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.doOnAttach
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.a2d.notebook.rustbridge.LivePageAnalysisPolicy
 
 /** Creates one adapter per lifecycle owner and closes its executor when composition is disposed. */
 @Composable
@@ -35,6 +36,34 @@ fun rememberCameraXAdapter(
         onDispose { adapter.close() }
     }
     return adapter
+}
+
+/**
+ * Creates the complete CameraX -> keep-latest scheduler -> borrowed Rust analysis path.
+ *
+ * A policy change closes and replaces the old scheduler so an in-flight result from the previous
+ * policy cannot update current scanner state. The underlying CameraX adapter remains lifecycle-owned
+ * and switches to the new pipeline callback through [rememberUpdatedState].
+ */
+@Composable
+fun rememberLiveAnalysisCameraXAdapter(
+    policy: LivePageAnalysisPolicy,
+    onLiveAnalysisEvent: (LiveFrameAnalysisEvent) -> Unit,
+    onStateChanged: (CameraAdapterState) -> Unit,
+): CameraXAdapter {
+    val currentLiveAnalysisCallback = rememberUpdatedState(onLiveAnalysisEvent)
+    val pipeline = remember(policy) {
+        LiveCameraAnalysisPipeline.native(policy) { event ->
+            currentLiveAnalysisCallback.value(event)
+        }
+    }
+    DisposableEffect(pipeline) {
+        onDispose { pipeline.close() }
+    }
+    return rememberCameraXAdapter(
+        onAnalysisEvent = pipeline::onCameraEvent,
+        onStateChanged = onStateChanged,
+    )
 }
 
 /**
