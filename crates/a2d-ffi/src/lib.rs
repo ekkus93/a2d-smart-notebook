@@ -3,9 +3,8 @@
 //! `#[uniffi::export]` was chosen over UDL (TODO 2.4's open decision): it keeps the interface
 //! definition next to the Rust code it describes instead of duplicated in a separate `.udl`
 //! file, and is UniFFI's current recommended default. Every exported operation here maps
-//! directly to an already-real `a2d-core` operation — nothing here fakes a use case that
-//! doesn't exist yet (see `a2d-core`'s module doc for why `list_notebooks` and similar are not
-//! yet exposed).
+//! directly to an already-real shared Rust operation — nothing here fakes a use case that
+//! doesn't exist yet.
 
 use std::fmt;
 use std::sync::Arc;
@@ -16,6 +15,8 @@ uniffi::setup_scaffolding!();
 
 mod milestone6;
 pub use milestone6::*;
+mod milestone7;
+pub use milestone7::*;
 
 #[derive(uniffi::Record)]
 pub struct OpenLibraryRequest {
