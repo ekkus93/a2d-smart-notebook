@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.a2d.notebook.feature.scanner.presentation.IdentityAutoCaptureGate
 import com.a2d.notebook.feature.scanner.presentation.IdentityCaptureBlockReason
@@ -61,18 +62,14 @@ class LiveScannerPresentationUiTest {
             }
         }
 
-        composeRule
-            .onNodeWithTag(LiveScannerTestTags.ACTIVE_NOTEBOOK)
-            .assertIsDisplayed()
-            .assertTextContains("Field Notes")
+        composeRule.onNodeWithTag(LiveScannerTestTags.ACTIVE_NOTEBOOK).assertIsDisplayed()
+        composeRule.onNodeWithText("Field Notes").assertIsDisplayed()
         composeRule
             .onNodeWithTag(LiveScannerTestTags.GUIDANCE)
             .assertIsDisplayed()
             .assertTextContains("Wrong Notebook")
-        composeRule
-            .onNodeWithTag(LiveScannerTestTags.IDENTITY_GATE)
-            .assertIsDisplayed()
-            .assertTextContains("Auto-capture blocked")
+        composeRule.onNodeWithTag(LiveScannerTestTags.IDENTITY_GATE).assertIsDisplayed()
+        composeRule.onNodeWithText("Auto-capture blocked").assertIsDisplayed()
     }
 
     @Test
@@ -104,11 +101,9 @@ class LiveScannerPresentationUiTest {
             }
         }
 
-        composeRule
-            .onNodeWithTag(LiveScannerTestTags.ACTIVE_NOTEBOOK)
-            .assertTextContains("Field Notes")
-        composeRule
-            .onNodeWithTag(LiveScannerTestTags.IDENTITY_GATE)
-            .assertTextContains("Page identity matches")
+        composeRule.onNodeWithTag(LiveScannerTestTags.ACTIVE_NOTEBOOK).assertIsDisplayed()
+        composeRule.onNodeWithText("Field Notes").assertIsDisplayed()
+        composeRule.onNodeWithTag(LiveScannerTestTags.IDENTITY_GATE).assertIsDisplayed()
+        composeRule.onNodeWithText("Page identity matches").assertIsDisplayed()
     }
 }
