@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 1
 
       - name: Reconcile authoritative TODO
         run: |
@@ -88,11 +88,10 @@ Validation evidence:
           path.write_text(text, encoding="utf-8")
           PY
 
-      - name: Commit reconciliation and remove this workflow
+      - name: Commit the TODO reconciliation
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/reconcile-camerax-todo.yml
           git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md
           git diff --cached --check
           git commit -m "Reconcile CameraX adapter milestone status [skip ci]"
