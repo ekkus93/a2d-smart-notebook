@@ -32,6 +32,7 @@ jobs:
           path: |
             crates/a2d-ffi/src/milestone7.rs
             crates/a2d-image/src/bin/a2d_fixture_measurements.rs
+            crates/a2d-image/tests/synthetic_processing_expectations.rs
           if-no-files-found: error
       - name: Fail if Rust formatting drifted
         run: git diff --exit-code -- '*.rs'
