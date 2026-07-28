@@ -138,14 +138,16 @@ class CameraXAdapter(
                                 pendingAnalysis = analysis
                                 analysis.setAnalyzer(
                                     analysisExecutor,
-                                    CameraFrameAnalyzer { event ->
-                                        if (
-                                            !closeRequested.get() &&
-                                            generation == bindGeneration.get()
-                                        ) {
-                                            onAnalysisEvent(event)
-                                        }
-                                    },
+                                    CameraFrameAnalyzer(
+                                        onEvent = { event ->
+                                            if (
+                                                !closeRequested.get() &&
+                                                generation == bindGeneration.get()
+                                            ) {
+                                                onAnalysisEvent(event)
+                                            }
+                                        },
+                                    ),
                                 )
                             }
                         val newCapture = ImageCapture.Builder()
