@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import os
 import struct
-import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -108,112 +106,6 @@ def verify(apk_path: Path, license_path: Path) -> None:
             fail("packaged APACHE-2.0.txt is not recognizable as Apache License 2.0")
 
 
-def stage_milestone_8_3_todo_after_validated_apk() -> None:
-    """Stage the authoritative TODO only inside the one-use validated cleanup run."""
-    cleanup_target = Path(".github/workflows/validate-camerax-adapter.yml")
-    if os.environ.get("GITHUB_ACTIONS") != "true" or not cleanup_target.is_file():
-        return
-
-    path = Path("docs/A2D_SMART_NOTEBOOK_V01_TODO.md")
-    text = path.read_text(encoding="utf-8")
-    replacements = [
-        (
-            "**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence; Milestones 8.1 and 8.2 CameraX plus live analysis/presentation safety complete  ",
-            "**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence; Milestones 8.1–8.3 CameraX, live analysis/presentation safety, and auto-capture state machine complete  ",
-            "status",
-        ),
-        (
-            """- Milestone 8.2 now completes live shared-Rust frame analysis, copy/latency instrumentation,
-  stale-work cancellation, marker/page overlays, active Notebook presentation, actionable guidance,
-  and strict identity gating. The auto-capture state machine remains in Milestone 8.3; physical
-  printer/camera and representative Android-device evidence also remain open.""",
-            """- Milestones 8.2 and 8.3 now complete live shared-Rust frame analysis, copy/latency
-  instrumentation, stale-work cancellation, marker/page overlays, active Notebook presentation,
-  actionable guidance, strict identity gating, and the explicit auto-capture state machine.
-  Single-page and batch scanner UI integration remain in Milestones 8.4 and 8.5; physical
-  printer/camera and representative Android-device evidence also remain open.""",
-            "Milestone 8.2 note",
-        ),
-        (
-            """## 8.3 Auto-capture state machine
-
-Use explicit states:
-
-```text
-Idle
-Searching
-CandidateStable
-Capturing
-Processing
-Accepted
-NeedsReview
-Rejected
-Paused
-```
-
-- [ ] Require stable acceptable frames for a configured interval.
-- [ ] Debounce repeated captures.
-- [ ] Permit manual capture only through an explicit warning path.
-- [ ] Cancel safely on navigation.
-- [ ] Recover from capture failure without losing context.""",
-            """## 8.3 Auto-capture state machine
-
-`AutoCaptureStateMachine` is a synchronized, Android-object-free controller under
-`feature/scanner/capture/`. It exposes the explicit `Idle`, `Searching`, `CandidateStable`,
-`Capturing`, `Processing`, `Accepted`, `NeedsReview`, `Rejected`, and `Paused` phases and emits
-explicit effects for camera capture, manual confirmation, debounce, cancellation, and stale callback
-handling.
-
-- [x] Require stable acceptable frames for a configured interval. A candidate must retain the same
-      Rust-resolved Page ID, pass the strict `IdentityAutoCaptureGate`, and carry an explicit
-      caller-supplied capture-policy approval across the configured monotonic interval. Excessive
-      inter-frame gaps, Page ID changes, identity failures, or rejected policy assessments restart
-      searching rather than inheriting prior stability. Presentation guidance thresholds are not
-      silently promoted into capture acceptance.
-- [x] Debounce repeated captures. A successful full-resolution capture records a per-page monotonic
-      debounce window. The same page cannot immediately auto-capture again, while a different Page ID
-      remains eligible for batch workflows. An explicit retake action may clear the same-page debounce
-      after a rejected or review result.
-- [x] Permit manual capture only through an explicit warning path. Manual capture first enters
-      `Paused(AWAITING_MANUAL_CONFIRMATION)` and emits warning codes for bypassed stability, rejected
-      capture policy, and recent-page repetition. Only the matching confirmation token starts a manual
-      capture. Manual capture can never override missing, ambiguous, conflicting, or wrong-Notebook
-      identity.
-- [x] Cancel safely on navigation. Navigation increments the machine generation, enters
-      `Paused(NAVIGATION)`, emits cancellation for active capture/processing work, clears candidate
-      frames and pending warnings, and ignores every late tokened callback from the previous
-      generation. Resume retains the explicit scan context but requires fresh frames.
-- [x] Recover from capture failure without losing context. A matching camera failure returns to
-      `Searching`, preserves the active Notebook/session context, exposes the typed failure, clears the
-      stale frame, and permits a new stability interval and capture request. Successful captures move
-      through `Processing` to explicit `Accepted`, `NeedsReview`, or `Rejected` outcomes.
-
-Validation evidence:
-
-- Kotlin JVM tests cover continuous stability timing, excessive frame gaps, Page ID changes,
-  capture-policy rejection, same-page debounce, different-page progress, explicit retakes, manual
-  warning confirmation/dismissal, identity-conflict denial, capture failure recovery, all terminal
-  processing outcomes, navigation cancellation, generation invalidation, stale capture/processing
-  callbacks, stop behavior, invalid policy, and non-monotonic frame rejection.
-- GitHub Actions run `30339511067`, validation attempt job `90277827109`, passed workspace
-  Rust/fixture gates, both packaged Android native ABIs, Android lint and JVM tests, debug APK
-  assembly, APK native-symbol/notices verification, and one-use workflow cleanup on 2026-07-28.
-- Milestone 8.4 still owns the single-page scanner screen and wiring these effects to CameraX staging
-  capture and final processing. Milestone 8.5 owns batch-session behavior; neither is claimed here.""",
-            "Milestone 8.3 section",
-        ),
-    ]
-
-    for old, new, label in replacements:
-        count = text.count(old)
-        if count != 1:
-            fail(f"expected exactly one {label} TODO block, found {count}")
-        text = text.replace(old, new, 1)
-
-    path.write_text(text, encoding="utf-8")
-    subprocess.run(["git", "add", str(path)], check=True)
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("apk", type=Path)
@@ -225,14 +117,7 @@ def main() -> int:
     args = parse_args()
     try:
         verify(args.apk, args.license)
-        stage_milestone_8_3_todo_after_validated_apk()
-    except (
-        OSError,
-        UnicodeDecodeError,
-        ValueError,
-        subprocess.CalledProcessError,
-        zipfile.BadZipFile,
-    ) as error:
+    except (OSError, UnicodeDecodeError, ValueError, zipfile.BadZipFile) as error:
         print(f"APK verification failed: {error}", file=sys.stderr)
         return 1
 
