@@ -1459,8 +1459,8 @@ Validation evidence:
 - GitHub Actions run `30339511067`, validation attempt job `90277827109`, passed workspace
   Rust/fixture gates, both packaged Android native ABIs, Android lint and JVM tests, debug APK
   assembly, APK native-symbol/notices verification, and one-use workflow cleanup on 2026-07-28.
-- Milestone 8.4 still owns the single-page scanner screen and wiring these effects to CameraX staging
-  capture and final processing. Milestone 8.5 owns batch-session behavior; neither is claimed here.
+- Milestone 8.4 now wires these effects to CameraX staging capture, final Rust processing, and
+  explicit review as documented below. Milestone 8.5 still owns batch-session behavior.
 
 ## 8.4 Single-page scanner
 
@@ -1506,7 +1506,7 @@ Validation evidence:
   framing, bounded image payloads, and the shared image-processing path. Kotlin JVM tests cover live
   QR rotation/scheduling/cancellation, exact final page-and-Notebook matching, camera readiness,
   unsigned RGB conversion, navigation routes, and the existing capture/presentation controllers.
-- GitHub Actions run `30339511067`, job `90336160383`, passed workspace Rust formatting, clippy and
+- GitHub Actions run `30339511067`, job `90339478476`, passed workspace Rust formatting, clippy and
   tests, printable fixture regeneration, arm64-v8a and x86_64 Android native builds, Android lint and
   JVM tests, debug APK assembly, and APK native packaging verification on 2026-07-28.
 - `tools/verify-android-apk.py` permanently requires the live-analysis and full-resolution preview,
