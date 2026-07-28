@@ -1,0 +1,10 @@
+name: Temporary Milestone 8.2A cleanup target
+
+on:
+  workflow_dispatch:
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
