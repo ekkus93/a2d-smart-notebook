@@ -22,8 +22,19 @@ jobs:
       - name: Show resolved toolchain
         run: rustc --version && cargo --version
       - uses: Swatinem/rust-cache@v2
-      - name: cargo fmt --check
-        run: cargo fmt --check
+      - name: Generate canonical Rust formatting
+        run: cargo fmt
+      - name: Upload exact rustfmt output for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-output
+          path: |
+            crates/a2d-ffi/src/milestone7.rs
+            crates/a2d-image/src/bin/a2d_fixture_measurements.rs
+          if-no-files-found: error
+      - name: Fail if Rust formatting drifted
+        run: git diff --exit-code -- '*.rs'
       - name: cargo clippy --workspace --all-targets --all-features -- -D warnings
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: cargo test --workspace --all-features
