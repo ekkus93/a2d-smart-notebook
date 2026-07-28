@@ -16,6 +16,10 @@ allow = [
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
+  # foldhash is Zlib-licensed and enters transitively through hashbrown from the PDF and UniFFI
+  # dependency graphs. Zlib is a short permissive, OSI-approved license with attribution and
+  # source-misrepresentation restrictions; it does not impose reciprocal licensing on A2D code.
+  "Zlib",
   "Unicode-3.0",
   # uniffi and its sub-crates (a2d-ffi's core dependency) are MPL-2.0. Weak/file-level
   # copyleft: modifications to MPL-covered *files* must stay MPL if redistributed as source,
