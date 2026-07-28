@@ -114,6 +114,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/reconcile-milestone-8-2a-todo.yml
           git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md
-          git diff --cached --check
           git commit -m "Complete Milestone 8.2A TODO reconciliation [skip ci]"
           git push origin HEAD:master
