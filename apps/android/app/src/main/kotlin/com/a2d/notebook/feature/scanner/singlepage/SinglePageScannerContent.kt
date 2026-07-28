@@ -50,6 +50,7 @@ object SinglePageScannerTestTags {
     const val PROCESSING = "single_scanner_processing"
     const val CORRECTED_PREVIEW = "single_scanner_corrected_preview"
     const val APPROVED_NOT_SAVED = "single_scanner_approved_not_saved"
+    const val IDENTITY_WARNING = "single_scanner_identity_warning"
 }
 
 @Composable
@@ -87,7 +88,10 @@ fun SinglePageScannerContent(
         Box {
             OutlinedButton(
                 onClick = { notebookMenuExpanded = true },
-                enabled = !state.loadingNotebooks && !state.processing,
+                enabled =
+                    !state.loadingNotebooks &&
+                        !state.processing &&
+                        state.reviewArtifact == null,
                 modifier = Modifier.fillMaxWidth().testTag(SinglePageScannerTestTags.NOTEBOOK_SELECTOR),
             ) {
                 Text(
@@ -291,6 +295,13 @@ private fun ReviewContent(
                     .testTag(SinglePageScannerTestTags.CORRECTED_PREVIEW),
         )
         Text(stringResource(R.string.single_scanner_review_explanation))
+        artifact.identityWarning?.let { warning ->
+            Text(
+                text = warning,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag(SinglePageScannerTestTags.IDENTITY_WARNING),
+            )
+        }
         artifact.warnings.forEach { warning ->
             Text(
                 text = stringResource(R.string.single_scanner_detail_warning, warning.name),
@@ -311,7 +322,10 @@ private fun ReviewContent(
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onApprove, enabled = !state.approvedForRegistration) {
+            Button(
+                onClick = onApprove,
+                enabled = state.canApprove && !state.approvedForRegistration,
+            ) {
                 Text(stringResource(R.string.single_scanner_accept))
             }
             OutlinedButton(onClick = onRetake) {
@@ -345,6 +359,9 @@ private fun ScannerDetailsDialog(
                     Text(stringResource(R.string.single_scanner_detail_page, it.captureRequest.pageId))
                     Text(stringResource(R.string.single_scanner_detail_pipeline, it.pipelineVersion))
                     Text(stringResource(R.string.single_scanner_not_saved))
+                    it.identityWarning?.let { warning ->
+                        Text(warning, color = MaterialTheme.colorScheme.error)
+                    }
                     it.warnings.forEach { warning ->
                         Text(stringResource(R.string.single_scanner_detail_warning, warning.name))
                     }
