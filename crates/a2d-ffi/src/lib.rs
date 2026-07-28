@@ -21,6 +21,8 @@ mod live_analysis;
 pub use live_analysis::*;
 mod preview_processing;
 pub use preview_processing::*;
+mod milestone9;
+pub use milestone9::*;
 
 #[derive(uniffi::Record)]
 pub struct OpenLibraryRequest {
