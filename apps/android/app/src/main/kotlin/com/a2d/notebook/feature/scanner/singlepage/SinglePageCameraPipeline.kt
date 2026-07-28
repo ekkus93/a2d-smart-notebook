@@ -34,7 +34,7 @@ fun rememberSinglePageCameraXAdapter(
         }
     }
     val qrScheduler = remember(generation) {
-        LiveQrCodeScheduler { event -> currentQrCallback.value(event) }
+        LiveQrCodeScheduler(onEvent = { event -> currentQrCallback.value(event) })
     }
     DisposableEffect(livePipeline, qrScheduler) {
         onDispose {
