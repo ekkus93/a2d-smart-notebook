@@ -49,6 +49,29 @@
     <string name="page_code_result">Rust resolution result</string>
     <string name="page_code_explanation">This confirms identity and destination only. Full-page capture and durable scan registration arrive in Milestones 8 and 9.</string>
 
+    <string name="scanner_destination_label">Saving scans to</string>
+    <string name="scanner_destination_design">Notebook Design: %1$s</string>
+    <string name="scanner_no_active_notebook">No active Notebook</string>
+    <string name="scanner_identity_verified">Page identity matches this Notebook</string>
+    <string name="scanner_auto_capture_blocked">Auto-capture blocked until identity is safe</string>
+    <string name="scanner_guidance_select_notebook">Choose the Notebook you are scanning</string>
+    <string name="scanner_guidance_find_page_code">Keep the Page Code visible</string>
+    <string name="scanner_guidance_wrong_notebook">Wrong Notebook — change the destination or page</string>
+    <string name="scanner_guidance_select_matching_notebook">Choose which matching Notebook this page belongs to</string>
+    <string name="scanner_guidance_register_notebook">Register this Notebook before scanning its pages</string>
+    <string name="scanner_guidance_smart_page_mode">This is a Smart Page — leave Notebook scanning mode</string>
+    <string name="scanner_guidance_unsupported_page">Use a supported A2D page</string>
+    <string name="scanner_guidance_analysis_failed">Page analysis failed — try again</string>
+    <string name="scanner_guidance_find_page">Place an A2D page inside the frame</string>
+    <string name="scanner_guidance_show_all_corners">Move back until all four Corner Markers are visible</string>
+    <string name="scanner_guidance_supported_page">Remove other marked pages from the frame</string>
+    <string name="scanner_guidance_move_closer">Move closer to the page</string>
+    <string name="scanner_guidance_move_farther">Move farther away so the whole page is visible</string>
+    <string name="scanner_guidance_hold_steady">Hold the phone steady</string>
+    <string name="scanner_guidance_add_light">Add more even light</string>
+    <string name="scanner_guidance_reduce_glare">Tilt the page or phone to reduce glare</string>
+    <string name="scanner_guidance_page_aligned">Page found — hold steady</string>
+
     <string name="smart_pages_title">Create Smart Pages</string>
     <string name="smart_pages_single">Single Page</string>
     <string name="smart_pages_set">Page Set</string>
