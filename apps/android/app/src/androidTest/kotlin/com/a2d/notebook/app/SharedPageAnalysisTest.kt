@@ -1,26 +1,33 @@
 package com.a2d.notebook.app
 
+import android.graphics.BitmapFactory
+import android.graphics.Color
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.a2d.notebook.feature.scanner.camera.CameraAnalysisFrame
 import com.a2d.notebook.rustbridge.A2dBridge
 import com.a2d.notebook.rustbridge.EncodedPageAnalysisRequest
 import com.a2d.notebook.rustbridge.EncodedPageFormat
 import com.a2d.notebook.rustbridge.EncodedPageRotation
+import com.a2d.notebook.rustbridge.LivePageAnalysisPolicy
+import com.a2d.notebook.rustbridge.NativeLivePageAnalyzer
 import com.a2d.notebook.rustbridge.PageMarkerIds
+import com.a2d.notebook.rustbridge.PageAnalysisResult
 import com.a2d.notebook.rustbridge.analyzeEncodedPage
+import java.nio.ByteBuffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Executes the canonical synthetic page through the actual Android APK boundary:
- * Android test asset bytes -> typed Kotlin façade -> generated UniFFI/JNA binding -> packaged
- * x86_64 Rust cdylib -> shared encoded-image decoder -> Gray8 conversion -> official AprilTag
- * detector -> semantic marker resolution -> quality measurement -> typed Kotlin result.
+ * Executes the canonical synthetic page through the actual Android APK boundaries:
  *
- * This is synthetic integration evidence only. It does not claim physical-camera performance or
- * establish production capture thresholds.
+ * 1. encoded asset bytes -> typed Kotlin façade -> generated UniFFI/JNA binding -> packaged Rust;
+ * 2. owned direct Gray8 buffer -> borrowed live-analysis JNA ABI -> the same shared Rust detector.
+ *
+ * Both paths reach semantic marker resolution and quality measurement. This is synthetic integration
+ * evidence only; it does not claim physical-camera performance or establish production thresholds.
  */
 @RunWith(AndroidJUnit4::class)
 class SharedPageAnalysisTest {
@@ -52,16 +59,61 @@ class SharedPageAnalysisTest {
                     highlightLuminanceCutoff = 245,
                     qualityTileColumns = 8,
                     qualityTileRows = 8,
-                    markerIds =
-                        PageMarkerIds(
-                            topLeft = 0,
-                            topRight = 1,
-                            bottomRight = 2,
-                            bottomLeft = 3,
-                        ),
+                    markerIds = markerIds(),
                 ),
             )
 
+        assertCanonicalResult(result)
+    }
+
+    @Test
+    fun canonicalSyntheticPageRunsThroughBorrowedDirectLiveAnalysisAbi() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val encodedBytes =
+            instrumentation.context.assets.open("base-page.png").use { it.readBytes() }
+        val bitmap = requireNotNull(BitmapFactory.decodeByteArray(encodedBytes, 0, encodedBytes.size))
+        val pixels = IntArray(Math.multiplyExact(bitmap.width, bitmap.height))
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val luminance = ByteBuffer.allocateDirect(pixels.size)
+        pixels.forEach { pixel -> luminance.put(Color.red(pixel).toByte()) }
+        luminance.flip()
+        val frame =
+            CameraAnalysisFrame(
+                width = bitmap.width,
+                height = bitmap.height,
+                sourceRowStride = bitmap.width,
+                sourcePixelStride = 1,
+                rotationDegrees = 0,
+                timestampNanos = 123L,
+                extractionDurationNanos = 0L,
+                pixelBufferCopyCount = 1,
+                luminance = luminance,
+            )
+        bitmap.recycle()
+
+        val result =
+            NativeLivePageAnalyzer.analyze(
+                frame,
+                LivePageAnalysisPolicy(
+                    maxPixels = 3_000_000,
+                    detectorThreadCount = 1,
+                    detectorQuadDecimate = 1.0,
+                    detectorQuadSigma = 0.0,
+                    detectorRefineEdges = true,
+                    detectorDecodeSharpening = 0.25,
+                    detectorBitsCorrected = 2,
+                    darkLuminanceCutoff = 32,
+                    highlightLuminanceCutoff = 245,
+                    qualityTileColumns = 8,
+                    qualityTileRows = 8,
+                    markerIds = markerIds(),
+                ),
+            )
+
+        assertCanonicalResult(result)
+    }
+
+    private fun assertCanonicalResult(result: PageAnalysisResult) {
         assertEquals(1400L, result.width)
         assertEquals(1900L, result.height)
         assertEquals(0, result.sourceRotationDegrees)
@@ -82,4 +134,12 @@ class SharedPageAnalysisTest {
         assertTrue(result.quality.highlightFraction in 0.0..1.0)
         assertTrue(result.quality.maxTileHighlightFraction in 0.0..1.0)
     }
+
+    private fun markerIds() =
+        PageMarkerIds(
+            topLeft = 0,
+            topRight = 1,
+            bottomRight = 2,
+            bottomLeft = 3,
+        )
 }
