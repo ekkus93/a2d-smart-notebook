@@ -1,0 +1,33 @@
+name: Update Milestone 9 PR from master
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/tmp/update-m9-pr-from-master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-m9-pr-from-master-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  merge-master:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Merge current master and remove trigger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin master
+          git merge --no-edit origin/master
+          git rm .github/tmp/update-m9-pr-from-master
+          git commit --amend --no-edit
+          git push origin "HEAD:${{ github.head_ref }}"
