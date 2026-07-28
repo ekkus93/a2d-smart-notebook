@@ -1,0 +1,10 @@
+[
+  {
+    "name": "notebook-setup-basic",
+    "payload_text": "A2D:1:S:00000000000000000000000001:3NB487M",
+    "decoded": {
+      "design_id": "00000000000000000000000001",
+      "type": "NotebookSetup"
+    }
+  }
+]

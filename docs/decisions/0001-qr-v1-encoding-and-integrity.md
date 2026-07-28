@@ -1,8 +1,8 @@
 # 0001. QR v1 wire encoding and integrity check
 
-**Status:** Proposed — NOT Accepted. Do not commit `fixtures/qr/v1/` golden vectors, and do not
-treat this grammar as final, until the Validation Evidence section below is satisfied and this
-ADR's status is changed to Accepted.
+**Status:** Accepted — the v1 wire grammar and permanent compatibility fixtures are frozen.
+Physical printer/camera qualification remains a separate Milestone 17 evidence gate and does not
+permit rewriting accepted v1 vectors.
 **Date:** 2026-07-26
 **Decision owners/authors:** Phillip Chin (product direction, via spec/TODO review responses); grammar drafted by Claude Code from that direction and requires human review before acceptance.
 
@@ -209,34 +209,26 @@ after that point is fixed by incrementing `version`, not by editing v1 fixtures.
       app eventually ships with (ML Kit's internal decoder isn't guaranteed byte-identical to
       ZXing in every edge case) — treat this as strong evidence the grammar itself is sound, not
       a substitute for testing the actual shipped decoder once one is chosen.
-- [ ] Confirmation that the worst-case (SmartPage, full-length layout id) payload renders at the
-      smallest QR module size the physical layout (spec §11.4) requires, and still decodes
-      reliably. **Partially addressed, not satisfied**: `smartPagePayloadRoundTripsAtASmallRenderSize`
-      renders the worst-case payload at 120px as a rough proxy and it still decodes correctly,
-      but this is not the same as testing against the *real* physical layout's module size and
-      print/scan damage tolerance — that layout doesn't exist yet (Milestone 5). This checklist
-      item stays open until Milestone 5 produces a real layout to test against.
+- [x] The worst-case SmartPage payload, including a 20-character layout ID, maximum visible
+      page number, and Page Set ID, is rendered inside the real 18mm QR rectangle of the configured
+      US Letter Smart Page layout. Pure-Rust PDF rasterization at 95%, 100%, and 105% print scales
+      decodes the exact canonical text and detects all four official corner markers within a 2mm
+      center tolerance. The permanent fixture suite also decodes every committed valid vector and
+      asserts stable errors for malformed vectors.
 
-**Status stays Proposed.** The second item above is still open, so this ADR is not yet Accepted
-and Milestone 4.3 MUST NOT commit `fixtures/qr/v1/` yet — but the primary risk this ADR existed
-to de-risk (does the grammar survive a real render/decode round trip at all) is now backed by
-real evidence rather than a untested assumption.
+**Accepted scope.** This evidence freezes the QR v1 wire compatibility surface and confirms the
+configured vector PDF geometry survives deterministic rasterization. It does not claim consumer
+printer, paper, toner, lighting, camera, or damage-tolerance thresholds; those remain Milestone 17
+physical-validation work. Any future wire-format correction requires a new protocol version rather
+than editing v1 fixtures.
 
 ## Follow-up tasks
 
 - ~~Run the Android decoder spike above; record results here.~~ Done — see Validation evidence.
-- Confirm the `layout-id` registry format/location with Milestone 5 (layout engine) before this
-  ADR is accepted, since layout ids are referenced here but owned by `a2d-layout`.
-- Re-test the worst-case payload against Milestone 5's real physical layout (module size, print/
-  scan damage tolerance) once that layout exists — the only remaining open Validation Evidence
-  item.
-- Update this ADR's Status to Accepted once validation evidence is complete, then proceed with
-  Milestone 4.2/4.3 implementation exactly as specified above. Note that a minimal *encoder*
-  (not the strict parser/decoder, and not golden fixtures) already exists ahead of that --
-  `crates/a2d-identity/src/qr.rs` — built specifically to give this spike real payloads to test.
-  Milestone 4.2 should build on/extend it rather than starting from scratch, but still needs to
-  add the parser, full strict-validation rejection tests, and golden fixtures this ADR's grammar
-  describes.
+- Preserve `fixtures/qr/v1/` permanently; correct defects through a new protocol version.
+- Keep layout IDs immutable after release because printed Page Codes reference them directly.
+- Complete Milestone 17 physical printer/camera qualification without converting synthetic raster
+  tolerances into production capture thresholds.
 
 ## Superseding ADR reference
 

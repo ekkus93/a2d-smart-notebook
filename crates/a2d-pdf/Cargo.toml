@@ -9,9 +9,29 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+fixture-tools = ["dep:image", "dep:serde", "dep:serde_json"]
+
 [dependencies]
 a2d-domain = { version = "0.1.0", path = "../a2d-domain" }
 a2d-identity = { version = "0.1.0", path = "../a2d-identity" }
+a2d-image = { version = "0.1.0", path = "../a2d-image" }
 a2d-layout = { version = "0.1.0", path = "../a2d-layout" }
+image = { version = "=0.25.10", default-features = false, features = ["png"], optional = true }
 printpdf = { version = "0.12.4", default-features = false }
 qrcode = { version = "0.14.1", default-features = false }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+
+[dev-dependencies]
+hayro = { version = "=0.7.1", features = ["embed-fonts"] }
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+rqrr = "=0.10.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[bin]]
+name = "a2d-qr-v1-fixtures"
+path = "src/bin/a2d_qr_v1_fixtures.rs"
+required-features = ["fixture-tools"]

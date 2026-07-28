@@ -1,0 +1,42 @@
+[
+  {
+    "name": "lowercase-character",
+    "payload_text": "a2d:1:S:00000000000000000000000001:3NB487M",
+    "expected_error": "QR_INVALID_CHARACTER"
+  },
+  {
+    "name": "unsupported-version",
+    "payload_text": "A2D:2:S:00000000000000000000000001:3NB487M",
+    "expected_error": "QR_UNSUPPORTED_VERSION"
+  },
+  {
+    "name": "unknown-type-code",
+    "payload_text": "A2D:1:X:00000000000000000000000001:3NB487M",
+    "expected_error": "QR_UNKNOWN_TYPE_CODE"
+  },
+  {
+    "name": "trailing-field",
+    "payload_text": "A2D:1:S:00000000000000000000000001:EXTRA:3NB487M",
+    "expected_error": "QR_WRONG_FIELD_COUNT"
+  },
+  {
+    "name": "leading-zero-number",
+    "payload_text": "A2D:1:B:00000000000000000000000001:042:DEV-PAGE-V1:3PBTYT9",
+    "expected_error": "QR_NUMERIC_FIELD_INVALID"
+  },
+  {
+    "name": "unknown-layout",
+    "payload_text": "A2D:1:B:00000000000000000000000001:42:UNKNOWN-LAYOUT:3PBTYT9",
+    "expected_error": "QR_LAYOUT_ID_UNKNOWN"
+  },
+  {
+    "name": "crc-mismatch",
+    "payload_text": "A2D:1:S:00000000000000000000000001:3NB4870",
+    "expected_error": "QR_CRC_MISMATCH"
+  },
+  {
+    "name": "payload-too-long",
+    "payload_text": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "expected_error": "QR_PAYLOAD_TOO_LONG"
+  }
+]

@@ -2,9 +2,8 @@
 //! `docs/decisions/0001-qr-v1-encoding-and-integrity.md` specifies. The encoder predates
 //! Milestone 4 (it exists to give the ADR's own required Android decoder spike real canonical
 //! payload strings); [`parse`] is Milestone 4.2's strict decoder, built directly against that
-//! ADR's "Strict-parser rules" list. Golden fixtures (Milestone 4.3, `fixtures/qr/v1/`) stay out
-//! of scope here — the ADR's status is still Proposed, and v1 fixtures are permanent once
-//! committed, so they wait for Accepted regardless of how solid this parser is.
+//! ADR's "Strict-parser rules" list. ADR 0001 is Accepted and `fixtures/qr/v1/` now permanently
+//! freeze the v1 compatibility surface; future changes require a new protocol version.
 //!
 //! [`parse`] takes the `layout-id` registry membership check as a caller-supplied predicate
 //! rather than depending on `a2d-layout` directly: that crate's registry doesn't exist yet

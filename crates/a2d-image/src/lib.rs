@@ -24,7 +24,7 @@ pub use detection::{
     ImagePoint, MarkerDetection, MarkerFamily, MarkerIdLayout, PageOrientation, ResolvedMarker,
     ResolvedPageMarkers, resolve_page_markers,
 };
-pub use detector::{AprilTagDetector, DetectorConfig};
+pub use detector::{AprilTagDetector, DetectorConfig, RenderedTag};
 pub use encoded::{
     EncodedImage, EncodedImageFormat, EncodedImageLimits, OwnedGrayImage, OwnedRgbImage,
 };

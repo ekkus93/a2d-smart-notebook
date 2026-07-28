@@ -219,13 +219,17 @@ impl AprilTagDetector {
             .collect()
     }
 
-    #[cfg(test)]
-    fn render_tag(&self, id: u32) -> Result<RenderedTag, A2dError> {
+    /// Renders one official `tagStandard41h12` marker into Rust-owned grayscale pixels.
+    ///
+    /// The native image is copied before returning, so callers never receive a C pointer or a
+    /// buffer tied to the detector lifetime. This is used by both printable PDF generation and
+    /// deterministic fixture generation.
+    pub fn render_tag(&self, id: u32) -> Result<RenderedTag, A2dError> {
         // SAFETY: self.family is live. Reading ncodes is immutable.
         let ncodes = unsafe { self.family.as_ref().ncodes };
         if id >= ncodes {
             return Err(validation_error(
-                "MARKER_TEST_TAG_ID_OUT_OF_RANGE",
+                "MARKER_TAG_ID_OUT_OF_RANGE",
                 format!("tag ID {id} is outside tagStandard41h12's {ncodes} codes"),
             ));
         }
@@ -234,7 +238,7 @@ impl AprilTagDetector {
         let image = unsafe { sys::apriltag_to_image(self.family.as_ptr(), id) };
         let image = NonNull::new(image).ok_or_else(|| {
             processing_error(
-                "MARKER_TEST_RENDER_FAILED",
+                "MARKER_RENDER_FAILED",
                 format!("apriltag_to_image returned null for tag ID {id}"),
                 false,
             )
@@ -250,7 +254,7 @@ impl AprilTagDetector {
             // SAFETY: image came from apriltag_to_image.
             unsafe { sys::image_u8_destroy(image.as_ptr()) };
             return Err(processing_error(
-                "MARKER_TEST_RENDER_INVALID",
+                "MARKER_RENDER_INVALID",
                 "apriltag_to_image returned an invalid image",
                 false,
             ));
@@ -260,7 +264,7 @@ impl AprilTagDetector {
             .checked_mul(native.height as usize)
             .ok_or_else(|| {
                 processing_error(
-                    "MARKER_TEST_RENDER_SIZE_OVERFLOW",
+                    "MARKER_RENDER_SIZE_OVERFLOW",
                     "rendered tag buffer size overflowed",
                     false,
                 )
@@ -437,12 +441,40 @@ fn copy_detection(
     })
 }
 
-#[cfg(test)]
-struct RenderedTag {
+/// Owned grayscale marker image returned by [`AprilTagDetector::render_tag`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RenderedTag {
     width: usize,
     height: usize,
     stride: usize,
     bytes: Vec<u8>,
+}
+
+impl RenderedTag {
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    pub fn row_stride(&self) -> usize {
+        self.stride
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn pixel(&self, x: usize, y: usize) -> Option<u8> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+        self.bytes
+            .get(y.checked_mul(self.stride)?.checked_add(x)?)
+            .copied()
+    }
 }
 
 #[cfg(test)]

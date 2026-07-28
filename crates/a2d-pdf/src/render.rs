@@ -5,15 +5,14 @@
 //! is satisfied by construction: `BuiltinFont` uses the 14 standard PDF fonts, which every PDF
 //! viewer/printer already has and which require no embedded font program).
 //!
-//! **Corner Markers are a placeholder shape** (a bordered black square), not a real AprilTag bit
-//! pattern — the actual tag family isn't decided until Milestone 7 accepts
-//! `docs/decisions/0002-apriltag-detector-selection.md`. Swapping in the real pattern only
-//! touches [`marker_ops`]; every other rendering function and the layout geometry itself is
-//! unaffected.
+//! Corner Markers are vector renderings of official `tagStandard41h12` tags. The marker pixels
+//! come through `a2d-image`'s reviewed native ownership boundary and are immediately converted to
+//! PDF vector rectangles; native pointers and raster interpolation never cross into this crate.
 
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
+use a2d_image::{AprilTagDetector, DetectorConfig, RenderedTag};
 use a2d_layout::geometry::PhysicalRect;
-use a2d_layout::page_layout::{CalibrationMark, ContentStyle, PageLayout};
+use a2d_layout::page_layout::{CalibrationMark, ContentStyle, MarkerRole, PageLayout};
 use printpdf::{
     BuiltinFont, Color, Line, LinePoint, Mm, Op, PdfFontHandle, Point, Pt, Rgb, TextItem,
 };
@@ -101,19 +100,41 @@ fn vertical_line_ops(page_height_mm: f64, top_mm: f64, bottom_mm: f64, x_mm: f64
     }
 }
 
-/// A placeholder Corner Marker: a black square with an inset white square, giving a bordered
-/// "there is a marker here" shape without claiming to be a decodable AprilTag. See module docs.
-fn marker_ops(page_height_mm: f64, marker_rect: &PhysicalRect) -> Vec<Op> {
-    let border_fraction = 0.15;
-    let inset = marker_rect.size.width_mm.min(marker_rect.size.height_mm) * border_fraction;
-    let inner = PhysicalRect::new(
-        marker_rect.left() + inset,
-        marker_rect.top() + inset,
-        marker_rect.size.width_mm - 2.0 * inset,
-        marker_rect.size.height_mm - 2.0 * inset,
-    );
-    let mut ops = filled_rect_ops(page_height_mm, marker_rect, black());
-    ops.extend(filled_rect_ops(page_height_mm, &inner, white()));
+/// Stable marker IDs assigned to the four semantic page corners. These IDs are part of the
+/// printable layout compatibility surface and must not be reordered within v1 layouts.
+fn marker_id_for_role(role: MarkerRole) -> u32 {
+    match role {
+        MarkerRole::TopLeft => 0,
+        MarkerRole::TopRight => 1,
+        MarkerRole::BottomRight => 2,
+        MarkerRole::BottomLeft => 3,
+    }
+}
+
+/// Converts an official marker image into vector PDF rectangles. The white backing guarantees a
+/// deterministic marker field; each dark source pixel becomes one crisp vector module.
+fn marker_ops(page_height_mm: f64, marker_rect: &PhysicalRect, rendered: &RenderedTag) -> Vec<Op> {
+    let module_width_mm = marker_rect.size.width_mm / rendered.width() as f64;
+    let module_height_mm = marker_rect.size.height_mm / rendered.height() as f64;
+    let mut ops = filled_rect_ops(page_height_mm, marker_rect, white());
+
+    for row in 0..rendered.height() {
+        for column in 0..rendered.width() {
+            let value = rendered
+                .pixel(column, row)
+                .expect("loop coordinates are bounded by the rendered marker dimensions");
+            if value >= 128 {
+                continue;
+            }
+            let module_rect = PhysicalRect::new(
+                marker_rect.left() + column as f64 * module_width_mm,
+                marker_rect.top() + row as f64 * module_height_mm,
+                module_width_mm,
+                module_height_mm,
+            );
+            ops.extend(filled_rect_ops(page_height_mm, &module_rect, black()));
+        }
+    }
     ops
 }
 
@@ -322,9 +343,11 @@ pub fn render_page_ops(
     // malformed hand-constructed layout fails immediately rather than allocating QR/marker ops
     // first or entering an unbounded ruling loop.
     let content_ops = content_style_ops(h, &layout.content_rect, layout.content_style)?;
+    let detector = AprilTagDetector::new(DetectorConfig::default())?;
     let mut ops = Vec::new();
     for marker in &layout.markers {
-        ops.extend(marker_ops(h, &marker.rect));
+        let rendered = detector.render_tag(marker_id_for_role(marker.role))?;
+        ops.extend(marker_ops(h, &marker.rect, &rendered));
     }
     ops.extend(qr_ops(h, &layout.qr_rect, qr_payload)?);
     ops.extend(content_ops);
@@ -348,15 +371,24 @@ mod tests {
     }
 
     #[test]
-    fn render_page_ops_draws_a_filled_polygon_pair_for_every_marker() {
+    fn render_page_ops_draws_official_marker_modules_for_every_corner() {
         let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
         let ops = render_page_ops(&layout, "A2D:1:S:X:1234567", None).unwrap();
-        // Each marker is an outer + inner square (2 polygons), 4 markers -> 8, plus the QR's
-        // white backing square -- at least that many even before counting dark QR modules.
-        assert!(
-            count_polygons(&ops) > layout.markers.len() * 2,
-            "expected at least one polygon pair per marker plus the QR backing"
-        );
+        let detector = AprilTagDetector::new(DetectorConfig::default()).unwrap();
+        let marker_polygons: usize = MarkerRole::ALL
+            .into_iter()
+            .map(|role| {
+                let rendered = detector.render_tag(marker_id_for_role(role)).unwrap();
+                1 + (0..rendered.height())
+                    .map(|row| {
+                        (0..rendered.width())
+                            .filter(|column| rendered.pixel(*column, row).unwrap() < 128)
+                            .count()
+                    })
+                    .sum::<usize>()
+            })
+            .sum();
+        assert!(count_polygons(&ops) > marker_polygons);
     }
 
     #[test]
@@ -376,8 +408,22 @@ mod tests {
             .count();
 
         let ops = render_page_ops(&layout, &payload, None).unwrap();
-        // 8 marker polygons + 1 QR backing + one polygon per dark module.
-        assert_eq!(count_polygons(&ops), 8 + 1 + dark_modules);
+        // Official marker vector modules + 1 QR backing + one polygon per dark QR module.
+        let detector = AprilTagDetector::new(DetectorConfig::default()).unwrap();
+        let marker_polygons: usize = MarkerRole::ALL
+            .into_iter()
+            .map(|role| {
+                let rendered = detector.render_tag(marker_id_for_role(role)).unwrap();
+                1 + (0..rendered.height())
+                    .map(|row| {
+                        (0..rendered.width())
+                            .filter(|column| rendered.pixel(*column, row).unwrap() < 128)
+                            .count()
+                    })
+                    .sum::<usize>()
+            })
+            .sum();
+        assert_eq!(count_polygons(&ops), marker_polygons + 1 + dark_modules);
     }
 
     #[test]
@@ -428,11 +474,12 @@ mod tests {
     }
 
     #[test]
-    fn every_marker_role_gets_a_placeholder_shape() {
-        let layout = smart_page_layout(PaperSize::UsLetter, SmartPageStyle::Blank);
-        let roles: std::collections::HashSet<MarkerRole> =
-            layout.markers.iter().map(|m| m.role).collect();
-        assert_eq!(roles.len(), 4);
+    fn every_marker_role_gets_a_distinct_stable_official_tag_id() {
+        let ids: std::collections::HashSet<u32> = MarkerRole::ALL
+            .into_iter()
+            .map(marker_id_for_role)
+            .collect();
+        assert_eq!(ids, std::collections::HashSet::from([0, 1, 2, 3]));
     }
 
     #[test]

@@ -8,9 +8,11 @@ on:
       - "crates/a2d-ffi/**"
       - "crates/a2d-image/**"
       - "crates/a2d-layout/**"
+      - "crates/a2d-pdf/**"
       - "apps/android/app/build.gradle.kts"
       - "apps/android/app/src/main/assets/**"
       - "fixtures/scans/**"
+      - "fixtures/qr/**"
       - "tools/build-android-native-libs.sh"
       - "tools/build-android-native.sh"
       - "tools/generate_scan_fixtures.py"
@@ -76,10 +78,17 @@ jobs:
             diff -r "fixtures/scans/${path}" "target/generated-scan-fixtures/${path}"
           done
 
+      - name: Regenerate and verify permanent QR v1 fixtures
+        run: |
+          cargo run -p a2d-pdf --features fixture-tools --bin a2d-qr-v1-fixtures -- target/generated-qr-v1
+          diff -r fixtures/qr/v1 target/generated-qr-v1
+
       - name: Run fixture Rust quality gates
         run: |
           cargo clippy -p a2d-image --all-targets --all-features -- -D warnings
           cargo test -p a2d-image --all-features
+          cargo clippy -p a2d-pdf --all-targets --all-features -- -D warnings
+          cargo test -p a2d-pdf --all-features
 
       - name: Record raw synthetic processing measurements
         run: >-

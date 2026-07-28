@@ -1,0 +1,24 @@
+[
+  {
+    "name": "smart-page-standalone",
+    "payload_text": "A2D:1:M:00000000000000000000000002:SP-A4-BLANK-V1:-:-:2GY8P1W",
+    "decoded": {
+      "layout_id": "SP-A4-BLANK-V1",
+      "page_set_id": null,
+      "smart_page_id": "00000000000000000000000002",
+      "type": "SmartPage",
+      "visible_page_number": null
+    }
+  },
+  {
+    "name": "smart-page-max-fields",
+    "payload_text": "A2D:1:M:00000000000000000000000002:ABCDEFGHIJKLMNOPQRST:999999:00000000000000000000000003:0QFY7V9",
+    "decoded": {
+      "layout_id": "ABCDEFGHIJKLMNOPQRST",
+      "page_set_id": "00000000000000000000000003",
+      "smart_page_id": "00000000000000000000000002",
+      "type": "SmartPage",
+      "visible_page_number": 999999
+    }
+  }
+]

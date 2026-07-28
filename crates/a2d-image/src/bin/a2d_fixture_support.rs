@@ -10,12 +10,10 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::ptr::NonNull;
-use std::slice;
 
 use a2d_domain::{LayoutId, NotebookDesignId};
 use a2d_identity::PageCode;
-use apriltag_sys as sys;
+use a2d_image::{AprilTagDetector, DetectorConfig};
 use qrcode::types::Color as QrColor;
 use qrcode::{EcLevel, QrCode};
 
@@ -85,60 +83,19 @@ fn render_tags(
     output_dir: &Path,
     tag_ids: impl IntoIterator<Item = u32>,
 ) -> Result<(), Box<dyn Error>> {
-    // SAFETY: constructor takes no borrowed pointers; null is checked before use.
-    let family = NonNull::new(unsafe { sys::tagStandard41h12_create() })
-        .ok_or("tagStandard41h12_create returned null")?;
-
-    let result = (|| {
-        // SAFETY: family remains live for this entire closure.
-        let code_count = unsafe { family.as_ref().ncodes };
-        for tag_id in tag_ids {
-            if tag_id >= code_count {
-                return Err(format!("tag ID {tag_id} is outside tagStandard41h12").into());
-            }
-
-            // SAFETY: tag_id is in range and family remains live until the image is copied.
-            let image = NonNull::new(unsafe { sys::apriltag_to_image(family.as_ptr(), tag_id) })
-                .ok_or_else(|| format!("apriltag_to_image returned null for tag ID {tag_id}"))?;
-
-            let write_result = (|| {
-                // SAFETY: image is live and owned by this scope.
-                let native = unsafe { image.as_ref() };
-                if native.width <= 0
-                    || native.height <= 0
-                    || native.stride < native.width
-                    || native.buf.is_null()
-                {
-                    return Err(
-                        format!("official renderer returned invalid tag image {tag_id}").into(),
-                    );
-                }
-
-                let length = usize::try_from(native.stride)?
-                    .checked_mul(usize::try_from(native.height)?)
-                    .ok_or("rendered tag size overflowed")?;
-                // SAFETY: the official image owns at least stride * height bytes.
-                let bytes = unsafe { slice::from_raw_parts(native.buf, length) };
-                let path = output_dir.join(format!("tag-{tag_id}.pgm"));
-                write_pgm_strided(
-                    &path,
-                    usize::try_from(native.width)?,
-                    usize::try_from(native.height)?,
-                    usize::try_from(native.stride)?,
-                    bytes,
-                )
-            })();
-
-            // SAFETY: image came from apriltag_to_image and has not been freed.
-            unsafe { sys::image_u8_destroy(image.as_ptr()) };
-            write_result?;
-        }
-        Ok::<(), Box<dyn Error>>(())
-    })();
-
-    // SAFETY: family came from tagStandard41h12_create and remains uniquely owned.
-    unsafe { sys::tagStandard41h12_destroy(family.as_ptr()) };
-    result
+    let detector = AprilTagDetector::new(DetectorConfig::default())?;
+    for tag_id in tag_ids {
+        let tag = detector.render_tag(tag_id)?;
+        let path = output_dir.join(format!("tag-{tag_id}.pgm"));
+        write_pgm_strided(
+            &path,
+            tag.width(),
+            tag.height(),
+            tag.row_stride(),
+            tag.bytes(),
+        )?;
+    }
+    Ok(())
 }
 
 fn render_qr(path: &Path, payload: &str) -> Result<(), Box<dyn Error>> {
