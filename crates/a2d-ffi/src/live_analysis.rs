@@ -297,7 +297,9 @@ impl BinaryWriter {
 
     fn count(&mut self, value: usize, field: &'static str) -> Result<(), A2dError> {
         let value = u32::try_from(value).map_err(|_| {
-            codec_error(format!("{field} count does not fit the live-analysis codec"))
+            codec_error(format!(
+                "{field} count does not fit the live-analysis codec"
+            ))
         })?;
         self.u32(value);
         Ok(())
@@ -382,7 +384,10 @@ fn encode_error(error: &A2dError) -> Vec<u8> {
         error.correlation_id.clone(),
     ];
 
-    if fields.iter().any(|value| u32::try_from(value.len()).is_err()) {
+    if fields
+        .iter()
+        .any(|value| u32::try_from(value.len()).is_err())
+    {
         return encode_static_error();
     }
 
@@ -437,11 +442,7 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
     }
 }
 
-unsafe fn set_status(
-    status: *mut A2dLiveAnalysisStatus,
-    code: i32,
-    error: A2dLiveAnalysisBuffer,
-) {
+unsafe fn set_status(status: *mut A2dLiveAnalysisStatus, code: i32, error: A2dLiveAnalysisBuffer) {
     // SAFETY: the exported function validates `status` is non-null before calling this helper, and
     // the caller promises it points to writable `A2dLiveAnalysisStatus` storage for the call.
     unsafe { ptr::write(status, A2dLiveAnalysisStatus { code, error }) };
@@ -456,14 +457,8 @@ fn execute_live_analysis(
     bytes: &[u8],
     config: LiveAnalysisConfig,
 ) -> Result<Vec<u8>, A2dError> {
-    let result = analyze_gray_frame_impl(
-        width,
-        height,
-        row_stride,
-        rotation_degrees,
-        bytes,
-        config,
-    )?;
+    let result =
+        analyze_gray_frame_impl(width, height, row_stride, rotation_degrees, bytes, config)?;
     encode_result(&result)
 }
 
@@ -508,7 +503,13 @@ pub unsafe extern "C" fn a2d_live_analyze_gray_frame(
         return A2dLiveAnalysisBuffer::default();
     }
     // SAFETY: non-null was checked and the function's safety contract requires writable storage.
-    unsafe { set_status(status, LIVE_ANALYSIS_STATUS_SUCCESS, A2dLiveAnalysisBuffer::default()) };
+    unsafe {
+        set_status(
+            status,
+            LIVE_ANALYSIS_STATUS_SUCCESS,
+            A2dLiveAnalysisBuffer::default(),
+        )
+    };
 
     let execution = catch_unwind(AssertUnwindSafe(|| {
         let byte_count = to_usize(bytes_len, "bytes_len")?;
