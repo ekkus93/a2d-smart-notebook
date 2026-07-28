@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -63,11 +62,11 @@ class LiveScannerPresentationUiTest {
         }
 
         composeRule.onNodeWithTag(LiveScannerTestTags.ACTIVE_NOTEBOOK).assertIsDisplayed()
-        composeRule.onNodeWithText("Field Notes").assertExists()
+        composeRule.onNodeWithText("Field Notes").fetchSemanticsNode()
         composeRule.onNodeWithTag(LiveScannerTestTags.GUIDANCE).assertIsDisplayed()
-        composeRule.onNodeWithText("Wrong Notebook", substring = true).assertExists()
+        composeRule.onNodeWithText("Wrong Notebook", substring = true).fetchSemanticsNode()
         composeRule.onNodeWithTag(LiveScannerTestTags.IDENTITY_GATE).assertIsDisplayed()
-        composeRule.onNodeWithText("Auto-capture blocked", substring = true).assertExists()
+        composeRule.onNodeWithText("Auto-capture blocked", substring = true).fetchSemanticsNode()
     }
 
     @Test
@@ -100,8 +99,8 @@ class LiveScannerPresentationUiTest {
         }
 
         composeRule.onNodeWithTag(LiveScannerTestTags.ACTIVE_NOTEBOOK).assertIsDisplayed()
-        composeRule.onNodeWithText("Field Notes").assertExists()
+        composeRule.onNodeWithText("Field Notes").fetchSemanticsNode()
         composeRule.onNodeWithTag(LiveScannerTestTags.IDENTITY_GATE).assertIsDisplayed()
-        composeRule.onNodeWithText("Page identity matches", substring = true).assertExists()
+        composeRule.onNodeWithText("Page identity matches", substring = true).fetchSemanticsNode()
     }
 }
