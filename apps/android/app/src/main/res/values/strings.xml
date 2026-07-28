@@ -5,12 +5,15 @@
     <string name="home_rust_generated_id_prefix">Rust-generated Page ID: %1$s</string>
     <string name="home_notebooks">Notebooks</string>
     <string name="home_smart_pages">Create Smart Pages</string>
+    <string name="home_scan_page">Scan a Page</string>
 
     <string name="common_back">Back</string>
     <string name="common_retry">Retry</string>
     <string name="common_cancel">Cancel</string>
     <string name="common_loading">Loading…</string>
     <string name="common_error_prefix">Error: %1$s</string>
+    <string name="common_details">Details</string>
+    <string name="common_close">Close</string>
 
     <string name="notebooks_title">Notebooks</string>
     <string name="notebooks_add">Add Notebook</string>
@@ -71,6 +74,39 @@
     <string name="scanner_guidance_add_light">Add more even light</string>
     <string name="scanner_guidance_reduce_glare">Tilt the page or phone to reduce glare</string>
     <string name="scanner_guidance_page_aligned">Page found — hold steady</string>
+
+    <string name="single_scanner_title">Scan One Page</string>
+    <string name="single_scanner_choose_notebook">Scan destination</string>
+    <string name="single_scanner_no_notebooks">Register a Notebook before scanning pages.</string>
+    <string name="single_scanner_markers_searching">Corner Markers: searching</string>
+    <string name="single_scanner_markers_found">Corner Markers: %1$d of 4</string>
+    <string name="single_scanner_page_code_searching">Page Code: searching</string>
+    <string name="single_scanner_page_code_resolved">Page Code: identity resolved</string>
+    <string name="single_scanner_page_code_blocked">Page Code: blocked</string>
+    <string name="single_scanner_page_code_failed">Page Code: decoder failed</string>
+    <string name="single_scanner_manual_capture">Capture</string>
+    <string name="single_scanner_torch_on">Torch on</string>
+    <string name="single_scanner_torch_off">Torch off</string>
+    <string name="single_scanner_processing">Processing full-resolution capture in Rust…</string>
+    <string name="single_scanner_cancel_processing">Cancel processing</string>
+    <string name="single_scanner_review_title">Corrected preview</string>
+    <string name="single_scanner_review_explanation">Review the Rust-corrected image before registration.</string>
+    <string name="single_scanner_accept">Approve</string>
+    <string name="single_scanner_retake">Retake</string>
+    <string name="single_scanner_approved">Approved for registration — not saved yet</string>
+    <string name="single_scanner_not_saved">Milestone 9 durable registration is not implemented. This screen never claims the page is saved.</string>
+    <string name="single_scanner_warning_title">Capture warnings</string>
+    <string name="single_scanner_manual_warning">Manual capture bypasses automatic stability checks. Review all warnings before continuing.</string>
+    <string name="single_scanner_continue_capture">Capture anyway</string>
+    <string name="single_scanner_permission_title">Camera permission required</string>
+    <string name="single_scanner_permission_request">Allow camera</string>
+    <string name="single_scanner_permission_settings">Open app settings</string>
+    <string name="single_scanner_camera_unavailable">Camera unavailable</string>
+    <string name="single_scanner_auto_capture_calibration">Automatic capture remains disabled until physical-device calibration is complete.</string>
+    <string name="single_scanner_detail_notebook">Notebook: %1$s</string>
+    <string name="single_scanner_detail_page">Page: %1$s</string>
+    <string name="single_scanner_detail_pipeline">Correction pipeline version: %1$d</string>
+    <string name="single_scanner_detail_warning">Warning: %1$s</string>
 
     <string name="smart_pages_title">Create Smart Pages</string>
     <string name="smart_pages_single">Single Page</string>
