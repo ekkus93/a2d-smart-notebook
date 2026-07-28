@@ -15,13 +15,153 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: milestone7-native-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  reconcile-fixture-docs:
+    name: Reconcile Milestone 7.8 fixture documentation
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/milestone-7-native-validation' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Apply evidence-backed checklist update
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/A2D_SMART_NOTEBOOK_V01_TODO.md")
+          text = path.read_text(encoding="utf-8")
+
+          old_detector = '''- [ ] Measure detection on representative grayscale fixtures. The generated four-tag smoke test is
+                deterministic, but photographed/perturbed fixtures and Android device-tier measurements are
+                still required.
+          '''
+          new_detector = '''- [ ] Measure detection on representative grayscale fixtures. A deterministic synthetic corpus now
+                covers a canonical page plus rotation, perspective, exposure, blur, glare, missing-marker,
+                wrong-layout, duplicate-marker, revision, and corrupt-input variants. Desktop tests detect and
+                resolve the canonical page, but photographed fixtures and Android device-tier measurements are
+                still required before this evidence gate is complete.
+          '''
+          if text.count(old_detector) != 1:
+              raise SystemExit("Milestone 7.1 detector fixture anchor not found exactly once")
+          text = text.replace(old_detector, new_detector, 1)
+
+          old_qr = '''- [ ] Add legally usable blur, rotation, scale, glare, and damage fixtures for the shipped decoder.
+          '''
+          new_qr = '''- [ ] Add legally usable blur, rotation, scale, glare, and damage fixtures for the shipped decoder.
+                The synthetic page corpus now contains valid A2D QR codes under rotation, blur, glare,
+                perspective, exposure, wrong-layout, and corruption transforms, but Android ZXing conformance,
+                explicit scale cases, and controlled QR damage cases are not yet implemented.
+          '''
+          if text.count(old_qr) != 1:
+              raise SystemExit("Milestone 7.4 QR fixture anchor not found exactly once")
+          text = text.replace(old_qr, new_qr, 1)
+
+          old_section = '''## 7.8 Fixture corpus
+
+          Create legally usable fixtures under:
+
+          ```text
+          fixtures/scans/
+          ├── generated/
+          ├── photographed/
+          ├── glare/
+          ├── blur/
+          ├── missing-marker/
+          ├── wrong-layout/
+          ├── duplicate/
+          ├── revisions/
+          └── corrupted/
+          ```
+
+          Every fixture records source/license, expected identity, quality state, marker roles, warnings, and tolerances.
+
+          Acceptance:
+
+          - [ ] A desktop Rust test/CLI processes fixtures without Android.
+          - [ ] Android calls the same shared processing path.
+          '''
+          new_section = '''## 7.8 Fixture corpus
+
+          The deterministic synthetic foundation is committed under:
+
+          ```text
+          fixtures/scans/
+          ├── generated/
+          ├── photographed/
+          ├── glare/
+          ├── blur/
+          ├── missing-marker/
+          ├── wrong-layout/
+          ├── duplicate/
+          ├── revisions/
+          └── corrupted/
+          ```
+
+          - [x] Generate a content-bearing notebook page with the pinned official `tagStandard41h12` marker
+                family and a canonical A2D Notebook Page QR payload. The fixture-only Rust helper renders the
+                official tags and uses the existing `PageCode` encoder; Python does not reimplement either wire
+                format.
+          - [x] Generate deterministic rotation, perspective, underexposure, overexposure, Gaussian blur,
+                localized glare, missing-marker, wrong-layout QR, wrong marker-set, duplicate-marker, revision,
+                truncated-image, and non-image controls with pinned Pillow `11.3.0`.
+          - [x] Record project-generated/Apache-2.0 provenance, expected QR identity, expected marker roles,
+                intended quality state, warnings, transformation parameters, dimensions, mode, byte length, and
+                SHA-256 in `fixtures/scans/manifest.json`.
+          - [x] Keep `fixtures/scans/photographed/` separate and protected from synthetic regeneration. Synthetic
+                controls never claim photographed provenance.
+          - [x] Verify every manifest entry, digest, dimension, decode-success/decode-failure expectation, category,
+                and provenance field through `tools/verify_scan_fixtures.py`.
+          - [x] Regenerate the corpus in read-only CI and compare every generated category plus the manifest
+                byte-for-byte against committed assets so generator drift fails explicitly.
+          - [ ] Add calibrated processing tolerances for each relevant fixture. Current CI enforces byte-exact asset
+                regeneration plus exact discrete marker/decode expectations; it does not invent production quality
+                thresholds or physical-camera tolerances.
+          - [ ] Add real photographed Android fixtures with source/consent/license, device, camera, lighting,
+                print/page, and capture-condition metadata.
+
+          Acceptance:
+
+          - [x] A desktop Rust integration test processes all generated PNGs without Android through bounded
+                encoded-image decoding, Gray8 conversion, and quality measurement; detects/resolves marker IDs
+                `0..=3` on the canonical page; and confirms corrupt controls fail without fabricated success.
+          - [ ] Android calls the same shared processing path. This remains a Milestone 8 integration task.
+
+          Validation evidence:
+
+          - GitHub Actions native/fixture run `30315949013` passed deterministic regeneration and byte-drift
+            comparison, fixture clippy/tests, pinned Android `arm64-v8a`/`x86_64` native builds, and future Apple
+            compile-feasibility checks.
+          - GitHub Actions full CI run `30315948996` passed workspace formatting/clippy/tests,
+            dependency/license checks, Android lint/tests/debug APK assembly, and Kotlin binding drift.
+          '''
+          if text.count(old_section) != 1:
+              raise SystemExit("Milestone 7.8 section anchor not found exactly once")
+          text = text.replace(old_section, new_section, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Verify only the TODO changed
+        run: |
+          changed=$(git diff --name-only)
+          test "$changed" = "docs/A2D_SMART_NOTEBOOK_V01_TODO.md" || {
+            echo "Unexpected changed paths:" >&2
+            echo "$changed" >&2
+            exit 1
+          }
+      - name: Commit checklist reconciliation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md
+          git commit -m "Document Milestone 7 synthetic fixture evidence"
+          git push origin HEAD:${{ github.head_ref }}
+
   synthetic-fixtures:
     name: Regenerate and verify synthetic scan fixtures
     runs-on: ubuntu-24.04
