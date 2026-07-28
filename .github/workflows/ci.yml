@@ -25,6 +25,7 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
       - name: Execute the assertion-checked reconciliation script
+        if: hashFiles('.github/workflows/reconcile-milestone7-docs.yml') != ''
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -36,12 +37,11 @@ jobs:
           source = "\n".join(line[10:] for line in lines[start:end])
           exec(compile(source, str(workflow), "exec"), {})
           PY
-      - name: Commit reconciled docs and remove temporary machinery
+      - name: Commit reconciled documentation
+        if: hashFiles('.github/workflows/reconcile-milestone7-docs.yml') != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout HEAD^ -- .github/workflows/ci.yml
-          git rm .github/workflows/reconcile-milestone7-docs.yml
           git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md docs/decisions/0002-apriltag-detector-selection.md
           git commit -m "Reconcile Milestone 7 validation evidence"
           git push origin HEAD:${{ github.head_ref }}
