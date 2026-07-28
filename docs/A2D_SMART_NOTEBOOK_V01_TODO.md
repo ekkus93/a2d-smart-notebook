@@ -1,8 +1,8 @@
 # A2D Smart Notebook v0.1 — Implementation TODO
 
-**Status:** Milestones 1–6 implemented; Milestone 7 is next  
+**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence  
 **Version:** 0.1  
-**Date:** 2026-07-27  
+**Date:** 2026-07-28  
 **Repository:** `ekkus93/a2d-smart-notebook`  
 **Authoritative specification:** `docs/A2D_SMART_NOTEBOOK_V01_SPEC.md`
 
@@ -164,9 +164,10 @@ Acceptance:
       MPL-2.0 wasn't allow-listed (uniffi's license) and workspace-internal path dependencies
       were flagged as "wildcard" — fixed by marking all 15 crates `publish = false`, which
       `allow-wildcard-paths` requires.)
-- [ ] Fixture compatibility checks after fixtures exist. (No fixtures exist yet — blocked on
-      ADR 0001 reaching Accepted, which needs Milestone 5's physical layout. Add this job when
-      Milestone 4.3 lands.)
+- [x] Fixture compatibility checks. Permanent CI regenerates the deterministic scan corpus,
+      verifies manifest metadata and hashes, fails on byte drift, enforces versioned synthetic
+      processing envelopes, runs Android ZXing conformance tests, and exercises the packaged shared
+      Rust analysis path on an Android emulator.
 
 Required commands:
 
@@ -1072,99 +1073,187 @@ Validation evidence:
 
 ## 7.1 Complete a working detector spike
 
-- [ ] Evaluate the official AprilTag 3 native library.
-- [ ] Confirm license compatibility and commit the review.
-- [ ] Build reproducibly for required Android ABIs.
-- [ ] Wrap ownership and errors safely for Rust.
-- [ ] Measure detection on representative grayscale fixtures.
-- [ ] Confirm future iOS build feasibility.
-- [ ] Compare a pure-Rust alternative only if it materially reduces packaging risk.
+- [x] Evaluate the official AprilTag 3 native library. The pinned official implementation through
+      `apriltag-sys = 0.4.0` is integrated behind the safe `a2d-image` API.
+- [x] Confirm license compatibility and commit the review. See
+      `docs/reviews/APRILTAG_LICENSE_REVIEW_2026-07-27.md`.
+- [x] Build reproducibly for required Android ABIs. CI pins Android NDK `27.0.12077973` and
+      `cargo-ndk 4.1.2` and builds `arm64-v8a` plus `x86_64` directly against `a2d-image`.
+- [x] Wrap ownership and errors safely for Rust. Native detector, family, image, and detection-array
+      lifetimes are private RAII guards; public results own their data and failures are typed.
+- [ ] Complete representative photographed-fixture and physical Android device-tier measurements.
+      The deterministic synthetic corpus now has calibrated regression envelopes and runs through
+      desktop Rust plus the packaged `x86_64` Android integration boundary. Photographed fixtures and
+      physical `arm64-v8a` measurements remain required before this evidence gate is complete.
+- [x] Confirm future iOS build feasibility. The same crate compiles for `aarch64-apple-ios` and
+      `aarch64-apple-ios-sim`; this is compile feasibility only, not iOS application work.
+- [x] Compare a pure-Rust alternative only if it materially reduces packaging risk. The contingency
+      was reviewed and not triggered because the pinned official implementation cross-compiles for
+      every required native target; a comparison remains conditional on later material risk.
 - [ ] Accept `docs/decisions/0002-apriltag-detector-selection.md`, naming the selected
-      implementation and recording license review, Android ABI build results, desktop fixture
-      results, performance measurements, the memory-safety boundary, packaging strategy, and
-      future iOS feasibility.
+      implementation and recording license review, Android ABI build results, fixture results,
+      performance measurements, the memory-safety boundary, packaging strategy, and future iOS
+      feasibility. The ADR remains Proposed until representative photographed fixtures and physical
+      Android device-tier performance measurements are committed. APK packaging, third-party notices,
+      synthetic fixture envelopes, and emulator runtime loading are already proven.
 
-The spike must end with code and tests, not prose only.
+The spike ends with code, tests, pinned CI, and committed evidence rather than prose only.
 
 ## 7.2 Image input types
 
-- [ ] Define width, height, row stride, pixel format, rotation, and buffer ownership.
-- [ ] Support reduced grayscale analysis frames.
-- [ ] Support full-resolution image files for final processing.
-- [ ] Reject impossible dimensions/strides.
-- [ ] Enforce maximum decoded pixel count.
-- [ ] Avoid Base64.
+- [x] Define width, height, row stride, pixel format, rotation, and buffer ownership.
+- [x] Support reduced grayscale analysis frames through borrowed validated `GrayFrame` input.
+- [x] Support bounded JPEG and PNG full-resolution image files for final processing.
+- [x] Reject impossible dimensions, strides, truncated rows, format mismatches, and output-size
+      overflows with structured errors.
+- [x] Enforce caller-selected encoded-byte, decoded-byte, and decoded-pixel limits before accepting
+      full-resolution output.
+- [x] Avoid Base64. Image boundaries use borrowed or owned byte buffers directly.
 
-Example:
-
-```rust
-pub struct GrayFrame<'a> {
-    pub width: u32,
-    pub height: u32,
-    pub row_stride: usize,
-    pub rotation_degrees: u16,
-    pub bytes: &'a [u8],
-}
-```
+Implemented inputs expose borrowed Gray8 analysis frames plus owned RGB8/Gray8 decoded images.
+Encoded files require an explicit declared format and limits; there is no format-guessing fallback.
 
 ## 7.3 Detection results
 
 Return marker ID, four corners, center, decision margin, and error-quality data.
 
-- [ ] Validate expected family.
-- [ ] Resolve marker semantic roles from layout.
-- [ ] Reject duplicate roles.
-- [ ] Resolve orientation.
-- [ ] Preserve detection quality.
+- [x] Validate expected `tagStandard41h12` family.
+- [x] Resolve marker semantic roles from the selected layout.
+- [x] Reject duplicate tag IDs and duplicate semantic roles.
+- [x] Resolve page orientation from the semantic top edge.
+- [x] Preserve center, four corners, decision margin, and Hamming-error quality data.
 
 ## 7.4 QR decoder boundary
 
-- [ ] Decide whether image decoding runs in platform or shared native code.
-- [ ] Always send decoded payload to Rust for canonical parsing.
-- [ ] Add blur/rotation/scale/damage fixtures.
-- [ ] Never accept a decoder result without Rust validation.
+- [x] Decide that Android performs bounded local QR image decoding while Rust remains the canonical
+      payload trust boundary. See `docs/decisions/0003-qr-image-decoder-boundary.md`.
+- [x] Always send decoded payload text to Rust for canonical grammar, version, bounds, layout, and
+      CRC validation.
+- [x] Add legally usable blur, rotation, scale, glare, distortion, and controlled-damage cases for
+      the shipped ZXing decoder. Deterministic JVM conformance tests exercise pixel-buffer decoding
+      separately from Android file I/O, while Rust remains the canonical payload trust boundary.
+- [x] Never accept a decoder result without Rust validation; decoder success alone cannot trigger an
+      A2D identity or workflow success state.
+
+Validation evidence for the reconciled work:
+
+- GitHub Actions native run `30326733326` completed successfully on 2026-07-28.
+- GitHub Actions full CI run `30326733320` completed successfully on 2026-07-28.
+- Android ZXing conformance tests cover scale, rotation, blur, glare, distortion, and controlled damage.
+- Rust formatting, clippy with warnings denied, the full workspace test suite, and dependency/license
+  checks passed.
+- Android lint, unit tests, debug APK assembly, Kotlin UniFFI binding drift, both packaged native ABIs,
+  detector linkage, and packaged notices passed verification.
+- Future Apple device/simulator compile-feasibility checks passed; no iOS application work is claimed.
 
 ## 7.5 Homography and rectification
 
-- [ ] Compute projective transform from known correspondences.
-- [ ] Validate transform conditioning.
-- [ ] Reject self-intersecting or implausible quadrilaterals.
-- [ ] Warp to canonical dimensions.
-- [ ] Preserve matrix and source corners.
-- [ ] Add deterministic reference-output tests.
-- [ ] Prevent out-of-bounds access on malformed inputs.
+- [x] Compute a normalized projective transform from four ordered source/destination
+      correspondences with partial-pivot Gaussian elimination and verified reprojection.
+- [x] Validate transform conditioning through finite geometry checks, normalization, singular-pivot
+      rejection, pivot-ratio rejection, matrix inversion checks, and finite projection checks.
+- [x] Reject zero-length, collinear, self-intersecting, non-convex, negligible-area, non-finite, and
+      source-out-of-bounds quadrilaterals with structured errors.
+- [x] Warp borrowed Gray8 or owned RGB8 input to caller-selected canonical dimensions using bounded
+      inverse mapping and bilinear interpolation.
+- [x] Preserve source/destination page corners, optional source/destination marker centers, forward
+      and inverse matrices, source dimensions, output dimensions, and solve pivot ratio.
+- [x] Add deterministic reference-output tests for Gray8/RGB8 warps plus identity, perspective,
+      semantic marker/layout, invalid-geometry, source-mismatch, and memory-limit cases.
+- [x] Prevent out-of-bounds access on malformed inputs through validated source geometry, exact
+      buffer construction, checked output limits, bounded numerical epsilon, and structured sample
+      rejection rather than clamping arbitrary invalid coordinates.
+
+`RectificationPlan::from_page_markers` uses Rust-resolved semantic marker roles and the physical
+`PageLayout` marker centers to derive the canonical transform. Output is upright (`Degrees0`), and
+no production page resolution or quality threshold is invented by this layer.
+
+Validation evidence:
+
+- GitHub Actions native run `30311792736` passed pinned Android `arm64-v8a`/`x86_64` builds and
+  future Apple device/simulator compile-feasibility checks.
+- GitHub Actions full CI run `30311792705` passed Rust formatting, workspace clippy with warnings
+  denied, the full workspace test suite, dependency/license checks, and UniFFI binding drift.
+- Android lint, unit tests, and debug APK assembly are tracked by the same full CI run.
 
 ## 7.6 Quality metrics
 
 Implement raw metrics and classifications for:
 
-- [ ] Blur/focus.
-- [ ] Underexposure.
-- [ ] Overexposure.
-- [ ] Glare/highlight clipping.
-- [ ] Page fill/framing.
-- [ ] Marker confidence.
-- [ ] Perspective severity.
-- [ ] Effective content resolution.
-- [ ] Possible curvature.
+- [x] Blur/focus through variance of the four-neighbor luminance Laplacian over interior pixels;
+      frames too small to support that measurement report focus as unavailable rather than zero.
+- [x] Underexposure through mean luminance and dark-pixel fraction.
+- [x] Overexposure through mean luminance and highlight-clipped pixel fraction.
+- [x] Glare/highlight clipping through both global highlight fraction and the worst populated tile in
+      a caller-selected bounded grid, preserving localized glare that a global average can hide.
+- [x] Page fill/framing through quadrilateral area fraction, four normalized border margins, minimum
+      margin, and page-center offset.
+- [x] Marker confidence through minimum/mean decision margin, maximum Hamming errors, and unexpected
+      tag count; invalid native quality values remain structured capture-quality failures.
+- [x] Perspective severity through edge-length ratio, opposing-edge imbalance, diagonal imbalance,
+      and quadrilateral-to-bounding-box area ratio.
+- [x] Effective content resolution through conservative source and canonical-output pixels per
+      physical millimeter using the validated `PageLayout` size.
+- [x] Possible curvature through explicit edge probes and normalized perpendicular deviation. With
+      no probes, curvature remains unavailable; four corners alone never fabricate a flat-page result.
 
-Put thresholds in versioned configuration. Never invent success if measurement fails.
+Thresholds live in an explicit nonzero-version `QualityPolicy`; the library supplies no default
+production policy. Scalar and nested-band threshold ordering/direction are validated before use.
+Callers declare which measurements are required. Missing required metrics classify as `NeedsReview`,
+missing optional metrics remain visibly `Unavailable`, and a completely unevaluated capture resolves
+to `NeedsReview` rather than `Accepted`.
+
+Classification preserves the raw measurements, per-metric state, policy version, and one of the
+specification states: `Accepted`, `AcceptedWithWarnings`, `NeedsReview`, or `Rejected`.
+
+Validation evidence:
+
+- GitHub Actions quality run `30312884513` passed canonical formatting, clippy with warnings denied,
+  and all `a2d-image` tests before the formatted source was committed.
+- GitHub Actions native run `30312966395` passed pinned Android `arm64-v8a`/`x86_64` builds and future
+  Apple device/simulator compile-feasibility checks with the quality module included.
+- GitHub Actions full CI run `30312966424` passed workspace formatting, clippy/tests,
+  dependency/license checks, and UniFFI binding-drift validation for the clean quality implementation.
 
 ## 7.7 Derived images
 
-- [ ] Corrected color image.
-- [ ] OCR-optimized image.
-- [ ] Thumbnail.
-- [ ] Conservative contrast normalization.
-- [ ] Bounded optional sharpening.
-- [ ] Pipeline provenance/version.
-- [ ] Memory-bounded processing.
-- [ ] Cancellation-safe temporary outputs.
-- [ ] Never overwrite original.
+- [x] Produce a new owned corrected RGB8 image through the validated `RectificationPlan`; output is
+      upright and does not alias platform-owned or original capture memory.
+- [x] Produce a new owned OCR-optimized Gray8 image through deterministic RGB luminance conversion,
+      conservative contrast normalization, and optional bounded sharpening.
+- [x] Produce an aspect-preserving RGB8 thumbnail with caller-selected maximum dimensions and no
+      automatic upscaling.
+- [x] Use explicit low/high histogram percentiles and a caller-selected maximum gain for contrast
+      normalization; flat or already-wide inputs remain unchanged rather than forcing enhancement.
+- [x] Apply sharpening only when explicitly configured, with validated positive amount, pixel-detail
+      threshold, and a bounded pass count.
+- [x] Preserve a nonzero pipeline version plus source/output dimensions, source rotation, homography
+      matrix, applied contrast values, and sharpening configuration in result provenance.
+- [x] Preflight per-image pixel/byte limits, total output bytes, platform addressability, and a
+      conservative peak working-set estimate before allocating derived outputs.
+- [x] Check shared cancellation state before every major stage and between sharpening passes. Partial
+      buffers remain in memory only and are dropped on failure/cancellation; no partial result is
+      returned or persisted by this layer.
+- [x] Borrow the original `OwnedRgbImage` immutably and create separate owned outputs. Tests verify
+      the original bytes and rotation remain unchanged.
+
+`DerivedImagePipeline` is intentionally file-system agnostic. Atomic file publication and durable
+rollback belong to the storage/worker transaction boundary; this image layer cannot overwrite the
+original capture because it receives no path and performs no writes.
+
+Validation evidence:
+
+- GitHub Actions derived validation run `30313630025` applied the single reviewed slice-API fix,
+  passed clippy with warnings denied and all `a2d-image` tests, and committed only formatted Rust
+  source.
+- GitHub Actions native run `30313769678` passed pinned Android `arm64-v8a`/`x86_64` builds and
+  future Apple device/simulator compile-feasibility checks on the clean permanent workflow.
+- GitHub Actions full CI run `30313769680` passed workspace formatting/clippy/tests,
+  dependency/license checks, Android lint/tests/debug APK assembly, and UniFFI binding drift.
 
 ## 7.8 Fixture corpus
 
-Create legally usable fixtures under:
+The deterministic synthetic foundation is committed under:
 
 ```text
 fixtures/scans/
@@ -1179,12 +1268,57 @@ fixtures/scans/
 └── corrupted/
 ```
 
-Every fixture records source/license, expected identity, quality state, marker roles, warnings, and tolerances.
+- [x] Generate a content-bearing notebook page with the pinned official `tagStandard41h12` marker
+      family and a canonical A2D Notebook Page QR payload. The fixture-only Rust helper renders the
+      official tags and uses the existing `PageCode` encoder; Python does not reimplement either wire
+      format.
+- [x] Generate deterministic rotation, perspective, underexposure, overexposure, Gaussian blur,
+      localized glare, missing-marker, wrong-layout QR, wrong marker-set, duplicate-marker, revision,
+      truncated-image, and non-image controls with pinned Pillow `11.3.0`.
+- [x] Record project-generated/Apache-2.0 provenance, expected QR identity, expected marker roles,
+      intended quality state, warnings, transformation parameters, dimensions, mode, byte length, and
+      SHA-256 in `fixtures/scans/manifest.json`.
+- [x] Keep `fixtures/scans/photographed/` separate and protected from synthetic regeneration. Synthetic
+      controls never claim photographed provenance.
+- [x] Verify every manifest entry, digest, dimension, decode-success/decode-failure expectation, category,
+      and provenance field through `tools/verify_scan_fixtures.py`.
+- [x] Regenerate the corpus in read-only CI and compare every generated category plus the manifest
+      byte-for-byte against committed assets so generator drift fails explicitly.
+- [x] Add calibrated processing tolerances for each relevant synthetic fixture. Versioned entries in
+      `fixtures/scans/processing-expectations.tsv` enforce fixture-specific dimensions, luminance/focus
+      ranges, detector counts and IDs, decision-margin/Hamming bounds, and explicit resolution/error
+      behavior. These are deterministic synthetic regression envelopes, not production quality thresholds
+      or physical-camera tolerances.
+- [ ] Add real photographed Android fixtures with source/consent/license, device, camera, lighting,
+      print/page, and capture-condition metadata.
 
 Acceptance:
 
-- [ ] A desktop Rust test/CLI processes fixtures without Android.
-- [ ] Android calls the same shared processing path.
+- [x] A desktop Rust integration test processes all generated PNGs without Android through bounded
+      encoded-image decoding, Gray8 conversion, and quality measurement; detects/resolves marker IDs
+      `0..=3` on the canonical page; and confirms corrupt controls fail without fabricated success.
+- [x] Android calls the same shared processing path. An Android instrumentation test reads the canonical
+      synthetic PNG from the test APK and executes the typed Kotlin façade, generated UniFFI/JNA binding,
+      packaged `x86_64` Rust library, bounded decoder, Gray8 conversion, official AprilTag detector,
+      semantic marker resolution, and quality measurement without mocked detector results.
+
+Validation evidence:
+
+- GitHub Actions native/fixture run `30326733326` passed deterministic regeneration and byte-drift
+  comparison, synthetic processing envelopes, raw-measurement artifact generation, pinned Android
+  `arm64-v8a`/`x86_64` native builds, and future Apple compile-feasibility checks.
+- GitHub Actions full CI run `30326733320` passed workspace formatting/clippy/tests,
+  dependency/license checks, Android lint/tests/debug APK assembly, Kotlin binding drift, APK native
+  ABI/linkage/notices verification, and the packaged shared-Rust Android emulator integration test.
+
+Remaining Milestone 7 evidence:
+
+- [ ] Commit real photographed Android fixtures with source/consent/license and device/capture metadata.
+- [ ] Record representative physical `arm64-v8a` runtime, latency, and memory measurements across the
+      supported Android device tiers.
+- [ ] Recalibrate any production capture policy only from physical evidence; do not promote synthetic
+      regression envelopes into production thresholds.
+- [ ] Move ADR 0002 to Accepted after the physical evidence gates above pass.
 
 ---
 

@@ -1,9 +1,6 @@
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
-pub(crate) fn validation_error(
-    code: &'static str,
-    message: impl Into<String>,
-) -> A2dError {
+pub(crate) fn validation_error(code: &'static str, message: impl Into<String>) -> A2dError {
     A2dError::new(
         ErrorCode::new(code),
         ErrorCategory::Validation,
@@ -24,6 +21,21 @@ pub(crate) fn processing_error(
         ErrorCategory::ImageProcessing,
         ErrorSeverity::Error,
         "error.image.processing",
+        message,
+        retryable,
+    )
+}
+
+pub(crate) fn capture_quality_error(
+    code: &'static str,
+    message: impl Into<String>,
+    retryable: bool,
+) -> A2dError {
+    A2dError::new(
+        ErrorCode::new(code),
+        ErrorCategory::CaptureQuality,
+        ErrorSeverity::Warning,
+        "error.capture.quality",
         message,
         retryable,
     )

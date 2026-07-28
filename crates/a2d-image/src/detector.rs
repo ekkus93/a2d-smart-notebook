@@ -32,6 +32,22 @@ impl Default for DetectorConfig {
     }
 }
 
+trait NativeBoolean {
+    fn from_bool(value: bool) -> Self;
+}
+
+impl NativeBoolean for bool {
+    fn from_bool(value: bool) -> Self {
+        value
+    }
+}
+
+impl NativeBoolean for i32 {
+    fn from_bool(value: bool) -> Self {
+        i32::from(value)
+    }
+}
+
 impl DetectorConfig {
     fn validate(self) -> Result<Self, A2dError> {
         if self.thread_count == 0 {
@@ -135,9 +151,9 @@ impl AprilTagDetector {
             native.nthreads = i32::from(config.thread_count);
             native.quad_decimate = config.quad_decimate;
             native.quad_sigma = config.quad_sigma;
-            native.refine_edges = if config.refine_edges { 1 } else { 0 };
+            native.refine_edges = NativeBoolean::from_bool(config.refine_edges);
             native.decode_sharpening = config.decode_sharpening;
-            native.debug = 0;
+            native.debug = NativeBoolean::from_bool(false);
         }
 
         Ok(Self { detector, family })
@@ -149,9 +165,8 @@ impl AprilTagDetector {
         // SAFETY: detector and image are live for the duration of the call.
         // The result is immediately wrapped in a guard and copied into owned
         // Rust values before native memory is destroyed.
-        let detections_ptr = unsafe {
-            sys::apriltag_detector_detect(self.detector.as_ptr(), image.as_mut_ptr())
-        };
+        let detections_ptr =
+            unsafe { sys::apriltag_detector_detect(self.detector.as_ptr(), image.as_mut_ptr()) };
         let detections = NativeDetections::new(detections_ptr)?;
 
         // SAFETY: the guard owns the native array for the remainder of this scope.
@@ -283,11 +298,7 @@ impl NativeGrayImage {
     fn copy_from(frame: GrayFrame<'_>) -> Result<Self, A2dError> {
         // SAFETY: validated dimensions and stride fit the C integer range.
         let image = unsafe {
-            sys::image_u8_create_stride(
-                frame.width(),
-                frame.height(),
-                frame.row_stride() as u32,
-            )
+            sys::image_u8_create_stride(frame.width(), frame.height(), frame.row_stride() as u32)
         };
         let image = NonNull::new(image).ok_or_else(|| {
             processing_error(
@@ -527,6 +538,14 @@ mod tests {
     }
 
     #[test]
+    fn native_boolean_mapping_is_portable_across_generated_binding_types() {
+        assert!(<bool as NativeBoolean>::from_bool(true));
+        assert!(!<bool as NativeBoolean>::from_bool(false));
+        assert_eq!(<i32 as NativeBoolean>::from_bool(true), 1);
+        assert_eq!(<i32 as NativeBoolean>::from_bool(false), 0);
+    }
+
+    #[test]
     fn rejects_invalid_native_detector_configuration_before_allocation() {
         let config = DetectorConfig {
             thread_count: 0,
@@ -540,9 +559,6 @@ mod tests {
             ..DetectorConfig::default()
         };
         let err = AprilTagDetector::new(config).unwrap_err();
-        assert_eq!(
-            err.code.to_string(),
-            "MARKER_CONFIG_BITS_CORRECTED_INVALID"
-        );
+        assert_eq!(err.code.to_string(), "MARKER_CONFIG_BITS_CORRECTED_INVALID");
     }
 }

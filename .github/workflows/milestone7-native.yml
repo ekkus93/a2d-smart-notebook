@@ -1,0 +1,173 @@
+name: Milestone 7 Native Validation
+
+on:
+  pull_request:
+    paths:
+      - ".cargo/config.toml"
+      - "Cargo.lock"
+      - "crates/a2d-ffi/**"
+      - "crates/a2d-image/**"
+      - "crates/a2d-layout/**"
+      - "apps/android/app/build.gradle.kts"
+      - "apps/android/app/src/main/assets/**"
+      - "fixtures/scans/**"
+      - "tools/build-android-native-libs.sh"
+      - "tools/build-android-native.sh"
+      - "tools/generate_scan_fixtures.py"
+      - "tools/scan-fixtures-requirements.txt"
+      - "tools/verify-android-apk.py"
+      - "tools/verify_scan_fixtures.py"
+      - "tools/validate-milestone7-native.sh"
+      - ".github/workflows/milestone7-native.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: milestone7-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-fixtures:
+    name: Regenerate and verify synthetic scan fixtures
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/scan-fixtures-requirements.txt
+
+      - name: Install pinned fixture dependency
+        run: python -m pip install --requirement tools/scan-fixtures-requirements.txt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Verify Rust formatting and render official support assets
+        run: |
+          cargo fmt --check
+          rm -rf target/fixture-support target/generated-scan-fixtures
+          cargo run -p a2d-image --features fixture-tools --bin a2d-fixture-support -- target/fixture-support
+
+      - name: Regenerate and verify synthetic corpus
+        run: |
+          python tools/generate_scan_fixtures.py \
+            --support-dir target/fixture-support \
+            --output-dir target/generated-scan-fixtures
+          python tools/verify_scan_fixtures.py \
+            --fixture-dir target/generated-scan-fixtures
+
+      - name: Fail on generated fixture drift
+        run: |
+          for path in \
+            generated \
+            glare \
+            blur \
+            missing-marker \
+            wrong-layout \
+            duplicate \
+            revisions \
+            corrupted \
+            manifest.json
+          do
+            diff -r "fixtures/scans/${path}" "target/generated-scan-fixtures/${path}"
+          done
+
+      - name: Run fixture Rust quality gates
+        run: |
+          cargo clippy -p a2d-image --all-targets --all-features -- -D warnings
+          cargo test -p a2d-image --all-features
+
+      - name: Record raw synthetic processing measurements
+        run: >-
+          cargo run -p a2d-image --features fixture-tools
+          --bin a2d-fixture-measurements --
+          fixtures/scans target/synthetic-fixture-measurements.tsv
+
+      - name: Upload synthetic processing measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-fixture-measurements
+          path: target/synthetic-fixture-measurements.tsv
+          if-no-files-found: error
+
+  desktop-and-android:
+    name: Desktop detector and Android native ABIs
+    runs-on: ubuntu-24.04
+    env:
+      A2D_ANDROID_NDK_VERSION: "27.0.12077973"
+      A2D_CARGO_NDK_VERSION: "4.1.2"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show resolved Rust toolchain
+        run: rustc --version && cargo --version
+      - uses: Swatinem/rust-cache@v2
+      - uses: android-actions/setup-android@v3
+      - name: Install and select pinned Android native toolchain
+        run: |
+          sdkmanager --install "ndk;${A2D_ANDROID_NDK_VERSION}"
+          ndk_home="${ANDROID_HOME}/ndk/${A2D_ANDROID_NDK_VERSION}"
+          test -d "$ndk_home"
+          {
+            echo "ANDROID_SDK_ROOT=${ANDROID_HOME}"
+            echo "ANDROID_NDK_HOME=$ndk_home"
+            echo "ANDROID_NDK_ROOT=$ndk_home"
+            echo "A2D_EXPECTED_NDK_VERSION=${A2D_ANDROID_NDK_VERSION}"
+            echo "A2D_REQUIRE_EXPLICIT_NDK_HOME=1"
+          } >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
+      - name: Validate official AprilTag detector and Android builds
+        id: android-build
+        continue-on-error: true
+        run: bash ./tools/validate-milestone7-native.sh > milestone7-android.log 2>&1
+      - name: Upload compact Android build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone7-android-build-log
+          path: milestone7-android.log
+          if-no-files-found: error
+      - name: Report Android build failure
+        if: steps.android-build.outcome == 'failure'
+        run: |
+          cat milestone7-android.log || true
+          exit 1
+
+  ios-feasibility:
+    name: Future iOS native compile feasibility
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show resolved Rust and Xcode toolchains
+        run: rustc --version && cargo --version && xcodebuild -version
+      - uses: Swatinem/rust-cache@v2
+      - name: Add iOS Rust targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - name: Compile a2d-image for iOS device
+        id: ios-device
+        continue-on-error: true
+        run: cargo check -p a2d-image --target aarch64-apple-ios > ios-device.log 2>&1
+      - name: Compile a2d-image for Apple Silicon simulator
+        id: ios-simulator
+        continue-on-error: true
+        run: cargo check -p a2d-image --target aarch64-apple-ios-sim > ios-simulator.log 2>&1
+      - name: Upload compact iOS build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone7-ios-build-logs
+          path: |
+            ios-device.log
+            ios-simulator.log
+          if-no-files-found: error
+      - name: Report iOS build failures
+        if: steps.ios-device.outcome == 'failure' || steps.ios-simulator.outcome == 'failure'
+        run: |
+          echo '=== iOS device build ==='
+          cat ios-device.log || true
+          echo '=== Apple Silicon simulator build ==='
+          cat ios-simulator.log || true
+          exit 1

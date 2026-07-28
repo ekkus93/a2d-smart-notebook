@@ -9,7 +9,24 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+fixture-tools = ["dep:a2d-identity", "dep:qrcode"]
+
 [dependencies]
 a2d-domain = { path = "../a2d-domain" }
+a2d-identity = { version = "0.1.0", path = "../a2d-identity", optional = true }
 a2d-layout = { path = "../a2d-layout" }
 apriltag-sys = "=0.4.0"
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
+qrcode = { version = "0.14.1", default-features = false, optional = true }
+
+[[bin]]
+name = "a2d-fixture-support"
+path = "src/bin/a2d_fixture_support.rs"
+required-features = ["fixture-tools"]
+
+[[bin]]
+name = "a2d-fixture-measurements"
+path = "src/bin/a2d_fixture_measurements.rs"
+required-features = ["fixture-tools"]

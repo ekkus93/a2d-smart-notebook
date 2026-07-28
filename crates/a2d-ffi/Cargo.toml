@@ -20,4 +20,6 @@ path = "src/bin/uniffi-bindgen.rs"
 a2d-core = { path = "../a2d-core" }
 a2d-domain = { path = "../a2d-domain" }
 a2d-identity = { path = "../a2d-identity" }
+a2d-image = { path = "../a2d-image" }
+a2d-layout = { path = "../a2d-layout" }
 uniffi = { version = "0.32", features = ["cli"] }
