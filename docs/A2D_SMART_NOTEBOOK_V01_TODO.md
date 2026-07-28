@@ -1,6 +1,6 @@
 # A2D Smart Notebook v0.1 — Implementation TODO
 
-**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence; Milestone 8.1 CameraX adapter complete  
+**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence; Milestone 8.1 CameraX adapter and Milestone 8.2A live Rust/native frame analysis complete  
 **Version:** 0.1  
 **Date:** 2026-07-28  
 **Repository:** `ekkus93/a2d-smart-notebook`  
@@ -1335,18 +1335,53 @@ Validation evidence:
 - GitHub Actions CameraX adapter run `30339511067` passed workspace formatting/clippy/tests,
   permanent printable QR/page compatibility regeneration, both packaged Android native-library
   ABIs, Android lint and JVM tests, debug APK assembly, and APK native packaging verification.
-- This completes only the platform adapter in Milestone 8.1. Live shared-Rust analysis, latency
-  measurement, stale native-work cancellation, overlays/guidance, and auto-capture remain in
-  Milestones 8.2 and 8.3; physical printer/camera and representative Android-device evidence also
-  remain open.
+- Milestone 8.2A now completes live shared-Rust frame analysis, copy/latency instrumentation,
+  and stale-work cancellation. Overlay rendering, active Notebook display, actionable guidance,
+  identity-conflict gating, and auto-capture remain in Milestones 8.2B and 8.3; physical
+  printer/camera and representative Android-device evidence also remain open.
 
 ## 8.2 Live Rust/native analysis
 
-- [ ] Extract luminance efficiently.
-- [ ] Pass dimensions/stride/orientation correctly.
-- [ ] Measure copies and latency.
-- [ ] Analyze off the main thread.
-- [ ] Cancel stale work.
+### 8.2A Frame transport, shared analysis, and scheduling
+
+- [x] Extract luminance efficiently. `CameraFrameAnalyzer` performs exactly one owned copy from
+      CameraX's cropped Y plane into a tightly packed read-only direct `ByteBuffer`, honoring source
+      row stride, pixel stride, crop bounds, and source buffer limits without retaining `ImageProxy`.
+- [x] Pass dimensions/stride/orientation correctly. The Android bridge passes width, height, packed
+      row stride, and validated 0/90/180/270-degree rotation to the borrowed
+      `a2d_live_analyze_gray_frame` ABI; Rust revalidates every scalar before constructing `GrayFrame`.
+- [x] Measure copies and latency. Per-frame metrics record source and packed geometry, input byte
+      count, one CameraX pixel-buffer copy, zero FFI input copies, one small result-payload copy,
+      extraction time, queue time, native bridge time, scheduler time, and extraction-to-completion
+      latency. Representative physical-device latency evidence remains open under Milestone 7.
+- [x] Analyze off the main thread. CameraX extraction and synchronous Rust analysis use separate
+      dedicated single-thread executors; no native detector or quality work runs on Android's main
+      thread.
+- [x] Cancel stale work. `LatestFrameAnalysisScheduler` permits one in-flight analysis and one
+      keep-latest pending frame, reports superseded pending frames explicitly, and discards in-flight
+      completions after a newer frame, cancellation, close, or policy replacement before they can
+      update scanner state.
+
+Validation evidence:
+
+- Rust tests exercise the borrowed canonical Gray8 page through AprilTag detection, marker-role
+  resolution, quality measurement, the versioned result/error codec, null-pointer validation, panic
+  containment, and invalid-configuration rejection.
+- Kotlin JVM tests cover direct-buffer ownership, crop/row/pixel-stride handling, one-copy accounting,
+  off-caller-thread execution, keep-latest behavior, stale-result suppression, cancellation, explicit
+  failures, and closed-scheduler submission rejection.
+- Android instrumentation runs the canonical synthetic page through the packaged x86_64
+  `liba2d_ffi.so` using the borrowed direct-buffer ABI and verifies marker identities, orientation, and
+  quality output. `tools/verify-android-apk.py` also requires both live-analysis symbols in arm64-v8a
+  and x86_64 APK libraries.
+- GitHub Actions run `30354250368` passed Rust formatting/clippy/tests, both Android native ABIs,
+  Kotlin binding drift, Android lint/JVM tests, APK verification, and the packaged shared-Rust emulator
+  test. Its cargo-deny job identified only the missing permissive `Zlib` allowlist entry for transitive
+  `foldhash`; `deny.toml` now documents/allows `Zlib`, and pinned `cargo-deny 0.20.2` subsequently
+  completed with warnings only and no rejected dependency or license.
+
+### 8.2B Scanner presentation and safety gating
+
 - [ ] Render page/marker overlay.
 - [ ] Show active Notebook prominently.
 - [ ] Show actionable guidance.
