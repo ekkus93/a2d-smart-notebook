@@ -4,6 +4,7 @@ import java.nio.ByteBuffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -25,6 +26,66 @@ class CameraAnalysisTest {
 
         assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5, 6), copied)
         assertEquals(2, source.position())
+    }
+
+    @Test
+    fun productionCopyUsesOneExactReadOnlyDirectBuffer() {
+        val source = ByteBuffer.wrap(
+            byteArrayOf(
+                1, 2, 3, 99,
+                4, 5, 6, 88,
+            ),
+        ).apply { position(3) }
+
+        val copied = copyLuminancePlaneToDirectBuffer(
+            source = source,
+            imageWidth = 3,
+            imageHeight = 2,
+            crop = LuminanceCrop(left = 0, top = 0, width = 3, height = 2),
+            rowStride = 4,
+            pixelStride = 1,
+        )
+
+        assertTrue(copied.isDirect)
+        assertTrue(copied.isReadOnly)
+        assertEquals(0, copied.position())
+        assertEquals(6, copied.remaining())
+        assertArrayEquals(
+            byteArrayOf(1, 2, 3, 4, 5, 6),
+            ByteArray(copied.remaining()).also { copied.get(it) },
+        )
+        assertEquals(3, source.position())
+    }
+
+    @Test
+    fun analysisFrameReturnsIndependentReadOnlyViewsOverOwnedBytes() {
+        val luminance = ByteBuffer.allocateDirect(4).apply {
+            put(byteArrayOf(10, 20, 30, 40))
+            flip()
+        }
+        val frame = CameraAnalysisFrame(
+            width = 2,
+            height = 2,
+            sourceRowStride = 6,
+            sourcePixelStride = 2,
+            rotationDegrees = 270,
+            timestampNanos = 123,
+            extractionDurationNanos = 45,
+            pixelBufferCopyCount = 1,
+            luminance = luminance,
+        )
+
+        val first = frame.luminanceBuffer()
+        val second = frame.luminanceBuffer()
+        first.position(2)
+
+        assertNotSame(first, second)
+        assertTrue(first.isReadOnly)
+        assertTrue(second.isReadOnly)
+        assertEquals(0, second.position())
+        assertEquals(4, second.remaining())
+        assertEquals(2, frame.packedRowStride)
+        assertEquals(4, frame.luminanceByteCount)
     }
 
     @Test
