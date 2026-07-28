@@ -91,7 +91,7 @@ jobs:
           if-no-files-found: error
 
   android-shared-analysis:
-    name: Android emulator (packaged shared Rust analysis)
+    name: Android emulator (shared analysis and scanner presentation)
     needs: android
     runs-on: ubuntu-latest
     env:
@@ -124,7 +124,7 @@ jobs:
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Build the packaged x86_64 Rust library
         run: bash ./tools/build-android-native-libs.sh "x86_64"
-      - name: Run the shared-analysis instrumentation test
+      - name: Run shared-analysis and scanner-presentation instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -138,7 +138,7 @@ jobs:
           script: >-
             cd apps/android &&
             ./gradlew connectedDebugAndroidTest --no-daemon
-            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest
       - name: Upload Android instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
