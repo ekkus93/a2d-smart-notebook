@@ -47,11 +47,16 @@ data class SinglePageReviewArtifact(
     val pipelineVersion: Int,
     val sourceToCorrectedMatrix: List<Double>,
     val warnings: Set<CapturePolicyWarning>,
+    val approvalAllowed: Boolean,
+    val identityWarning: String?,
 ) {
     init {
         require(stagingPath.isNotBlank())
         require(pipelineVersion > 0)
         require(sourceToCorrectedMatrix.size == 9)
+        require(approvalAllowed || !identityWarning.isNullOrBlank()) {
+            "a blocked review artifact must explain its identity conflict"
+        }
     }
 }
 
