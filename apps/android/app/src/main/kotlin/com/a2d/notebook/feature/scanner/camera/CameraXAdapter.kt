@@ -19,6 +19,8 @@ import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 sealed interface CameraAdapterState {
     data object Idle : CameraAdapterState
@@ -33,7 +35,7 @@ sealed interface CameraAdapterState {
 
     data class Error(
         val message: String,
-        val cause: Throwable,
+        val cause: Exception,
     ) : CameraAdapterState
 
     data object Closed : CameraAdapterState
@@ -47,7 +49,7 @@ sealed interface CameraCaptureResult {
 
     data class Failure(
         val message: String,
-        val cause: Throwable?,
+        val cause: Exception?,
     ) : CameraCaptureResult
 }
 
@@ -73,19 +75,16 @@ class CameraXAdapter(
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor(
         cameraThreadFactory("a2d-camera-analysis"),
     ),
-    private val captureExecutor: ExecutorService = Executors.newSingleThreadExecutor(
-        cameraThreadFactory("a2d-camera-capture"),
-    ),
 ) : AutoCloseable {
     private val applicationContext = context.applicationContext
+    private val closeRequested = AtomicBoolean(false)
+    private val bindGeneration = AtomicLong(0)
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onDestroy(owner: LifecycleOwner) {
             close()
         }
     }
 
-    private var bindGeneration = 0L
-    private var closed = false
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
     private var preview: Preview? = null
@@ -103,7 +102,7 @@ class CameraXAdapter(
         targetRotation: Int,
     ) {
         mainExecutor.execute {
-            if (closed) {
+            if (closeRequested.get()) {
                 publishClosedFailure("cannot bind a closed CameraX adapter")
                 return@execute
             }
@@ -114,13 +113,17 @@ class CameraXAdapter(
                 return@execute
             }
 
-            val generation = ++bindGeneration
+            val generation = bindGeneration.incrementAndGet()
             publish(CameraAdapterState.Initializing)
             val providerFuture = ProcessCameraProvider.getInstance(applicationContext)
             providerFuture.addListener(
                 {
-                    if (closed || generation != bindGeneration) return@addListener
-                    runCatching {
+                    if (closeRequested.get() || generation != bindGeneration.get()) {
+                        return@addListener
+                    }
+
+                    var pendingAnalysis: ImageAnalysis? = null
+                    try {
                         val resolvedProvider = providerFuture.get()
                         val newPreview = Preview.Builder()
                             .setTargetRotation(targetRotation)
@@ -131,10 +134,18 @@ class CameraXAdapter(
                             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                             .build()
-                            .also {
-                                it.setAnalyzer(
+                            .also { analysis ->
+                                pendingAnalysis = analysis
+                                analysis.setAnalyzer(
                                     analysisExecutor,
-                                    CameraFrameAnalyzer(onAnalysisEvent),
+                                    CameraFrameAnalyzer { event ->
+                                        if (
+                                            !closeRequested.get() &&
+                                            generation == bindGeneration.get()
+                                        ) {
+                                            onAnalysisEvent(event)
+                                        }
+                                    },
                                 )
                             }
                         val newCapture = ImageCapture.Builder()
@@ -142,7 +153,10 @@ class CameraXAdapter(
                             .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                             .build()
 
+                        imageAnalysis?.clearAnalyzer()
                         unbindUseCases(resolvedProvider)
+                        clearBoundReferences()
+
                         val boundCamera = resolvedProvider.bindToLifecycle(
                             lifecycleOwner,
                             cameraSelector,
@@ -156,13 +170,20 @@ class CameraXAdapter(
                         imageAnalysis = newAnalysis
                         imageCapture = newCapture
                         torchEnabled = false
+
+                        if (closeRequested.get() || generation != bindGeneration.get()) {
+                            return@addListener
+                        }
                         publish(
                             CameraAdapterState.Bound(
                                 torchAvailable = boundCamera.cameraInfo.hasFlashUnit(),
                                 torchEnabled = false,
                             ),
                         )
-                    }.onFailure(::publishFailure)
+                    } catch (failure: Exception) {
+                        pendingAnalysis?.clearAnalyzer()
+                        publishFailure(failure)
+                    }
                 },
                 mainExecutor,
             )
@@ -171,7 +192,16 @@ class CameraXAdapter(
 
     fun updateTargetRotation(targetRotation: Int) {
         mainExecutor.execute {
-            if (closed || !isValidRotation(targetRotation)) return@execute
+            if (closeRequested.get()) {
+                publishClosedFailure("cannot update rotation on a closed CameraX adapter")
+                return@execute
+            }
+            if (!isValidRotation(targetRotation)) {
+                publishFailure(
+                    IllegalArgumentException("invalid CameraX target rotation: $targetRotation"),
+                )
+                return@execute
+            }
             preview?.targetRotation = targetRotation
             imageAnalysis?.targetRotation = targetRotation
             imageCapture?.targetRotation = targetRotation
@@ -180,7 +210,7 @@ class CameraXAdapter(
 
     fun setTorch(enabled: Boolean) {
         mainExecutor.execute {
-            if (closed) {
+            if (closeRequested.get()) {
                 publishClosedFailure("cannot control torch on a closed CameraX adapter")
                 return@execute
             }
@@ -194,20 +224,29 @@ class CameraXAdapter(
                 return@execute
             }
 
+            val generation = bindGeneration.get()
             val request = boundCamera.cameraControl.enableTorch(enabled)
             request.addListener(
                 {
-                    runCatching { request.get() }
-                        .onSuccess {
-                            torchEnabled = enabled
-                            publish(
-                                CameraAdapterState.Bound(
-                                    torchAvailable = boundCamera.cameraInfo.hasFlashUnit(),
-                                    torchEnabled = enabled,
-                                ),
-                            )
-                        }
-                        .onFailure(::publishFailure)
+                    if (
+                        closeRequested.get() ||
+                        generation != bindGeneration.get() ||
+                        camera !== boundCamera
+                    ) {
+                        return@addListener
+                    }
+                    try {
+                        request.get()
+                        torchEnabled = enabled
+                        publish(
+                            CameraAdapterState.Bound(
+                                torchAvailable = boundCamera.cameraInfo.hasFlashUnit(),
+                                torchEnabled = enabled,
+                            ),
+                        )
+                    } catch (failure: Exception) {
+                        publishFailure(failure)
+                    }
                 },
                 mainExecutor,
             )
@@ -223,9 +262,8 @@ class CameraXAdapter(
         callback: (CameraCaptureResult) -> Unit,
     ) {
         mainExecutor.execute {
-            if (closed) {
-                callbackOnMain(
-                    callback,
+            if (closeRequested.get()) {
+                callback(
                     CameraCaptureResult.Failure(
                         "cannot capture from a closed CameraX adapter",
                         null,
@@ -235,15 +273,11 @@ class CameraXAdapter(
             }
             val capture = imageCapture
             if (capture == null) {
-                callbackOnMain(
-                    callback,
-                    CameraCaptureResult.Failure("camera is not bound", null),
-                )
+                callback(CameraCaptureResult.Failure("camera is not bound", null))
                 return@execute
             }
             if (outputFile.exists()) {
-                callbackOnMain(
-                    callback,
+                callback(
                     CameraCaptureResult.Failure(
                         "capture staging file already exists",
                         null,
@@ -253,8 +287,7 @@ class CameraXAdapter(
             }
             val parent = outputFile.parentFile
             if (parent == null || (!parent.exists() && !parent.mkdirs())) {
-                callbackOnMain(
-                    callback,
+                callback(
                     CameraCaptureResult.Failure(
                         "capture staging directory could not be created",
                         null,
@@ -264,28 +297,33 @@ class CameraXAdapter(
             }
 
             val options = ImageCapture.OutputFileOptions.Builder(outputFile).build()
-            capture.takePicture(
-                options,
-                captureExecutor,
-                object : ImageCapture.OnImageSavedCallback {
-                    override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                        callbackOnMain(
-                            callback,
-                            CameraCaptureResult.Captured(outputFile, output.savedUri),
-                        )
-                    }
+            try {
+                capture.takePicture(
+                    options,
+                    mainExecutor,
+                    object : ImageCapture.OnImageSavedCallback {
+                        override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                            callback(CameraCaptureResult.Captured(outputFile, output.savedUri))
+                        }
 
-                    override fun onError(exception: ImageCaptureException) {
-                        callbackOnMain(
-                            callback,
-                            CameraCaptureResult.Failure(
-                                exception.message ?: "CameraX image capture failed",
-                                exception,
-                            ),
-                        )
-                    }
-                },
-            )
+                        override fun onError(exception: ImageCaptureException) {
+                            callback(
+                                CameraCaptureResult.Failure(
+                                    exception.message ?: "CameraX image capture failed",
+                                    exception,
+                                ),
+                            )
+                        }
+                    },
+                )
+            } catch (failure: Exception) {
+                callback(
+                    CameraCaptureResult.Failure(
+                        failure.message ?: "CameraX image capture failed",
+                        failure,
+                    ),
+                )
+            }
         }
     }
 
@@ -294,36 +332,49 @@ class CameraXAdapter(
     }
 
     override fun close() {
+        if (!closeRequested.compareAndSet(false, true)) {
+            return
+        }
+        bindGeneration.incrementAndGet()
         mainExecutor.execute {
-            if (closed) return@execute
-            closed = true
-            bindGeneration++
             lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
-            imageAnalysis?.clearAnalyzer()
-            provider?.let(::unbindUseCases)
+
+            var cleanupFailure: Exception? = null
+            try {
+                imageAnalysis?.clearAnalyzer()
+                provider?.let(::unbindUseCases)
+            } catch (failure: Exception) {
+                cleanupFailure = failure
+            }
+
             provider = null
-            camera = null
-            preview = null
-            imageAnalysis = null
-            imageCapture = null
-            torchEnabled = false
+            clearBoundReferences()
             analysisExecutor.shutdownNow()
-            captureExecutor.shutdownNow()
+
+            cleanupFailure?.let(::publishFailure)
             publish(CameraAdapterState.Closed)
         }
     }
 
     private fun unbindOnMain() {
-        if (closed) return
-        bindGeneration++
-        imageAnalysis?.clearAnalyzer()
-        provider?.let(::unbindUseCases)
+        if (closeRequested.get()) return
+        bindGeneration.incrementAndGet()
+        try {
+            imageAnalysis?.clearAnalyzer()
+            provider?.let(::unbindUseCases)
+            clearBoundReferences()
+            publish(CameraAdapterState.Unbound)
+        } catch (failure: Exception) {
+            publishFailure(failure)
+        }
+    }
+
+    private fun clearBoundReferences() {
         camera = null
         preview = null
         imageAnalysis = null
         imageCapture = null
         torchEnabled = false
-        publish(CameraAdapterState.Unbound)
     }
 
     private fun unbindUseCases(cameraProvider: ProcessCameraProvider) {
@@ -333,7 +384,7 @@ class CameraXAdapter(
         }
     }
 
-    private fun publishFailure(cause: Throwable) {
+    private fun publishFailure(cause: Exception) {
         publish(
             CameraAdapterState.Error(
                 message = cause.message ?: "CameraX operation failed",
@@ -348,13 +399,6 @@ class CameraXAdapter(
 
     private fun publish(state: CameraAdapterState) {
         onStateChanged(state)
-    }
-
-    private fun callbackOnMain(
-        callback: (CameraCaptureResult) -> Unit,
-        result: CameraCaptureResult,
-    ) {
-        mainExecutor.execute { callback(result) }
     }
 
     private fun isValidRotation(rotation: Int): Boolean = rotation == Surface.ROTATION_0 ||
