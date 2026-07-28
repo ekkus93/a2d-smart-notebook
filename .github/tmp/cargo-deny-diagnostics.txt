@@ -1,0 +1,388 @@
+error[rejected]: failed to satisfy license requirements
+   ┌─ /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/foldhash-0.2.0/Cargo.toml:40:12
+   │
+40 │ license = "Zlib"
+   │            ━━━━
+   │            │
+   │            rejected: license is not explicitly allowed
+   │
+   ├ Zlib - zlib License:
+   ├   - OSI approved
+   ├   - FSF Free/Libre
+   ├ foldhash v0.2.0
+     ├── hashbrown v0.16.1
+     │   └── lru v0.16.4
+     │       └── rqrr v0.10.1
+     │           └── (dev) a2d-pdf v0.1.0
+     │               └── a2d-core v0.1.0
+     │                   └── a2d-ffi v0.1.0
+     └── hashbrown v0.17.1
+         ├── indexmap v2.14.0
+         │   ├── lopdf v0.44.0
+         │   │   └── printpdf v0.12.4
+         │   │       └── a2d-pdf v0.1.0 (*)
+         │   ├── uniffi_bindgen v0.32.0
+         │   │   └── uniffi v0.32.0
+         │   │       └── a2d-ffi v0.1.0 (*)
+         │   ├── uniffi_internal_macros v0.32.0
+         │   │   ├── uniffi_bindgen v0.32.0 (*)
+         │   │   ├── uniffi_meta v0.32.0
+         │   │   │   ├── uniffi_bindgen v0.32.0 (*)
+         │   │   │   ├── uniffi_macros v0.32.0
+         │   │   │   │   └── uniffi v0.32.0 (*)
+         │   │   │   └── uniffi_udl v0.32.0
+         │   │   │       └── uniffi_bindgen v0.32.0 (*)
+         │   │   └── uniffi_pipeline v0.32.0
+         │   │       ├── uniffi v0.32.0 (*)
+         │   │       ├── uniffi_bindgen v0.32.0 (*)
+         │   │       └── uniffi_meta v0.32.0 (*)
+         │   └── uniffi_pipeline v0.32.0 (*)
+         ├── vello_common v0.0.8
+         │   └── vello_cpu v0.0.8
+         │       └── hayro v0.7.1
+         │           └── (dev) a2d-pdf v0.1.0 (*)
+         └── vello_cpu v0.0.8 (*)
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/runner/work/a2d-smart-notebook/a2d-smart-notebook/deny.toml:18:4
+   │
+18 │   "ISC",
+   │    ━━━ unmatched license allowance
+
+warning[duplicate]: found 2 duplicate entries for crate 'getrandom'
+   ┌─ /home/runner/work/a2d-smart-notebook/a2d-smart-notebook/Cargo.lock:88:1
+   │  
+88 │ ╭ getrandom 0.2.17 registry+https://github.com/rust-lang/crates.io-index
+89 │ │ getrandom 0.4.3 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰─────────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ getrandom v0.2.17
+     └── a2d-domain v0.1.0
+         ├── a2d-core v0.1.0
+         │   └── a2d-ffi v0.1.0
+         ├── a2d-ffi v0.1.0 (*)
+         ├── a2d-identity v0.1.0
+         │   ├── a2d-core v0.1.0 (*)
+         │   ├── a2d-ffi v0.1.0 (*)
+         │   ├── a2d-image v0.1.0
+         │   │   ├── a2d-ffi v0.1.0 (*)
+         │   │   └── a2d-pdf v0.1.0
+         │   │       └── a2d-core v0.1.0 (*)
+         │   └── a2d-pdf v0.1.0 (*)
+         ├── a2d-image v0.1.0 (*)
+         ├── a2d-layout v0.1.0
+         │   ├── a2d-core v0.1.0 (*)
+         │   ├── a2d-ffi v0.1.0 (*)
+         │   ├── a2d-image v0.1.0 (*)
+         │   └── a2d-pdf v0.1.0 (*)
+         ├── a2d-pdf v0.1.0 (*)
+         └── a2d-storage v0.1.0
+             └── a2d-core v0.1.0 (*)
+   ├ getrandom v0.4.3
+     ├── jobserver v0.1.35
+     │   └── cc v1.4.0
+     │       ├── (build) apriltag-sys v0.4.0
+     │       │   └── a2d-image v0.1.0
+     │       │       ├── a2d-ffi v0.1.0
+     │       │       └── a2d-pdf v0.1.0
+     │       │           └── a2d-core v0.1.0
+     │       │               └── a2d-ffi v0.1.0 (*)
+     │       ├── cmake v0.1.58
+     │       │   └── (build) apriltag-sys v0.4.0 (*)
+     │       └── (build) libsqlite3-sys v0.30.1
+     │           └── rusqlite v0.32.1
+     │               └── a2d-storage v0.1.0
+     │                   └── a2d-core v0.1.0 (*)
+     ├── lopdf v0.44.0
+     │   └── printpdf v0.12.4
+     │       └── a2d-pdf v0.1.0 (*)
+     ├── printpdf v0.12.4 (*)
+     ├── rand v0.10.2
+     │   └── lopdf v0.44.0 (*)
+     └── tempfile v3.27.0
+         ├── uniffi_bindgen v0.32.0
+         │   └── uniffi v0.32.0
+         │       └── a2d-ffi v0.1.0 (*)
+         └── uniffi_pipeline v0.32.0
+             ├── uniffi v0.32.0 (*)
+             ├── uniffi_bindgen v0.32.0 (*)
+             └── uniffi_meta v0.32.0
+                 ├── uniffi_bindgen v0.32.0 (*)
+                 ├── uniffi_macros v0.32.0
+                 │   └── uniffi v0.32.0 (*)
+                 └── uniffi_udl v0.32.0
+                     └── uniffi_bindgen v0.32.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
+   ┌─ /home/runner/work/a2d-smart-notebook/a2d-smart-notebook/Cargo.lock:94:1
+   │  
+94 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
+95 │ │ hashbrown 0.16.1 registry+https://github.com/rust-lang/crates.io-index
+96 │ │ hashbrown 0.17.1 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ hashbrown v0.14.5
+     └── hashlink v0.9.1
+         └── rusqlite v0.32.1
+             └── a2d-storage v0.1.0
+                 └── a2d-core v0.1.0
+                     └── a2d-ffi v0.1.0
+   ├ hashbrown v0.17.1
+     ├── indexmap v2.14.0
+     │   ├── lopdf v0.44.0
+     │   │   └── printpdf v0.12.4
+     │   │       └── a2d-pdf v0.1.0
+     │   │           └── a2d-core v0.1.0
+     │   │               └── a2d-ffi v0.1.0
+     │   ├── uniffi_bindgen v0.32.0
+     │   │   └── uniffi v0.32.0
+     │   │       └── a2d-ffi v0.1.0 (*)
+     │   ├── uniffi_internal_macros v0.32.0
+     │   │   ├── uniffi_bindgen v0.32.0 (*)
+     │   │   ├── uniffi_meta v0.32.0
+     │   │   │   ├── uniffi_bindgen v0.32.0 (*)
+     │   │   │   ├── uniffi_macros v0.32.0
+     │   │   │   │   └── uniffi v0.32.0 (*)
+     │   │   │   └── uniffi_udl v0.32.0
+     │   │   │       └── uniffi_bindgen v0.32.0 (*)
+     │   │   └── uniffi_pipeline v0.32.0
+     │   │       ├── uniffi v0.32.0 (*)
+     │   │       ├── uniffi_bindgen v0.32.0 (*)
+     │   │       └── uniffi_meta v0.32.0 (*)
+     │   └── uniffi_pipeline v0.32.0 (*)
+     ├── vello_common v0.0.8
+     │   └── vello_cpu v0.0.8
+     │       └── hayro v0.7.1
+     │           └── (dev) a2d-pdf v0.1.0 (*)
+     └── vello_cpu v0.0.8 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'heck'
+    ┌─ /home/runner/work/a2d-smart-notebook/a2d-smart-notebook/Cargo.lock:106:1
+    │  
+106 │ ╭ heck 0.4.1 registry+https://github.com/rust-lang/crates.io-index
+107 │ │ heck 0.5.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ heck v0.4.1
+      └── ouroboros_macro v0.18.5
+          └── ouroboros v0.18.5
+              └── allsorts-azul v0.17.1
+                  └── printpdf v0.12.4
+                      └── a2d-pdf v0.1.0
+                          └── a2d-core v0.1.0
+                              └── a2d-ffi v0.1.0
+    ├ heck v0.5.0
+      ├── clap_derive v4.6.4
+      │   └── clap v4.6.4
+      │       └── uniffi v0.32.0
+      │           └── a2d-ffi v0.1.0
+      ├── uniffi_bindgen v0.32.0
+      │   └── uniffi v0.32.0 (*)
+      └── uniffi_pipeline v0.32.0
+          ├── uniffi v0.32.0 (*)
+          ├── uniffi_bindgen v0.32.0 (*)
+          └── uniffi_meta v0.32.0
+              ├── uniffi_bindgen v0.32.0 (*)
+              ├── uniffi_macros v0.32.0
+              │   └── uniffi v0.32.0 (*)
+              └── uniffi_udl v0.32.0
+                  └── uniffi_bindgen v0.32.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'nom'
+    ┌─ /home/runner/work/a2d-smart-notebook/a2d-smart-notebook/Cargo.lock:129:1
+    │  
+129 │ ╭ nom 7.1.3 registry+https://github.com/rust-lang/crates.io-index
+130 │ │ nom 8.0.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ nom v7.1.3
+      └── weedle2 v5.0.0
+          └── uniffi_udl v0.32.0
+              └── uniffi_bindgen v0.32.0
+                  └── uniffi v0.32.0
+                      └── a2d-ffi v0.1.0
+    ├ nom v8.0.0
+      └── lopdf v0.44.0
+          └── printpdf v0.12.4
+              └── a2d-pdf v0.1.0
+                  └── a2d-core v0.1.0
+                      └── a2d-ffi v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'syn'
+    ┌─ /home/runner/work/a2d-smart-notebook/a2d-smart-notebook/Cargo.lock:185:1
+    │  
+185 │ ╭ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
+186 │ │ syn 3.0.3 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ syn v2.0.119
+      ├── askama_derive v0.16.0
+      │   └── askama_macros v0.16.0
+      │       └── askama v0.16.0
+      │           └── uniffi_bindgen v0.32.0
+      │               └── uniffi v0.32.0
+      │                   └── a2d-ffi v0.1.0
+      ├── bytemuck_derive v1.11.0
+      │   └── bytemuck v1.25.2
+      │       ├── color v0.3.3
+      │       │   └── peniko v0.6.1
+      │       │       └── vello_common v0.0.8
+      │       │           └── vello_cpu v0.0.8
+      │       │               └── hayro v0.7.1
+      │       │                   └── (dev) a2d-pdf v0.1.0
+      │       │                       └── a2d-core v0.1.0
+      │       │                           └── a2d-ffi v0.1.0 (*)
+      │       ├── font-types v0.11.3
+      │       │   └── read-fonts v0.39.2
+      │       │       └── skrifa v0.42.1
+      │       │           └── hayro-interpret v0.7.0
+      │       │               └── hayro v0.7.1 (*)
+      │       ├── hayro v0.7.1 (*)
+      │       ├── image v0.25.10
+      │       │   ├── a2d-image v0.1.0
+      │       │   │   ├── a2d-ffi v0.1.0 (*)
+      │       │   │   └── a2d-pdf v0.1.0 (*)
+      │       │   ├── (dev) a2d-pdf v0.1.0 (*)
+      │       │   ├── hayro v0.7.1 (*)
+      │       │   └── rqrr v0.10.1
+      │       │       └── (dev) a2d-pdf v0.1.0 (*)
+      │       ├── peniko v0.6.1 (*)
+      │       ├── read-fonts v0.39.2 (*)
+      │       ├── skrifa v0.42.1 (*)
+      │       ├── vello_common v0.0.8 (*)
+      │       └── vello_cpu v0.0.8 (*)
+      ├── enumflags2_derive v0.7.12
+      │   └── enumflags2 v0.7.12
+      │       └── allsorts-azul v0.17.1
+      │           └── printpdf v0.12.4
+      │               └── a2d-pdf v0.1.0 (*)
+      ├── g2gen v1.2.2
+      │   └── g2p v1.2.2
+      │       └── rqrr v0.10.1 (*)
+      ├── ouroboros_macro v0.18.5
+      │   └── ouroboros v0.18.5
+      │       └── allsorts-azul v0.17.1 (*)
+      ├── phf_macros v0.13.1
+      │   └── phf v0.13.1
+      │       └── hayro-interpret v0.7.0 (*)
+      ├── proc-macro2-diagnostics v0.10.1
+      │   └── ouroboros_macro v0.18.5 (*)
+      ├── scroll_derive v0.12.1
+      │   └── scroll v0.12.0
+      │       └── goblin v0.8.2
+      │           └── uniffi_bindgen v0.32.0 (*)
+      ├── synstructure v0.13.2
+      │   ├── yoke-derive v0.8.2
+      │   │   └── yoke v0.8.3
+      │   │       └── hayro-interpret v0.7.0 (*)
+      │   └── zerofrom-derive v0.1.7
+      │       └── zerofrom v0.1.8
+      │           └── yoke v0.8.3 (*)
+      ├── uniffi_internal_macros v0.32.0
+      │   ├── uniffi_bindgen v0.32.0 (*)
+      │   ├── uniffi_meta v0.32.0
+      │   │   ├── uniffi_bindgen v0.32.0 (*)
+      │   │   ├── uniffi_macros v0.32.0
+      │   │   │   └── uniffi v0.32.0 (*)
+      │   │   └── uniffi_udl v0.32.0
+      │   │       └── uniffi_bindgen v0.32.0 (*)
+      │   └── uniffi_pipeline v0.32.0
+      │       ├── uniffi v0.32.0 (*)
+      │       ├── uniffi_bindgen v0.32.0 (*)
+      │       └── uniffi_meta v0.32.0 (*)
+      ├── uniffi_macros v0.32.0 (*)
+      ├── wasm-bindgen-macro-support v0.2.126
+      │   └── wasm-bindgen-macro v0.2.126
+      │       └── wasm-bindgen v0.2.126
+      │           ├── getrandom v0.4.3
+      │           │   ├── jobserver v0.1.35
+      │           │   │   └── cc v1.4.0
+      │           │   │       ├── (build) apriltag-sys v0.4.0
+      │           │   │       │   └── a2d-image v0.1.0 (*)
+      │           │   │       ├── cmake v0.1.58
+      │           │   │       │   └── (build) apriltag-sys v0.4.0 (*)
+      │           │   │       └── (build) libsqlite3-sys v0.30.1
+      │           │   │           └── rusqlite v0.32.1
+      │           │   │               └── a2d-storage v0.1.0
+      │           │   │                   └── a2d-core v0.1.0 (*)
+      │           │   ├── lopdf v0.44.0
+      │           │   │   └── printpdf v0.12.4 (*)
+      │           │   ├── printpdf v0.12.4 (*)
+      │           │   ├── rand v0.10.2
+      │           │   │   └── lopdf v0.44.0 (*)
+      │           │   └── tempfile v3.27.0
+      │           │       ├── uniffi_bindgen v0.32.0 (*)
+      │           │       └── uniffi_pipeline v0.32.0 (*)
+      │           ├── js-sys v0.3.103
+      │           │   ├── getrandom v0.4.3 (*)
+      │           │   └── wasm-bindgen-futures v0.4.76
+      │           │       └── printpdf v0.12.4 (*)
+      │           ├── printpdf v0.12.4 (*)
+      │           └── wasm-bindgen-futures v0.4.76 (*)
+      ├── yoke-derive v0.8.2 (*)
+      └── zerofrom-derive v0.1.7 (*)
+    ├ syn v3.0.3
+      ├── clap_derive v4.6.4
+      │   └── clap v4.6.4
+      │       └── uniffi v0.32.0
+      │           └── a2d-ffi v0.1.0
+      ├── serde_derive v1.0.229
+      │   ├── askama_derive v0.16.0
+      │   │   └── askama_macros v0.16.0
+      │   │       └── askama v0.16.0
+      │   │           └── uniffi_bindgen v0.32.0
+      │   │               └── uniffi v0.32.0 (*)
+      │   ├── askama_parser v0.16.0
+      │   │   └── askama_derive v0.16.0 (*)
+      │   ├── printpdf v0.12.4
+      │   │   └── a2d-pdf v0.1.0
+      │   │       └── a2d-core v0.1.0
+      │   │           └── a2d-ffi v0.1.0 (*)
+      │   └── serde v1.0.229
+      │       ├── a2d-layout v0.1.0
+      │       │   ├── a2d-core v0.1.0 (*)
+      │       │   ├── a2d-ffi v0.1.0 (*)
+      │       │   ├── a2d-image v0.1.0
+      │       │   │   ├── a2d-ffi v0.1.0 (*)
+      │       │   │   └── a2d-pdf v0.1.0 (*)
+      │       │   └── a2d-pdf v0.1.0 (*)
+      │       ├── (dev) a2d-pdf v0.1.0 (*)
+      │       ├── a2d-storage v0.1.0
+      │       │   └── a2d-core v0.1.0 (*)
+      │       ├── askama_derive v0.16.0 (*)
+      │       ├── askama_parser v0.16.0 (*)
+      │       ├── basic-toml v0.1.10
+      │       │   └── askama_derive v0.16.0 (*)
+      │       ├── cargo_metadata v0.23.1
+      │       │   ├── uniffi v0.32.0 (*)
+      │       │   └── uniffi_bindgen v0.32.0 (*)
+      │       ├── printpdf v0.12.4 (*)
+      │       ├── smallvec v1.15.2
+      │       │   ├── hayro-interpret v0.7.0
+      │       │   │   └── hayro v0.7.1
+      │       │   │       └── (dev) a2d-pdf v0.1.0 (*)
+      │       │   ├── hayro-syntax v0.7.2
+      │       │   │   └── hayro-interpret v0.7.0 (*)
+      │       │   ├── kurbo v0.13.1
+      │       │   │   ├── hayro v0.7.1 (*)
+      │       │   │   ├── hayro-interpret v0.7.0 (*)
+      │       │   │   └── peniko v0.6.1
+      │       │   │       └── vello_common v0.0.8
+      │       │   │           └── vello_cpu v0.0.8
+      │       │   │               └── hayro v0.7.1 (*)
+      │       │   ├── peniko v0.6.1 (*)
+      │       │   ├── printpdf v0.12.4 (*)
+      │       │   ├── rusqlite v0.32.1
+      │       │   │   └── a2d-storage v0.1.0 (*)
+      │       │   └── vello_common v0.0.8 (*)
+      │       ├── uniffi_bindgen v0.32.0 (*)
+      │       └── uniffi_macros v0.32.0
+      │           └── uniffi v0.32.0 (*)
+      └── thiserror-impl v2.0.19
+          └── thiserror v2.0.19
+              ├── cargo_metadata v0.23.1 (*)
+              ├── lopdf v0.44.0
+              │   └── printpdf v0.12.4 (*)
+              └── vello_common v0.0.8 (*)
+
+advisories ok, bans ok, licenses FAILED, sources ok
