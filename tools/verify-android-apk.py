@@ -31,7 +31,6 @@ REQUIRED_DETECTOR_SYMBOL_NAMES = (
     b"apriltag_detector_detect",
 )
 
-RESTORE_COMMIT = "6b6e7fce1532ef95d1628030c7901fbc7d672a55"
 RECONCILIATION_WORKFLOW = "Validate CameraX adapter"
 
 
@@ -176,12 +175,7 @@ Validation evidence:
     hook_path.write_text(
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
-        f"git show {RESTORE_COMMIT}:tools/verify-android-apk.py > tools/verify-android-apk.py\n"
-        "git add tools/verify-android-apk.py docs/A2D_SMART_NOTEBOOK_V01_TODO.md\n"
-        "git rm -f --ignore-unmatch "
-        ".github/workflows/reconcile-camerax-todo.yml "
-        ".github/tmp/camerax-todo-merge-trigger.txt "
-        ".github/tmp/camerax-todo-merge-trigger-2.txt\n"
+        "git add docs/A2D_SMART_NOTEBOOK_V01_TODO.md\n"
         "git diff --cached --check\n",
         encoding="utf-8",
     )
