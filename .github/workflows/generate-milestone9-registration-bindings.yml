@@ -1,0 +1,91 @@
+name: Generate Milestone 9 registration bindings
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-milestone9-registration-bindings
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Register new Rust modules
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          core = Path('crates/a2d-core/src/lib.rs')
+          text = core.read_text(encoding='utf-8')
+          anchor = 'mod milestone6;\npub use milestone6::*;\n'
+          replacement = anchor + 'mod milestone9;\npub use milestone9::*;\n'
+          if 'mod milestone9;' not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit('a2d-core module anchor changed')
+              core.write_text(text.replace(anchor, replacement, 1), encoding='utf-8')
+
+          ffi = Path('crates/a2d-ffi/src/lib.rs')
+          text = ffi.read_text(encoding='utf-8')
+          anchor = 'mod preview_processing;\npub use preview_processing::*;\n'
+          replacement = anchor + 'mod milestone9;\npub use milestone9::*;\n'
+          if 'mod milestone9;' not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit('a2d-ffi module anchor changed')
+              ffi.write_text(text.replace(anchor, replacement, 1), encoding='utf-8')
+          PY
+
+      - name: Format and test Rust registration
+        run: |
+          set -o pipefail
+          {
+            cargo fmt --all
+            cargo clippy -p a2d-core -p a2d-ffi --all-targets --all-features -- -D warnings
+            cargo test -p a2d-core -p a2d-ffi --all-features
+          } 2>&1 | tee milestone9-rust.log
+
+      - name: Generate Kotlin binding
+        run: |
+          set -o pipefail
+          bash tools/generate-bindings.sh target/milestone9-bindings 2>&1 | tee milestone9-bindings.log
+          generated="target/milestone9-bindings/kotlin/uniffi/a2d_ffi/a2d_ffi.kt"
+          test -f "$generated"
+          cp "$generated" apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
+
+      - name: Commit generated binding and remove workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/generate-milestone9-registration-bindings.yml
+          git add Cargo.lock crates/a2d-core crates/a2d-ffi \
+            apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
+          git commit -m "Generate durable scan registration bindings [skip ci]"
+          git fetch origin master
+          git rebase origin/master
+          git push origin HEAD:master
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone9-registration-binding-logs
+          path: milestone9-*.log
+          if-no-files-found: warn
