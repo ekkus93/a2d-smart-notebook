@@ -27,12 +27,14 @@ class SharedPageAnalysisTest {
 
     @Test
     fun canonicalSyntheticPageRunsThroughThePackagedSharedRustAnalysisPath() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val encodedBytes = context.assets.open("base-page.png").use { it.readBytes() }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val encodedBytes =
+            instrumentation.context.assets.open("base-page.png").use { it.readBytes() }
 
         val result =
             A2dBridge.analyzeEncodedPage(
-                context,
+                targetContext,
                 EncodedPageAnalysisRequest(
                     encodedBytes = encodedBytes,
                     format = EncodedPageFormat.PNG,
