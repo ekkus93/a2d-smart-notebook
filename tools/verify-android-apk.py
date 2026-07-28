@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the Milestone 7 native and notice contents of an Android APK."""
+"""Verify the native analysis and notice contents of an Android APK."""
 
 from __future__ import annotations
 
@@ -25,9 +25,11 @@ REQUIRED_NOTICE_TEXT = (
     "ZXing Core 3.5.3",
     "Java Native Access (JNA) 5.14.0",
 )
-REQUIRED_DETECTOR_SYMBOL_NAMES = (
+REQUIRED_NATIVE_SYMBOL_NAMES = (
     b"tagStandard41h12_create",
     b"apriltag_detector_detect",
+    b"a2d_live_analyze_gray_frame",
+    b"a2d_live_analysis_buffer_free",
 )
 
 
@@ -54,10 +56,10 @@ def verify_elf(path: str, data: bytes, expected_machine: int) -> None:
             f"{path} has ELF machine {machine}, expected {expected_machine} for its ABI"
         )
 
-    for symbol in REQUIRED_DETECTOR_SYMBOL_NAMES:
+    for symbol in REQUIRED_NATIVE_SYMBOL_NAMES:
         if symbol not in data:
             fail(
-                f"{path} does not contain required linked detector symbol name "
+                f"{path} does not contain required native symbol name "
                 f"{symbol.decode('ascii')}"
             )
 
