@@ -70,7 +70,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
 
-    val cameraXVersion = "1.6.1"
+    // CameraX 1.6.x requires compileSdk 36 and AGP 8.9.1+. Keep the adapter on the newest
+    // stable 1.5.x release compatible with this project's pinned compileSdk 35 / AGP 8.7.3.
+    val cameraXVersion = "1.5.3"
     implementation("androidx.camera:camera-core:$cameraXVersion")
     implementation("androidx.camera:camera-camera2:$cameraXVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
