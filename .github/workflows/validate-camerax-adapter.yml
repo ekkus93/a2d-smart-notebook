@@ -1,0 +1,10 @@
+name: Temporary Milestone 8.3 validation cleanup target
+
+on:
+  workflow_dispatch:
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
