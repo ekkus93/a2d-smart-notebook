@@ -1,6 +1,6 @@
 # A2D Smart Notebook v0.1 — Implementation TODO
 
-**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence; Milestone 8.1 CameraX adapter and Milestone 8.2A live Rust/native frame analysis complete  
+**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except photographed Android fixtures and physical-device performance evidence; Milestones 8.1 and 8.2 CameraX plus live analysis/presentation safety complete  
 **Version:** 0.1  
 **Date:** 2026-07-28  
 **Repository:** `ekkus93/a2d-smart-notebook`  
@@ -1335,9 +1335,9 @@ Validation evidence:
 - GitHub Actions CameraX adapter run `30339511067` passed workspace formatting/clippy/tests,
   permanent printable QR/page compatibility regeneration, both packaged Android native-library
   ABIs, Android lint and JVM tests, debug APK assembly, and APK native packaging verification.
-- Milestone 8.2A now completes live shared-Rust frame analysis, copy/latency instrumentation,
-  and stale-work cancellation. Overlay rendering, active Notebook display, actionable guidance,
-  identity-conflict gating, and auto-capture remain in Milestones 8.2B and 8.3; physical
+- Milestone 8.2 now completes live shared-Rust frame analysis, copy/latency instrumentation,
+  stale-work cancellation, marker/page overlays, active Notebook presentation, actionable guidance,
+  and strict identity gating. The auto-capture state machine remains in Milestone 8.3; physical
   printer/camera and representative Android-device evidence also remain open.
 
 ## 8.2 Live Rust/native analysis
@@ -1382,10 +1382,39 @@ Validation evidence:
 
 ### 8.2B Scanner presentation and safety gating
 
-- [ ] Render page/marker overlay.
-- [ ] Show active Notebook prominently.
-- [ ] Show actionable guidance.
-- [ ] Block auto-capture on identity conflict.
+- [x] Render page/marker overlay. `LiveScannerPreview` layers reusable Compose scanner chrome over
+      `CameraPreviewSurface`; `LivePageMarkerOverlay` draws the resolved page boundary and each
+      marker quadrilateral. `PreviewCoordinateMapper` matches CameraX `FILL_CENTER` cropping and
+      maps 0/90/180/270-degree source rotations explicitly.
+- [x] Show active Notebook prominently. The top scanner banner continuously displays the active
+      Notebook name and Notebook Design. A missing destination is a prominent blocking state rather
+      than an empty label or an inferred fallback.
+- [x] Show actionable guidance. `buildLiveScannerPresentation` maps typed Rust/native marker,
+      geometry, quality, analysis-error, and Page Code resolution results into explicit guidance such
+      as show all corners, move closer/farther, hold steady, add light, reduce glare, select/register
+      a Notebook, or use a supported page. Guidance thresholds are caller-supplied presentation
+      policy only; no synthetic threshold is hidden as an authoritative production capture rule.
+- [x] Block auto-capture on identity conflict. `IdentityAutoCaptureGate` allows eligibility only when
+      Rust returns `PageResolution.Resolved` with a Notebook ID exactly equal to the displayed active
+      Notebook. Missing identity, mismatches, ambiguity, required registration, imported Smart Pages,
+      unsupported codes, and `ConflictingActiveNotebook` all remain explicitly blocked. The gate is
+      ready for the Milestone 8.3 state machine and never changes the destination silently.
+
+Validation evidence:
+
+- Kotlin JVM tests cover exact-match eligibility, mismatches, Rust conflict/ambiguity/registration
+  variants, missing destination/Page Code, marker completeness, framing, focus, lighting, glare,
+  invalid presentation policies, and `FILL_CENTER` coordinate mapping with rotation.
+- Android emulator Compose tests verify that the active Notebook remains visible, a wrong-Notebook
+  result displays blocking guidance, auto-capture is visibly blocked, and a verified identity does
+  not change the displayed destination.
+- One-use validation completed the packaged x86_64 Rust build, Android lint, JVM tests, debug APK
+  assembly, and the scanner-presentation emulator tests, then removed itself in commit
+  `14febb773d0d0c6766ab4263cd58d5eebb4e7fa5`.
+- A separate current-`master` validation attempt also passed workspace Rust/fixture gates, both
+  packaged Android ABIs, Android lint/JVM tests, debug APK assembly, and APK packaging verification;
+  only its obsolete cleanup push failed because the successful 8.2B validation commit had already
+  advanced `master`.
 
 ## 8.3 Auto-capture state machine
 
