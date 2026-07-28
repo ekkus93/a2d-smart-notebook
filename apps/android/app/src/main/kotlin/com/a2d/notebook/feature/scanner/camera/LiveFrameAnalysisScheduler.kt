@@ -37,6 +37,7 @@ data class LiveFrameAnalysisMetrics(
     val queueDurationNanos: Long,
     val nativeBridgeDurationNanos: Long,
     val totalSchedulerDurationNanos: Long,
+    val extractionToCompletionDurationNanos: Long,
 )
 
 sealed interface LiveFrameAnalysisEvent {
@@ -301,8 +302,10 @@ class LatestFrameAnalysisScheduler(
         work: PendingFrame,
         startedAtNanos: Long,
         completedAtNanos: Long,
-    ): LiveFrameAnalysisMetrics =
-        LiveFrameAnalysisMetrics(
+    ): LiveFrameAnalysisMetrics {
+        val totalSchedulerDurationNanos =
+            elapsed(work.submittedAtNanos, completedAtNanos, "total scheduler")
+        return LiveFrameAnalysisMetrics(
             frameSequence = work.sequence,
             frameTimestampNanos = work.frame.timestampNanos,
             width = work.frame.width,
@@ -318,9 +321,11 @@ class LatestFrameAnalysisScheduler(
             extractionDurationNanos = work.frame.extractionDurationNanos,
             queueDurationNanos = elapsed(work.submittedAtNanos, startedAtNanos, "queue"),
             nativeBridgeDurationNanos = elapsed(startedAtNanos, completedAtNanos, "native bridge"),
-            totalSchedulerDurationNanos =
-                elapsed(work.submittedAtNanos, completedAtNanos, "total scheduler"),
+            totalSchedulerDurationNanos = totalSchedulerDurationNanos,
+            extractionToCompletionDurationNanos =
+                Math.addExact(work.frame.extractionDurationNanos, totalSchedulerDurationNanos),
         )
+    }
 
     private fun elapsed(
         start: Long,
