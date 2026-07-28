@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  statuses: write
 
 jobs:
   reconcile:
@@ -17,41 +18,53 @@ jobs:
           ref: master
           fetch-depth: 0
 
+      - name: Publish pending status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_SHA: ${{ github.sha }}
+        run: |
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          payload="$(printf '{\"state\":\"pending\",\"context\":\"a2d/camerax-todo\",\"description\":\"CameraX TODO reconciliation is running\",\"target_url\":\"%s\"}' "$run_url")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${STATUS_SHA}" \
+            --data "$payload"
+
       - name: Reconcile authoritative TODO
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
 
           path = Path("docs/A2D_SMART_NOTEBOOK_V01_TODO.md")
           text = path.read_text(encoding="utf-8")
 
-          old_status = (
-              "**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except "
-              "photographed Android fixtures and physical-device performance evidence  "
-          )
           new_status = (
               "**Status:** Milestones 1–6 complete; Milestone 7 implementation is complete except "
               "photographed Android fixtures and physical-device performance evidence; Milestone "
               "8.1 CameraX adapter complete  "
           )
-          if text.count(old_status) != 1:
-              raise SystemExit("authoritative status line did not match exactly once")
-          text = text.replace(old_status, new_status, 1)
+          text, replacements = re.subn(
+              r"^\*\*Status:\*\*.*$",
+              new_status,
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if replacements != 1:
+              raise SystemExit("could not replace the authoritative status line")
 
-          old_block = """## 8.1 Camera adapter
+          start_marker = "## 8.1 Camera adapter\n"
+          end_marker = "## 8.2 Live Rust/native analysis\n"
+          start = text.find(start_marker)
+          end = text.find(end_marker, start + len(start_marker))
+          if start < 0 or end < 0 or end <= start:
+              raise SystemExit("could not locate the bounded Milestone 8.1 section")
 
-- [ ] CameraX preview.
-- [ ] Image analysis.
-- [ ] Full-resolution capture.
-- [ ] Correct lifecycle binding.
-- [ ] Permission-denied handling.
-- [ ] Background/foreground recovery.
-- [ ] Rotation handling.
-- [ ] Torch control where available.
-- [ ] Bounded analysis backpressure.
-- [ ] Reliably close every frame.
-"""
-          new_block = """## 8.1 Camera adapter
+          new_section = """## 8.1 Camera adapter
 
 - [x] CameraX preview. `CameraPreviewSurface` hosts `PreviewView` in Compose and binds only after
       view attachment so initial display rotation is authoritative without a delayed callback that
@@ -87,10 +100,9 @@ Validation evidence:
   measurement, stale native-work cancellation, overlays/guidance, and auto-capture remain in
   Milestones 8.2 and 8.3; physical printer/camera and representative Android-device evidence also
   remain open.
+
 """
-          if text.count(old_block) != 1:
-              raise SystemExit("Milestone 8.1 block did not match exactly once")
-          text = text.replace(old_block, new_block, 1)
+          text = text[:start] + new_section + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
 
@@ -103,3 +115,19 @@ Validation evidence:
           git diff --cached --check
           git commit -m "Reconcile CameraX adapter milestone status [skip ci]"
           git push origin HEAD:master
+
+      - name: Publish failure status
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_SHA: ${{ github.sha }}
+        run: |
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          payload="$(printf '{\"state\":\"failure\",\"context\":\"a2d/camerax-todo\",\"description\":\"CameraX TODO reconciliation failed\",\"target_url\":\"%s\"}' "$run_url")"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${STATUS_SHA}" \
+            --data "$payload"
