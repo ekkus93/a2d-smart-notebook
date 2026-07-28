@@ -63,6 +63,8 @@ jobs:
           java-version: "21"
       - uses: Swatinem/rust-cache@v2
       - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "15859902"
       - name: Install and select pinned Android native toolchain
         run: |
           sdkmanager --install "ndk;${A2D_ANDROID_NDK_VERSION}"
@@ -105,6 +107,8 @@ jobs:
           java-version: "21"
       - uses: Swatinem/rust-cache@v2
       - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "15859902"
       - name: Enable KVM for the Android emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -163,6 +167,8 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "15859902"
       - name: Install and select pinned Android native toolchain
         run: |
           sdkmanager --install "ndk;${A2D_ANDROID_NDK_VERSION}"
