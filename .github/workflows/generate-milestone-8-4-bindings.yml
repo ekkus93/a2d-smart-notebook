@@ -30,6 +30,129 @@ jobs:
           java-version: "21"
       - uses: Swatinem/rust-cache@v2
       - uses: android-actions/setup-android@v3
+      - name: Apply reviewed Rust fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/a2d-ffi/src/milestone8.rs")
+          text = path.read_text(encoding="utf-8")
+          replacements = [
+              (
+                  """#[derive(Clone, Debug, uniffi::Enum)]
+          pub enum ProcessEncodedPagePreviewOutcome {
+              Completed {
+                  result: ProcessEncodedPagePreviewResult,
+              },
+              Cancelled,
+          }
+          """,
+                  """#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+          pub enum ProcessEncodedPagePreviewStatus {
+              Completed,
+              Cancelled,
+          }
+
+          #[derive(Clone, Debug, uniffi::Record)]
+          pub struct ProcessEncodedPagePreviewOutcome {
+              pub status: ProcessEncodedPagePreviewStatus,
+              pub result: Option<ProcessEncodedPagePreviewResult>,
+          }
+          """,
+                  1,
+              ),
+              (
+                  """fn is_cancelled(error: &A2dError) -> bool {
+              error.code.to_string() == "DERIVED_PROCESSING_CANCELLED"
+          }
+          """,
+                  """fn is_cancelled(error: &A2dError) -> bool {
+              error.code.to_string() == "DERIVED_PROCESSING_CANCELLED"
+          }
+
+          fn cancelled_outcome() -> ProcessEncodedPagePreviewOutcome {
+              ProcessEncodedPagePreviewOutcome {
+                  status: ProcessEncodedPagePreviewStatus::Cancelled,
+                  result: None,
+              }
+          }
+          """,
+                  1,
+              ),
+              (
+                  "return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);",
+                  "return Ok(cancelled_outcome());",
+                  4,
+              ),
+              (
+                  """        .map(|value| {
+                      Ok(SharpenConfig::new(
+                          value.amount,
+                          to_u8(value.threshold, "sharpening.threshold")?,
+                          to_u8(value.passes, "sharpening.passes")?,
+                      )?)
+                  })
+          """,
+                  """        .map(|value| {
+                      SharpenConfig::new(
+                          value.amount,
+                          to_u8(value.threshold, "sharpening.threshold")?,
+                          to_u8(value.passes, "sharpening.passes")?,
+                      )
+                  })
+          """,
+                  1,
+              ),
+              (
+                  """    Ok(ProcessEncodedPagePreviewOutcome::Completed {
+                  result: ProcessEncodedPagePreviewResult {
+          """,
+                  """    Ok(ProcessEncodedPagePreviewOutcome {
+                  status: ProcessEncodedPagePreviewStatus::Completed,
+                  result: Some(ProcessEncodedPagePreviewResult {
+          """,
+                  1,
+              ),
+              (
+                  """            source_to_corrected_matrix: matrix,
+                  },
+              })
+          """,
+                  """            source_to_corrected_matrix: matrix,
+                  }),
+              })
+          """,
+                  1,
+              ),
+              (
+                  """        let ProcessEncodedPagePreviewOutcome::Completed { result } = outcome else {
+                      panic!("expected completed preview processing");
+                  };
+          """,
+                  """        assert_eq!(outcome.status, ProcessEncodedPagePreviewStatus::Completed);
+                  let result = outcome.result.expect("completed processing must return a result");
+          """,
+                  1,
+              ),
+              (
+                  """        assert!(matches!(
+                      outcome,
+                      ProcessEncodedPagePreviewOutcome::Cancelled
+                  ));
+          """,
+                  """        assert_eq!(outcome.status, ProcessEncodedPagePreviewStatus::Cancelled);
+                  assert!(outcome.result.is_none());
+          """,
+                  1,
+              ),
+          ]
+          for old, new, expected in replacements:
+              actual = text.count(old)
+              if actual != expected:
+                  raise SystemExit(f"expected {expected} occurrences, found {actual}: {old[:80]!r}")
+              text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
+          PY
       - name: Install pinned Android native toolchain
         run: |
           set -euo pipefail
