@@ -15,9 +15,9 @@ use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 use a2d_image::{
     AprilTagDetector, ContrastNormalizationConfig, DerivedImageConfig, DerivedImageLimits,
     DerivedImagePipeline, DetectorConfig, EncodedImage, EncodedImageFormat, EncodedImageLimits,
-    ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerIdLayout,
-    ProcessingCancellation, RectificationLimits, RectificationPlan, RectifiedImageSize,
-    ResolvedPageMarkers, ThumbnailConfig, measure_gray_quality, resolve_page_markers,
+    ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerIdLayout, ProcessingCancellation,
+    RectificationLimits, RectificationPlan, RectifiedImageSize, ThumbnailConfig,
+    measure_gray_quality, resolve_page_markers,
 };
 use a2d_layout::{MarkerRole, writable_page_layout};
 
@@ -525,7 +525,10 @@ fn encode_result(result: &PreviewResult) -> Result<Vec<u8>, A2dError> {
         .ok_or_else(|| codec_error("preview result capacity overflowed"))?;
     let mut writer = BinaryWriter::new(RESULT_MAGIC, capacity);
     writer.u32(result.pipeline_version);
-    writer.length(result.source_to_corrected_matrix.len(), "source_to_corrected_matrix")?;
+    writer.length(
+        result.source_to_corrected_matrix.len(),
+        "source_to_corrected_matrix",
+    )?;
     for value in result.source_to_corrected_matrix {
         writer.f64(value);
     }
@@ -548,7 +551,10 @@ fn encode_error(error: &A2dError) -> Vec<u8> {
         error.developer_message.clone(),
         error.correlation_id.clone(),
     ];
-    if fields.iter().any(|value| u32::try_from(value.len()).is_err()) {
+    if fields
+        .iter()
+        .any(|value| u32::try_from(value.len()).is_err())
+    {
         return encode_static_error();
     }
     let mut writer = BinaryWriter::new(ERROR_MAGIC, 512);
@@ -633,9 +639,7 @@ pub unsafe extern "C" fn a2d_preview_cancellation_cancel(
 /// [`a2d_preview_cancellation_new`] that has not previously been freed. It must not be freed while a
 /// processing call is still borrowing it.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn a2d_preview_cancellation_free(
-    cancellation: *mut A2dPreviewCancellation,
-) {
+pub unsafe extern "C" fn a2d_preview_cancellation_free(cancellation: *mut A2dPreviewCancellation) {
     if !cancellation.is_null() {
         // SAFETY: required by this function's contract.
         unsafe { drop(Box::from_raw(cancellation)) };
@@ -699,13 +703,7 @@ pub unsafe extern "C" fn a2d_process_encoded_page_preview(
         return A2dPreviewBuffer::default();
     }
     // SAFETY: status is non-null and writable by contract.
-    unsafe {
-        set_status(
-            status,
-            PREVIEW_STATUS_SUCCESS,
-            A2dPreviewBuffer::default(),
-        )
-    };
+    unsafe { set_status(status, PREVIEW_STATUS_SUCCESS, A2dPreviewBuffer::default()) };
 
     let execution = catch_unwind(AssertUnwindSafe(|| {
         let byte_count = to_usize(bytes_len, "bytes_len")?;
