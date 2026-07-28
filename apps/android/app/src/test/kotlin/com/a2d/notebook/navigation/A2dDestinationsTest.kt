@@ -11,4 +11,9 @@ class A2dDestinationsTest {
         // change here without updating the graph would be a real regression, so pin it.
         assertEquals("home", A2dDestinations.HOME)
     }
+
+    @Test
+    fun singlePageScannerRouteIsStable() {
+        assertEquals("scanner/single", A2dDestinations.SINGLE_PAGE_SCANNER)
+    }
 }
