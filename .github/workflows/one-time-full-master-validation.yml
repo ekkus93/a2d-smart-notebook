@@ -1,0 +1,150 @@
+name: One-time full master validation
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  actions: write
+  contents: write
+  statuses: write
+
+concurrency:
+  group: one-time-full-master-validation
+  cancel-in-progress: false
+
+jobs:
+  orchestrate:
+    name: Run and verify all permanent validation workflows
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VALIDATION_SHA: ${{ github.sha }}
+      WORKFLOW_PATH: .github/workflows/one-time-full-master-validation.yml
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Dispatch, monitor, report, and clean up
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          api="${GITHUB_API_URL}"
+          repo_api="${api}/repos/${GITHUB_REPOSITORY}"
+          status_context="a2d/full-master-validation"
+          actions_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions"
+
+          post_status() {
+            local state="$1"
+            local description="$2"
+            local payload
+            payload="$(jq -n \
+              --arg state "$state" \
+              --arg context "$status_context" \
+              --arg description "$description" \
+              --arg target_url "$actions_url" \
+              '{state: $state, context: $context, description: $description, target_url: $target_url}')"
+            curl --fail-with-body --silent --show-error --location \
+              --request POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "${repo_api}/statuses/${VALIDATION_SHA}" \
+              --data "$payload" >/dev/null
+          }
+
+          cleanup_workflow() {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git pull --ff-only origin master || return 1
+            if [[ -f "$WORKFLOW_PATH" ]]; then
+              git rm "$WORKFLOW_PATH" || return 1
+              git commit -m "Remove one-time full master validation workflow [skip ci]" || return 1
+              git push origin HEAD:master || return 1
+            fi
+          }
+
+          post_status pending "Complete lint and test validation is running"
+
+          rc=0
+          description="All lint and test validation passed"
+
+          dispatch_payload='{"ref":"master"}'
+          if ! curl --fail-with-body --silent --show-error --location \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${repo_api}/actions/workflows/milestone7-native.yml/dispatches" \
+            --data "$dispatch_payload" >/dev/null; then
+            rc=1
+            description="Failed to dispatch native validation"
+          fi
+
+          ci_id=""
+          native_id=""
+          ci_status=""
+          native_status=""
+          ci_conclusion=""
+          native_conclusion=""
+
+          if [[ "$rc" -eq 0 ]]; then
+            deadline=$((SECONDS + 5400))
+            runs_url="${repo_api}/actions/runs?head_sha=${VALIDATION_SHA}&per_page=100"
+
+            while (( SECONDS < deadline )); do
+              if ! runs="$(curl --fail-with-body --silent --show-error --location \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                "$runs_url")"; then
+                rc=1
+                description="Failed to query validation workflow runs"
+                break
+              fi
+
+              ci_id="$(jq -r '[.workflow_runs[] | select(.name == "CI")][0].id // empty' <<<"$runs")"
+              native_id="$(jq -r '[.workflow_runs[] | select(.name == "Milestone 7 Native Validation")][0].id // empty' <<<"$runs")"
+
+              if [[ -n "$ci_id" ]]; then
+                ci_status="$(jq -r --argjson id "$ci_id" '.workflow_runs[] | select(.id == $id) | .status' <<<"$runs")"
+                ci_conclusion="$(jq -r --argjson id "$ci_id" '.workflow_runs[] | select(.id == $id) | (.conclusion // "")' <<<"$runs")"
+              fi
+              if [[ -n "$native_id" ]]; then
+                native_status="$(jq -r --argjson id "$native_id" '.workflow_runs[] | select(.id == $id) | .status' <<<"$runs")"
+                native_conclusion="$(jq -r --argjson id "$native_id" '.workflow_runs[] | select(.id == $id) | (.conclusion // "")' <<<"$runs")"
+              fi
+
+              echo "CI: id=${ci_id:-pending} status=${ci_status:-pending} conclusion=${ci_conclusion:-pending}"
+              echo "Native: id=${native_id:-pending} status=${native_status:-pending} conclusion=${native_conclusion:-pending}"
+
+              if [[ -n "$ci_id" && -n "$native_id" && "$ci_status" == "completed" && "$native_status" == "completed" ]]; then
+                break
+              fi
+              sleep 20
+            done
+
+            if [[ "$rc" -eq 0 && ( -z "$ci_id" || -z "$native_id" || "$ci_status" != "completed" || "$native_status" != "completed" ) ]]; then
+              rc=1
+              description="Timed out waiting for complete validation"
+            elif [[ "$rc" -eq 0 && ( "$ci_conclusion" != "success" || "$native_conclusion" != "success" ) ]]; then
+              rc=1
+              description="One or more lint or test jobs failed"
+            fi
+          fi
+
+          if ! cleanup_workflow; then
+            rc=1
+            description="Validation finished but workflow cleanup failed"
+          fi
+
+          if [[ "$rc" -eq 0 ]]; then
+            post_status success "$description"
+          else
+            post_status failure "$description"
+          fi
+
+          exit "$rc"
