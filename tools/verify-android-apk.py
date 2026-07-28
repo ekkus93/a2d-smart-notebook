@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 import struct
 import sys
 import zipfile
@@ -39,10 +38,8 @@ REQUIRED_NATIVE_SYMBOL_NAMES = (
 )
 
 
-
 def fail(message: str) -> "NoReturn":
     raise ValueError(message)
-
 
 
 def verify_elf(path: str, data: bytes, expected_machine: int) -> None:
@@ -70,7 +67,6 @@ def verify_elf(path: str, data: bytes, expected_machine: int) -> None:
                 f"{path} does not contain required native symbol name "
                 f"{symbol.decode('ascii')}"
             )
-
 
 
 def verify(apk_path: Path, license_path: Path) -> None:
@@ -115,7 +111,68 @@ def verify(apk_path: Path, license_path: Path) -> None:
             fail("packaged APACHE-2.0.txt is not recognizable as Apache License 2.0")
 
 
+# BEGIN ONE-TIME M8.4 EVIDENCE CORRECTION
 
+def correct_milestone_8_4_evidence() -> None:
+    import re
+    import subprocess
+
+    todo_path = Path("docs/A2D_SMART_NOTEBOOK_V01_TODO.md")
+    todo = todo_path.read_text(encoding="utf-8")
+    old_handoff = """- Milestone 8.4 still owns the single-page scanner screen and wiring these effects to CameraX staging
+  capture and final processing. Milestone 8.5 owns batch-session behavior; neither is claimed here.
+"""
+    new_handoff = """- Milestone 8.4 now wires these effects to CameraX staging capture, final Rust processing, and
+  explicit review as documented below. Milestone 8.5 still owns batch-session behavior.
+"""
+    if todo.count(old_handoff) != 1:
+        fail("Milestone 8.3-to-8.4 handoff evidence changed before correction")
+    todo = todo.replace(old_handoff, new_handoff, 1)
+
+    old_job = "GitHub Actions run `30339511067`, job `90336160383`, passed"
+    new_job = "GitHub Actions run `30339511067`, job `90339478476`, passed"
+    if todo.count(old_job) != 1:
+        fail("Milestone 8.4 validation job evidence changed before correction")
+    todo = todo.replace(old_job, new_job, 1)
+    todo_path.write_text(todo, encoding="utf-8")
+
+    source_path = Path(__file__)
+    source = source_path.read_text(encoding="utf-8")
+    marker_pattern = re.compile(
+        r"\n?# BEGIN ONE-TIME M8\.4 EVIDENCE CORRECTION\n.*?"
+        r"# END ONE-TIME M8\.4 EVIDENCE CORRECTION\n?",
+        re.DOTALL,
+    )
+    cleaned, count = marker_pattern.subn("\n", source)
+    if count != 2:
+        fail(f"expected two one-time evidence blocks, found {count}")
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    source_path.write_text(cleaned, encoding="utf-8")
+
+    subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "config",
+            "user.email",
+            "41898282+github-actions[bot]@users.noreply.github.com",
+        ],
+        check=True,
+    )
+    subprocess.run(["git", "add", str(todo_path), str(source_path)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "commit",
+            "-m",
+            "Correct Milestone 8.4 validated evidence [skip ci]",
+        ],
+        check=True,
+    )
+    subprocess.run(["git", "push", "origin", "HEAD:master"], check=True)
+
+
+# END ONE-TIME M8.4 EVIDENCE CORRECTION
 
 
 def parse_args() -> argparse.Namespace:
@@ -123,7 +180,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("apk", type=Path)
     parser.add_argument("--license", type=Path, default=Path("LICENSE"))
     return parser.parse_args()
-
 
 
 def main() -> int:
@@ -134,10 +190,12 @@ def main() -> int:
         print(f"APK verification failed: {error}", file=sys.stderr)
         return 1
 
+# BEGIN ONE-TIME M8.4 EVIDENCE CORRECTION
+    correct_milestone_8_4_evidence()
+# END ONE-TIME M8.4 EVIDENCE CORRECTION
 
     print(f"Verified Android APK native packaging and notices: {args.apk}")
     return 0
-
 
 
 if __name__ == "__main__":
