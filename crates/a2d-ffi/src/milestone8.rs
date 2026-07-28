@@ -72,12 +72,16 @@ pub struct ProcessEncodedPagePreviewResult {
     pub source_to_corrected_matrix: Vec<f64>,
 }
 
-#[derive(Clone, Debug, uniffi::Enum)]
-pub enum ProcessEncodedPagePreviewOutcome {
-    Completed {
-        result: ProcessEncodedPagePreviewResult,
-    },
+#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+pub enum ProcessEncodedPagePreviewStatus {
+    Completed,
     Cancelled,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ProcessEncodedPagePreviewOutcome {
+    pub status: ProcessEncodedPagePreviewStatus,
+    pub result: Option<ProcessEncodedPagePreviewResult>,
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -265,17 +269,24 @@ fn is_cancelled(error: &A2dError) -> bool {
     error.code.to_string() == "DERIVED_PROCESSING_CANCELLED"
 }
 
+fn cancelled_outcome() -> ProcessEncodedPagePreviewOutcome {
+    ProcessEncodedPagePreviewOutcome {
+        status: ProcessEncodedPagePreviewStatus::Cancelled,
+        result: None,
+    }
+}
+
 fn process_encoded_page_preview_impl(
     request: ProcessEncodedPagePreviewRequest,
     cancellation: &ProcessingCancellation,
 ) -> Result<ProcessEncodedPagePreviewOutcome, A2dError> {
     if cancellation.is_cancelled() {
-        return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);
+        return Ok(cancelled_outcome());
     }
 
     let (source, resolved, analysis) = decode_and_analyze(&request.analysis)?;
     if cancellation.is_cancelled() {
-        return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);
+        return Ok(cancelled_outcome());
     }
 
     let layout = match request.layout_kind {
@@ -300,11 +311,11 @@ fn process_encoded_page_preview_impl(
     let sharpening = request
         .sharpening
         .map(|value| {
-            Ok(SharpenConfig::new(
+            SharpenConfig::new(
                 value.amount,
                 to_u8(value.threshold, "sharpening.threshold")?,
                 to_u8(value.passes, "sharpening.passes")?,
-            )?)
+            )
         })
         .transpose()?;
     let config = DerivedImageConfig::new(
@@ -328,12 +339,12 @@ fn process_encoded_page_preview_impl(
         match DerivedImagePipeline::new(config).process(&source, &rectification, cancellation) {
             Ok(value) => value,
             Err(error) if is_cancelled(&error) => {
-                return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);
+                return Ok(cancelled_outcome());
             }
             Err(error) => return Err(error),
         };
     if cancellation.is_cancelled() {
-        return Ok(ProcessEncodedPagePreviewOutcome::Cancelled);
+        return Ok(cancelled_outcome());
     }
 
     let matrix = derived
@@ -353,14 +364,15 @@ fn process_encoded_page_preview_impl(
         rgb_bytes: derived.thumbnail.into_bytes(),
     };
 
-    Ok(ProcessEncodedPagePreviewOutcome::Completed {
-        result: ProcessEncodedPagePreviewResult {
+    Ok(ProcessEncodedPagePreviewOutcome {
+        status: ProcessEncodedPagePreviewStatus::Completed,
+        result: Some(ProcessEncodedPagePreviewResult {
             analysis,
             corrected,
             thumbnail,
             pipeline_version: derived.provenance.pipeline_version,
             source_to_corrected_matrix: matrix,
-        },
+        }),
     })
 }
 
@@ -428,9 +440,10 @@ mod tests {
     fn canonical_capture_returns_bounded_corrected_and_thumbnail_buffers() {
         let cancellation = ProcessingCancellation::active();
         let outcome = process_encoded_page_preview_impl(request(), &cancellation).unwrap();
-        let ProcessEncodedPagePreviewOutcome::Completed { result } = outcome else {
-            panic!("expected completed preview processing");
-        };
+        assert_eq!(outcome.status, ProcessEncodedPagePreviewStatus::Completed);
+        let result = outcome
+            .result
+            .expect("completed processing must return a result");
 
         assert_eq!(
             (result.corrected.width, result.corrected.height),
@@ -453,10 +466,8 @@ mod tests {
         let cancellation = ProcessingCancellation::active();
         cancellation.cancel();
         let outcome = process_encoded_page_preview_impl(request(), &cancellation).unwrap();
-        assert!(matches!(
-            outcome,
-            ProcessEncodedPagePreviewOutcome::Cancelled
-        ));
+        assert_eq!(outcome.status, ProcessEncodedPagePreviewStatus::Cancelled);
+        assert!(outcome.result.is_none());
     }
 
     #[test]
