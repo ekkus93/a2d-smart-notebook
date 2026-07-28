@@ -1,48 +1,3 @@
-error[rejected]: failed to satisfy license requirements
-   ┌─ /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/foldhash-0.2.0/Cargo.toml:40:12
-   │
-40 │ license = "Zlib"
-   │            ━━━━
-   │            │
-   │            rejected: license is not explicitly allowed
-   │
-   ├ Zlib - zlib License:
-   ├   - OSI approved
-   ├   - FSF Free/Libre
-   ├ foldhash v0.2.0
-     ├── hashbrown v0.16.1
-     │   └── lru v0.16.4
-     │       └── rqrr v0.10.1
-     │           └── (dev) a2d-pdf v0.1.0
-     │               └── a2d-core v0.1.0
-     │                   └── a2d-ffi v0.1.0
-     └── hashbrown v0.17.1
-         ├── indexmap v2.14.0
-         │   ├── lopdf v0.44.0
-         │   │   └── printpdf v0.12.4
-         │   │       └── a2d-pdf v0.1.0 (*)
-         │   ├── uniffi_bindgen v0.32.0
-         │   │   └── uniffi v0.32.0
-         │   │       └── a2d-ffi v0.1.0 (*)
-         │   ├── uniffi_internal_macros v0.32.0
-         │   │   ├── uniffi_bindgen v0.32.0 (*)
-         │   │   ├── uniffi_meta v0.32.0
-         │   │   │   ├── uniffi_bindgen v0.32.0 (*)
-         │   │   │   ├── uniffi_macros v0.32.0
-         │   │   │   │   └── uniffi v0.32.0 (*)
-         │   │   │   └── uniffi_udl v0.32.0
-         │   │   │       └── uniffi_bindgen v0.32.0 (*)
-         │   │   └── uniffi_pipeline v0.32.0
-         │   │       ├── uniffi v0.32.0 (*)
-         │   │       ├── uniffi_bindgen v0.32.0 (*)
-         │   │       └── uniffi_meta v0.32.0 (*)
-         │   └── uniffi_pipeline v0.32.0 (*)
-         ├── vello_common v0.0.8
-         │   └── vello_cpu v0.0.8
-         │       └── hayro v0.7.1
-         │           └── (dev) a2d-pdf v0.1.0 (*)
-         └── vello_cpu v0.0.8 (*)
-
 warning[license-not-encountered]: license was not encountered
    ┌─ /home/runner/work/a2d-smart-notebook/a2d-smart-notebook/deny.toml:18:4
    │
@@ -385,4 +340,4 @@ warning[duplicate]: found 2 duplicate entries for crate 'syn'
               │   └── printpdf v0.12.4 (*)
               └── vello_common v0.0.8 (*)
 
-advisories ok, bans ok, licenses FAILED, sources ok
+advisories ok, bans ok, licenses ok, sources ok
