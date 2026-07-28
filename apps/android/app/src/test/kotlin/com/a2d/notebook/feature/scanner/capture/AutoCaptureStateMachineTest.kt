@@ -277,6 +277,33 @@ class AutoCaptureStateMachineTest {
     }
 
     @Test
+    fun durableReviewRegistrationTransitionsToAcceptedOnlyForMatchingToken() {
+        val machine = startedMachine()
+        val request = triggerAutoCapture(machine)
+        machine.captureSucceeded(request.token, CapturedImage("/staging/page.jpg"))
+        machine.processingCompleted(
+            request.token,
+            AutoCaptureProcessingOutcome.NeedsReview("explicit user approval required"),
+        )
+
+        val accepted = machine.reviewRegistrationCompleted(request.token, "scan-durable")
+        assertEquals(
+            AutoCapturePhase.Accepted(request, "scan-durable"),
+            accepted.snapshot.phase,
+        )
+
+        val stale = machine.reviewRegistrationCompleted(request.token, "scan-second")
+        assertEquals(
+            AutoCapturePhase.Accepted(request, "scan-durable"),
+            stale.snapshot.phase,
+        )
+        assertEquals(
+            "reviewRegistrationCompleted",
+            stale.effects.filterIsInstance<AutoCaptureEffect.StaleCallbackIgnored>().single().callback,
+        )
+    }
+
+    @Test
     fun staleProcessingCallbackCannotMutateNewGeneration() {
         val machine = startedMachine()
         val request = triggerAutoCapture(machine)
