@@ -1,8 +1,8 @@
 # FIX-001 UniFFI Binding Regeneration Evidence — 2026-07-29
 
-## Scope
+## Status
 
-This record documents the generated-artifact provenance used to repair the committed Android Kotlin UniFFI binding. It does not claim FIX-001 complete until permanent CI passes on the exact final `master` commit.
+FIX-001 implementation and source validation are complete. The committed Android Kotlin UniFFI binding matches the Rust FFI surface, Android compiles from a fresh checkout, Kotlin and Swift generation smoke tests pass, and permanent CI completed successfully on the validated source head recorded below.
 
 ## Generator run
 
@@ -90,11 +90,42 @@ That correction reduced the `a2d-core` failures from ten to two. The remaining f
 
 Both tests were corrected without weakening production validation in commit `35d5881b61a3489043679961c3aa3c2254ca5ff4`.
 
-## Remaining acceptance gates
+## Final permanent source validation
 
-FIX-001 remains pending until permanent CI passes on the exact final validation head, including:
+- Workflow run: `30490735230`
+- Validated source commit: `792c95dd5c28d056480000487ef401bfe28ab1d5`
+- Overall conclusion: success
+- Failed steps: none
+- Rust formatting: passed
+- Full-workspace clippy with warnings denied: passed
+- Full Rust test suite: passed
+- Kotlin UniFFI generation smoke test: passed
+- Swift UniFFI generation smoke test: passed
+- Android Kotlin binding regeneration and drift comparison: passed
+- Dependency and license policy: passed
+- Android `arm64-v8a` and `x86_64` native builds: passed
+- Android lint, JVM tests, and debug APK assembly: passed
+- APK native-library, detector-linkage, production-symbol, and notices verification: passed
+- Android emulator scanner, recovery, and FFI panic-containment tests: passed
 
-- Kotlin binding drift;
-- Kotlin and Swift binding-generation smoke tests;
-- full Rust formatting, clippy, and tests;
-- Android compilation, unit tests, lint, native ABI packaging, and APK verification.
+Published artifacts for the successful run:
+
+- `regenerated-android-ffi-files` — artifact ID `8739610990`
+- `a2d-verified-debug-apk` — artifact ID `8739698618`
+- `android-shared-analysis-results` — artifact ID `8739854665`
+- `rustfmt-output` — artifact ID `8739584433`
+
+## FIX-002 ownership policy
+
+The permanent ownership policy is documented in `docs/BINDING_GENERATION.md` and summarized in `README.md` and `apps/ios/README.md`:
+
+- the Android Kotlin binding is generated source committed to the repository;
+- Android native libraries and desktop Kotlin/Swift smoke output are ephemeral;
+- `bash tools/build-android-native.sh` is the authoritative Android generation command;
+- `bash tools/generate-bindings.sh` is the Kotlin/Swift desktop smoke-generation command;
+- an exported Rust FFI change requires regenerated Kotlin in the same commit;
+- generated bindings must not be hand-edited;
+- permanent CI drift detection is authoritative;
+- stale-binding troubleshooting and exact artifact recovery are documented.
+
+A repository search found no remaining documentation claiming that the committed Android Kotlin binding is uncommitted or ephemeral.
