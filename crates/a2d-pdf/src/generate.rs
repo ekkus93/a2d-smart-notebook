@@ -25,6 +25,15 @@ use printpdf::{Mm, Op, PdfDocument, PdfPage, PdfParseOptions, PdfSaveOptions};
 use crate::error::{io_error, verify_error};
 use crate::render::render_page_ops;
 
+/// Portable resource-safety ceiling for one generated Page Set. Android uses the same value for
+/// immediate form feedback, but Rust enforces it for every caller, including direct FFI and future
+/// Swift clients.
+pub const MAX_PAGE_SET_PAGE_COUNT: u32 = 500;
+
+/// QR v1 numeric fields are bounded to 0..=999999. Kept explicit here so visible-page arithmetic
+/// is checked before allocation or identity generation rather than failing partway through a set.
+const MAX_QR_V1_VISIBLE_PAGE_NUMBER: u32 = 999_999;
+
 fn pdf_page_for(layout: &PageLayout, ops: Vec<Op>) -> PdfPage {
     PdfPage::new(
         Mm(layout.physical_size.width_mm as f32),
@@ -147,6 +156,66 @@ pub struct GeneratePageSetRequest {
     pub starting_visible_page: u32,
 }
 
+impl GeneratePageSetRequest {
+    fn validated_capacity_and_last_page(&self) -> Result<(usize, u32), A2dError> {
+        if self.page_count == 0 {
+            return Err(validation_error(
+                "PDF_PAGE_SET_EMPTY",
+                "page_count must be at least 1",
+            ));
+        }
+        if self.page_count > MAX_PAGE_SET_PAGE_COUNT {
+            return Err(validation_error(
+                "PDF_PAGE_SET_PAGE_COUNT_LIMIT_EXCEEDED",
+                format!(
+                    "page_count {} exceeds the portable limit {MAX_PAGE_SET_PAGE_COUNT}",
+                    self.page_count
+                ),
+            )
+            .with_detail("page_count", self.page_count.to_string())
+            .with_detail("max_page_count", MAX_PAGE_SET_PAGE_COUNT.to_string()));
+        }
+        if self.starting_visible_page == 0 {
+            return Err(validation_error(
+                "PDF_PAGE_SET_STARTING_PAGE_INVALID",
+                "starting_visible_page must be at least 1",
+            ));
+        }
+        let last_offset = self.page_count - 1;
+        let last_visible_page = self
+            .starting_visible_page
+            .checked_add(last_offset)
+            .ok_or_else(|| {
+                validation_error(
+                    "PDF_PAGE_SET_VISIBLE_PAGE_OVERFLOW",
+                    "visible page range overflows the portable u32 representation",
+                )
+            })?;
+        if last_visible_page > MAX_QR_V1_VISIBLE_PAGE_NUMBER {
+            return Err(validation_error(
+                "PDF_PAGE_SET_VISIBLE_PAGE_OUT_OF_RANGE",
+                format!(
+                    "last visible page {last_visible_page} exceeds QR v1 maximum {MAX_QR_V1_VISIBLE_PAGE_NUMBER}"
+                ),
+            )
+            .with_detail("starting_visible_page", self.starting_visible_page.to_string())
+            .with_detail("page_count", self.page_count.to_string())
+            .with_detail("last_visible_page", last_visible_page.to_string())
+            .with_detail(
+                "max_visible_page",
+                MAX_QR_V1_VISIBLE_PAGE_NUMBER.to_string(),
+            ));
+        }
+        let capacity = usize::try_from(self.page_count).map_err(|_| {
+            validation_error(
+                "PDF_PAGE_SET_PAGE_COUNT_UNSUPPORTED",
+                "page_count does not fit this platform's address space",
+            )
+        })?;
+        Ok((capacity, last_visible_page))
+    }
+}
+
 #[derive(Debug)]
 pub struct GeneratedPageSet {
     pub page_set_id: PageSetId,
@@ -167,21 +236,24 @@ pub struct GeneratedPageSetBytes {
 pub fn render_page_set_pdf_bytes(
     request: GeneratePageSetRequest,
 ) -> Result<GeneratedPageSetBytes, A2dError> {
-    if request.page_count == 0 {
-        return Err(validation_error(
-            "PDF_PAGE_SET_EMPTY",
-            "page_count must be at least 1",
-        ));
-    }
-
+    let (capacity, validated_last_page) = request.validated_capacity_and_last_page()?;
     let layout = smart_page_layout(request.paper_size, request.style);
     let page_set_id = PageSetId::generate();
-    let mut smart_page_ids = Vec::with_capacity(request.page_count as usize);
-    let mut pdf_pages = Vec::with_capacity(request.page_count as usize);
+    let mut smart_page_ids = Vec::with_capacity(capacity);
+    let mut pdf_pages = Vec::with_capacity(capacity);
 
     for offset in 0..request.page_count {
         let smart_page_id = SmartPageId::generate();
-        let visible_number = request.starting_visible_page + offset;
+        let visible_number = request
+            .starting_visible_page
+            .checked_add(offset)
+            .ok_or_else(|| {
+                validation_error(
+                    "PDF_PAGE_SET_VISIBLE_PAGE_OVERFLOW",
+                    "visible page arithmetic changed after request validation",
+                )
+            })?;
+        debug_assert!(visible_number <= validated_last_page);
         let qr_payload = PageCode::SmartPage {
             smart_page_id: smart_page_id.clone(),
             layout_id: layout.id.clone(),
@@ -294,11 +366,6 @@ mod tests {
         ))
     }
 
-    /// TODO 5.6 "test truncated/corrupt output behavior" -- the one bullet in that task
-    /// achievable without a PDF rasterizer or a real marker detector (both still blocked:
-    /// rasterization needs a dependency decision that hasn't been made, and marker detection
-    /// needs Milestone 7's ADR 0002, plus this build's Corner Markers are still a placeholder
-    /// shape, not a real decodable tag -- see `render.rs`'s module doc).
     #[test]
     fn write_and_verify_rejects_truncated_bytes_and_never_creates_the_output_path() {
         let generated = render_smart_page_pdf_bytes(PaperSize::A4, SmartPageStyle::Blank).unwrap();
@@ -312,9 +379,6 @@ mod tests {
             "a failed verify must never leave a file at output_path"
         );
 
-        // The temp file is deliberately left behind (matching this crate's simpler, ad-hoc
-        // protocol here -- not the full asset-commit-protocol orphan tracking a2d-storage's
-        // AssetStore has); clean it up so the test doesn't leak files.
         let tmp_path = path.with_extension("pdf.tmp");
         assert!(tmp_path.exists());
         std::fs::remove_file(&tmp_path).ok();
@@ -361,6 +425,57 @@ mod tests {
         };
         let err = generate_page_set_pdf(request, &temp_path("empty")).unwrap_err();
         assert!(err.code.to_string().contains("PAGE_SET_EMPTY"));
+    }
+
+    #[test]
+    fn page_set_limits_are_enforced_before_allocation_or_identity_generation() {
+        let too_many = render_page_set_pdf_bytes(GeneratePageSetRequest {
+            paper_size: PaperSize::A4,
+            style: SmartPageStyle::Blank,
+            page_count: MAX_PAGE_SET_PAGE_COUNT + 1,
+            starting_visible_page: 1,
+        })
+        .unwrap_err();
+        assert_eq!(
+            too_many.code.to_string(),
+            "PDF_PAGE_SET_PAGE_COUNT_LIMIT_EXCEEDED"
+        );
+
+        let zero_start = render_page_set_pdf_bytes(GeneratePageSetRequest {
+            paper_size: PaperSize::A4,
+            style: SmartPageStyle::Blank,
+            page_count: 1,
+            starting_visible_page: 0,
+        })
+        .unwrap_err();
+        assert_eq!(
+            zero_start.code.to_string(),
+            "PDF_PAGE_SET_STARTING_PAGE_INVALID"
+        );
+
+        let out_of_range = render_page_set_pdf_bytes(GeneratePageSetRequest {
+            paper_size: PaperSize::A4,
+            style: SmartPageStyle::Blank,
+            page_count: 2,
+            starting_visible_page: MAX_QR_V1_VISIBLE_PAGE_NUMBER,
+        })
+        .unwrap_err();
+        assert_eq!(
+            out_of_range.code.to_string(),
+            "PDF_PAGE_SET_VISIBLE_PAGE_OUT_OF_RANGE"
+        );
+    }
+
+    #[test]
+    fn page_set_accepts_the_qr_v1_visible_page_boundary() {
+        let generated = render_page_set_pdf_bytes(GeneratePageSetRequest {
+            paper_size: PaperSize::A4,
+            style: SmartPageStyle::Blank,
+            page_count: 2,
+            starting_visible_page: MAX_QR_V1_VISIBLE_PAGE_NUMBER - 1,
+        })
+        .unwrap();
+        assert_eq!(generated.smart_page_ids.len(), 2);
     }
 
     #[test]
@@ -416,10 +531,7 @@ mod tests {
         let mut warnings = Vec::new();
         let doc = PdfDocument::parse(&bytes, &PdfParseOptions::default(), &mut warnings).unwrap();
 
-        // Setup + its verso, then one recto/verso pair per logical page.
         assert_eq!(doc.page_count(), 2 + 2 * logical_page_count as usize);
-
-        // Every even-indexed page (0-based: 1, 3, 5, ...) is a blank verso -- no ops at all.
         for (index, page) in doc.pages.iter().enumerate() {
             let is_verso = index % 2 == 1;
             if is_verso {
