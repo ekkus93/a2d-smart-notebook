@@ -1,22 +1,17 @@
-//! Milestone 6 notebook and page-resolution queries plus cross-record storage workflows.
+//! Milestone 6 notebook and page-resolution queries.
 //!
 //! These operations remain inside `a2d-storage` so SQL never leaks into the service or FFI
 //! layers. They supplement the basic CRUD traits with the exact query/update shapes needed by the
-//! notebook workflow, deterministic page resolver, and preferred-scan integrity rules.
-
-use std::collections::BTreeMap;
+//! notebook workflow and deterministic page resolver.
 
 use a2d_domain::{
-    A2dError, AssetKind, AuditEvent, AuditEventId, ErrorCategory, ErrorCode, ErrorSeverity,
-    Notebook, NotebookDesignId, NotebookId, Page, PageId, ScanId, SmartPageId,
+    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, Notebook, NotebookDesignId, NotebookId, Page,
+    PageId, SmartPageId,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::Storage;
-use crate::repository::{
-    AssetRepository, AuditEventRepository, NotebookRepository, PageRepository, ScanRepository,
-    map_sql_error,
-};
+use crate::repository::{NotebookRepository, PageRepository, map_sql_error};
 
 pub trait NotebookWorkflowRepository {
     fn update_notebook(&self, notebook: &Notebook) -> Result<(), A2dError>;
@@ -55,21 +50,6 @@ fn notebook_not_found(id: &NotebookId, operation: &str) -> A2dError {
     .with_detail("notebook_id", id.to_string())
 }
 
-fn preferred_scan_error(
-    code: &'static str,
-    category: ErrorCategory,
-    message: impl Into<String>,
-) -> A2dError {
-    A2dError::new(
-        ErrorCode::new(code),
-        category,
-        ErrorSeverity::Error,
-        "error.storage.preferred_scan",
-        message.into(),
-        false,
-    )
-}
-
 fn load_notebooks(
     conn: &Connection,
     sql: &str,
@@ -91,176 +71,6 @@ fn load_notebooks(
             })
         })
         .collect()
-}
-
-impl Storage {
-    /// Atomically changes one page's preferred scan and records the user-visible mutation.
-    ///
-    /// Migration 0005 makes `pages.preferred_scan_id` authoritative for an explicit preference
-    /// change and synchronizes every `scans.preferred` flag in the same SQLite statement. This
-    /// workflow adds the cross-record validation, immutable-original check, postcondition
-    /// verification, and audit event required before exposing the operation to core/FFI callers.
-    /// Re-selecting the current preferred scan is an idempotent no-op and does not add audit noise.
-    pub fn change_preferred_scan(
-        &mut self,
-        page_id: &PageId,
-        scan_id: &ScanId,
-        changed_at_ms: i64,
-        actor: &str,
-        correlation_id: Option<&str>,
-    ) -> Result<bool, A2dError> {
-        if changed_at_ms <= 0 {
-            return Err(preferred_scan_error(
-                "STORAGE_PREFERRED_SCAN_TIME_INVALID",
-                ErrorCategory::Validation,
-                "changed_at_ms must be a positive Unix timestamp",
-            ));
-        }
-        let actor = actor.trim();
-        if actor.is_empty() {
-            return Err(preferred_scan_error(
-                "STORAGE_PREFERRED_SCAN_ACTOR_INVALID",
-                ErrorCategory::Validation,
-                "preferred-scan changes require a non-empty audit actor",
-            ));
-        }
-        let correlation_id = correlation_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-        let actor = actor.to_string();
-
-        self.transaction(|tx| {
-            let page = PageRepository::get_page(tx, page_id)?.ok_or_else(|| {
-                preferred_scan_error(
-                    "STORAGE_PAGE_NOT_FOUND",
-                    ErrorCategory::Validation,
-                    "change_preferred_scan: no page with this id",
-                )
-                .with_detail("page_id", page_id.to_string())
-            })?;
-            let scan = ScanRepository::get_scan(tx, scan_id)?.ok_or_else(|| {
-                preferred_scan_error(
-                    "STORAGE_SCAN_NOT_FOUND",
-                    ErrorCategory::Validation,
-                    "change_preferred_scan: no scan with this id",
-                )
-                .with_detail("scan_id", scan_id.to_string())
-            })?;
-            if &scan.page_id != page_id {
-                return Err(preferred_scan_error(
-                    "STORAGE_PREFERRED_SCAN_PAGE_MISMATCH",
-                    ErrorCategory::Validation,
-                    "preferred scan must belong to the requested page",
-                )
-                .with_detail("page_id", page_id.to_string())
-                .with_detail("scan_id", scan_id.to_string())
-                .with_detail("scan_page_id", scan.page_id.to_string()));
-            }
-
-            let original = AssetRepository::get_asset(tx, &scan.original_asset_id)?.ok_or_else(|| {
-                preferred_scan_error(
-                    "STORAGE_PREFERRED_SCAN_ORIGINAL_MISSING",
-                    ErrorCategory::Integrity,
-                    "preferred-scan candidate references a missing original asset",
-                )
-                .with_detail("scan_id", scan_id.to_string())
-                .with_detail("original_asset_id", scan.original_asset_id.to_string())
-            })?;
-            if original.kind != AssetKind::Original || !original.immutable {
-                return Err(preferred_scan_error(
-                    "STORAGE_PREFERRED_SCAN_ORIGINAL_INVALID",
-                    ErrorCategory::Integrity,
-                    "preferred-scan candidate does not reference an immutable original asset",
-                )
-                .with_detail("scan_id", scan_id.to_string())
-                .with_detail("original_asset_id", original.id().to_string()));
-            }
-
-            let preferred_count = || -> Result<i64, A2dError> {
-                tx.query_row(
-                    "SELECT COUNT(*) FROM scans WHERE page_id = ?1 AND preferred = 1",
-                    [page_id.to_string()],
-                    |row| row.get(0),
-                )
-                .map_err(|error| map_sql_error("counting preferred scans", error))
-            };
-
-            if page.preferred_scan_id.as_ref() == Some(scan_id) {
-                if !scan.preferred || preferred_count()? != 1 {
-                    return Err(preferred_scan_error(
-                        "STORAGE_PREFERRED_SCAN_STATE_INCONSISTENT",
-                        ErrorCategory::Integrity,
-                        "page pointer and scan preferred flags are internally inconsistent",
-                    )
-                    .with_detail("page_id", page_id.to_string())
-                    .with_detail("scan_id", scan_id.to_string()));
-                }
-                return Ok(false);
-            }
-
-            let previous_preferred_scan_id = page.preferred_scan_id.clone();
-            let changed = tx
-                .execute(
-                    "UPDATE pages SET preferred_scan_id = ?1, updated_at_ms = ?2 WHERE id = ?3",
-                    params![scan_id.to_string(), changed_at_ms, page_id.to_string()],
-                )
-                .map_err(|error| map_sql_error("change_preferred_scan", error))?;
-            if changed != 1 {
-                return Err(A2dError::internal_unknown(
-                    "preferred-scan page disappeared during its transaction",
-                )
-                .with_detail("page_id", page_id.to_string()));
-            }
-
-            let updated_page = PageRepository::get_page(tx, page_id)?.ok_or_else(|| {
-                A2dError::internal_unknown(
-                    "preferred-scan page disappeared after its update",
-                )
-                .with_detail("page_id", page_id.to_string())
-            })?;
-            let updated_scan = ScanRepository::get_scan(tx, scan_id)?.ok_or_else(|| {
-                A2dError::internal_unknown(
-                    "preferred-scan candidate disappeared after its update",
-                )
-                .with_detail("scan_id", scan_id.to_string())
-            })?;
-            if updated_page.preferred_scan_id.as_ref() != Some(scan_id)
-                || !updated_scan.preferred
-                || preferred_count()? != 1
-            {
-                return Err(preferred_scan_error(
-                    "STORAGE_PREFERRED_SCAN_POSTCONDITION_FAILED",
-                    ErrorCategory::Integrity,
-                    "preferred-scan transaction did not establish exactly one consistent preference",
-                )
-                .with_detail("page_id", page_id.to_string())
-                .with_detail("scan_id", scan_id.to_string()));
-            }
-
-            let mut details = BTreeMap::new();
-            details.insert("page_id".to_string(), page_id.to_string());
-            details.insert(
-                "previous_preferred_scan_id".to_string(),
-                previous_preferred_scan_id
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| "none".to_string()),
-            );
-            details.insert("preferred_scan_id".to_string(), scan_id.to_string());
-            let event = AuditEvent::new(
-                AuditEventId::generate(),
-                changed_at_ms,
-                "scan.preferred_changed".to_string(),
-                actor.clone(),
-                Some(page_id.to_string()),
-                details,
-                correlation_id.clone(),
-            );
-            AuditEventRepository::insert_audit_event(tx, &event)?;
-            Ok(true)
-        })
-    }
 }
 
 impl NotebookWorkflowRepository for Connection {
