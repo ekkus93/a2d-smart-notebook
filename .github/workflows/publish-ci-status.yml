@@ -1,0 +1,247 @@
+name: Publish Hosted CI Status
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - requested
+      - in_progress
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+concurrency:
+  group: publish-hosted-ci-status
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Publish latest hosted CI status
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Update authoritative hosted CI issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: "22"
+          WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_STATUS: ${{ github.event.workflow_run.status }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CREATED_AT: ${{ github.event.workflow_run.created_at }}
+          UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          set -euo pipefail
+
+          latest_run_id="$(
+            gh api \
+              "repos/${REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?per_page=1" \
+              --jq '.workflow_runs[0].id'
+          )"
+          if [[ "${latest_run_id}" != "${RUN_ID}" ]]; then
+            printf 'Skipping stale state for run %s; latest run is %s.\n' \
+              "${RUN_ID}" "${latest_run_id}"
+            exit 0
+          fi
+
+          jobs_file="${RUNNER_TEMP}/hosted-ci-jobs.json"
+          artifacts_file="${RUNNER_TEMP}/hosted-ci-artifacts.json"
+          query_state_file="${RUNNER_TEMP}/hosted-ci-query-state.json"
+          body_file="${RUNNER_TEMP}/hosted-ci-status.md"
+          patch_file="${RUNNER_TEMP}/hosted-ci-issue-patch.json"
+
+          jobs_query_error=false
+          if ! gh api \
+            "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?filter=latest&per_page=100" \
+            > "${jobs_file}"; then
+            jobs_query_error=true
+            printf '{"jobs":[]}\n' > "${jobs_file}"
+          fi
+
+          artifacts_query_error=false
+          if ! gh api \
+            "repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
+            > "${artifacts_file}"; then
+            artifacts_query_error=true
+            printf '{"artifacts":[]}\n' > "${artifacts_file}"
+          fi
+
+          printf '{"jobs_query_error":%s,"artifacts_query_error":%s}\n' \
+            "${jobs_query_error}" "${artifacts_query_error}" \
+            > "${query_state_file}"
+
+          python3 - \
+            "${jobs_file}" \
+            "${artifacts_file}" \
+            "${query_state_file}" \
+            "${body_file}" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          jobs_path = Path(sys.argv[1])
+          artifacts_path = Path(sys.argv[2])
+          query_state_path = Path(sys.argv[3])
+          body_path = Path(sys.argv[4])
+
+          raw_jobs = json.loads(jobs_path.read_text(encoding="utf-8"))
+          raw_artifacts = json.loads(artifacts_path.read_text(encoding="utf-8"))
+          query_state = json.loads(query_state_path.read_text(encoding="utf-8"))
+
+          jobs = []
+          failed_steps = []
+          for raw_job in raw_jobs.get("jobs", []):
+              steps = []
+              for raw_step in raw_job.get("steps", []):
+                  step = {
+                      "number": raw_step.get("number"),
+                      "name": raw_step.get("name"),
+                      "status": raw_step.get("status"),
+                      "conclusion": raw_step.get("conclusion"),
+                      "started_at": raw_step.get("started_at"),
+                      "completed_at": raw_step.get("completed_at"),
+                  }
+                  steps.append(step)
+                  if step["conclusion"] == "failure":
+                      failed_steps.append(
+                          {
+                              "job_id": raw_job.get("id"),
+                              "job": raw_job.get("name"),
+                              "step_number": step["number"],
+                              "step": step["name"],
+                          }
+                      )
+
+              jobs.append(
+                  {
+                      "id": raw_job.get("id"),
+                      "name": raw_job.get("name"),
+                      "status": raw_job.get("status"),
+                      "conclusion": raw_job.get("conclusion"),
+                      "started_at": raw_job.get("started_at"),
+                      "completed_at": raw_job.get("completed_at"),
+                      "runner_name": raw_job.get("runner_name"),
+                      "runner_group_name": raw_job.get("runner_group_name"),
+                      "steps": steps,
+                  }
+              )
+
+          artifacts = []
+          for raw_artifact in raw_artifacts.get("artifacts", []):
+              workflow_run = raw_artifact.get("workflow_run") or {}
+              artifacts.append(
+                  {
+                      "id": raw_artifact.get("id"),
+                      "name": raw_artifact.get("name"),
+                      "size_in_bytes": raw_artifact.get("size_in_bytes"),
+                      "expired": raw_artifact.get("expired"),
+                      "created_at": raw_artifact.get("created_at"),
+                      "expires_at": raw_artifact.get("expires_at"),
+                      "workflow_run_id": workflow_run.get("id"),
+                      "head_sha": workflow_run.get("head_sha"),
+                  }
+              )
+
+          payload = {
+              "schema_version": 2,
+              "workflow": os.environ["WORKFLOW_NAME"],
+              "workflow_id": int(os.environ["WORKFLOW_ID"]),
+              "run_id": int(os.environ["RUN_ID"]),
+              "run_attempt": int(os.environ["RUN_ATTEMPT"]),
+              "run_url": os.environ["RUN_URL"],
+              "status": os.environ["RUN_STATUS"],
+              "conclusion": os.environ["RUN_CONCLUSION"] or None,
+              "event": os.environ["RUN_EVENT"],
+              "head_branch": os.environ["HEAD_BRANCH"],
+              "head_sha": os.environ["HEAD_SHA"],
+              "created_at": os.environ["CREATED_AT"],
+              "updated_at": os.environ["UPDATED_AT"],
+              "jobs_query_error": query_state["jobs_query_error"],
+              "artifacts_query_error": query_state["artifacts_query_error"],
+              "failed_steps": failed_steps,
+              "artifacts": artifacts,
+              "jobs": jobs,
+          }
+
+          failed_summary = "None"
+          if failed_steps:
+              failed_summary = ", ".join(
+                  f'{item["job"]} / {item["step"]}' for item in failed_steps
+              )
+
+          artifact_summary = "None"
+          if artifacts:
+              artifact_summary = ", ".join(
+                  f'{item["name"]} (ID {item["id"]})' for item in artifacts
+              )
+
+          conclusion = payload["conclusion"] or "pending"
+          body = "\n".join(
+              [
+                  "<!-- maintained by publish-ci-status.yml -->",
+                  "# Latest Hosted Quality Gates",
+                  "",
+                  f'- **Status:** `{payload["status"]}`',
+                  f'- **Conclusion:** `{conclusion}`',
+                  f'- **Run:** [{payload["run_id"]}]({payload["run_url"]})',
+                  f'- **Attempt:** `{payload["run_attempt"]}`',
+                  f'- **Commit:** `{payload["head_sha"]}`',
+                  f'- **Branch/event:** `{payload["head_branch"]}` / `{payload["event"]}`',
+                  f'- **Failed steps:** {failed_summary}',
+                  f'- **Artifacts:** {artifact_summary}',
+                  f'- **Jobs query error:** `{payload["jobs_query_error"]}`',
+                  f'- **Artifacts query error:** `{payload["artifacts_query_error"]}`',
+                  f'- **Observed:** `{payload["updated_at"]}`',
+                  "",
+                  "## Machine-readable status",
+                  "",
+                  "```json",
+                  json.dumps(payload, indent=2, sort_keys=True),
+                  "```",
+                  "",
+                  "This issue is overwritten whenever the latest run changes state; it is not a historical log.",
+                  "Do not edit it manually.",
+              ]
+          )
+          body_path.write_text(body + "\n", encoding="utf-8")
+          PY
+
+          python3 - "${body_file}" "${patch_file}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          body = Path(sys.argv[1]).read_text(encoding="utf-8")
+          patch = {
+              "title": "CI Status: Hosted Quality Gates",
+              "body": body,
+              "state": "open",
+          }
+          Path(sys.argv[2]).write_text(
+              json.dumps(patch),
+              encoding="utf-8",
+          )
+          PY
+
+          gh api \
+            --method PATCH \
+            "repos/${REPOSITORY}/issues/${ISSUE_NUMBER}" \
+            --input "${patch_file}" \
+            >/dev/null
+
+          printf 'Published run %s status and artifact metadata to issue #%s.\n' \
+            "${RUN_ID}" "${ISSUE_NUMBER}"
