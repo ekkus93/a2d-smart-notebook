@@ -10,26 +10,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.a2d.notebook.R
-import com.a2d.notebook.feature.scanner.camera.CameraAdapterState
 import com.a2d.notebook.feature.scanner.camera.CameraPermissionStatus
 import com.a2d.notebook.feature.scanner.camera.CameraPreviewSurface
 import com.a2d.notebook.feature.scanner.camera.rememberCameraPermissionState
-import com.a2d.notebook.rustbridge.A2dBridge
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import uniffi.a2d_ffi.PageResolution
 
 @Composable
 fun SinglePageScannerScreen(
@@ -42,43 +33,9 @@ fun SinglePageScannerScreen(
 
     when (permission.status) {
         CameraPermissionStatus.Granted -> {
-            val applicationContext = LocalContext.current.applicationContext
-            val policy = remember { SinglePageScannerPolicies.V1 }
-            val resolvedPageId =
-                (state.latestPageResolution as? PageResolution.Resolved)?.pageId
-
-            LaunchedEffect(resolvedPageId, state.cameraGeneration, policy) {
-                policy.clearStoredLayoutPolicy()
-                if (resolvedPageId != null) {
-                    try {
-                        val storedLayout =
-                            withContext(Dispatchers.IO) {
-                                A2dBridge.client(applicationContext)
-                                    .resolveStoredScanLayoutPolicy(resolvedPageId)
-                            }
-                        policy.applyStoredLayoutPolicy(storedLayout)
-                    } catch (failure: CancellationException) {
-                        throw failure
-                    } catch (failure: Exception) {
-                        policy.clearStoredLayoutPolicy()
-                        viewModel.onCameraStateChanged(
-                            CameraAdapterState.Error(
-                                message =
-                                    failure.message
-                                        ?: "Rust failed to resolve the stored page scan layout",
-                                cause = failure,
-                            ),
-                        )
-                    }
-                }
-            }
-            DisposableEffect(policy) {
-                onDispose { policy.clearStoredLayoutPolicy() }
-            }
-
             val adapter =
                 rememberSinglePageCameraXAdapter(
-                    policy = policy,
+                    policy = SinglePageScannerPolicies.V1,
                     generation = state.cameraGeneration,
                     onLiveAnalysisEvent = viewModel::onLiveAnalysisEvent,
                     onQrCodeEvent = viewModel::onQrCodeEvent,
