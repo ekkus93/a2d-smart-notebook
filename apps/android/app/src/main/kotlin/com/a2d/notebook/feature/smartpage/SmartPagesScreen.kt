@@ -90,7 +90,7 @@ fun SmartPagesScreen(
     DisposableEffect(Unit) {
         onDispose {
             (preview as? SmartPagePreviewState.Ready)?.bitmap
-                ?.takeUnless(Bitmap::isRecycled)
+                ?.takeUnless { bitmap -> bitmap.isRecycled }
                 ?.recycle()
         }
     }
@@ -188,7 +188,9 @@ fun SmartPagesScreen(
                         assetId = generated.pdfAssetId,
                         path = generated.pdfPath,
                     )
-                    renderFirstPdfPage(source.absolutePath).also { renderedBitmap = it }
+                    renderFirstPdfPage(source.absolutePath).also { bitmap ->
+                        renderedBitmap = bitmap
+                    }
                 }
             }
             currentCoroutineContext().ensureActive()
@@ -207,7 +209,7 @@ fun SmartPagesScreen(
             )
         } finally {
             renderedBitmap
-                ?.takeUnless(Bitmap::isRecycled)
+                ?.takeUnless { bitmap -> bitmap.isRecycled }
                 ?.recycle()
         }
     }
@@ -306,9 +308,9 @@ fun SmartPagesScreen(
                                 }
                                 try {
                                     saveLauncher.launch("a2d-smart-pages-${result.pageSetId}.pdf")
-                                } catch (failure: Exception) {
+                                } catch (_: Exception) {
                                     val consumed = viewModel.consumePendingSave()
-                                    if (consumed.isFailure || consumed.getOrNull()?.token != pending.token) {
+                                    if (consumed.isFailure || consumed.getOrThrow().token != pending.token) {
                                         platformError = context.getString(R.string.smart_pages_save_stale)
                                     } else {
                                         platformError = context.getString(R.string.smart_pages_save_failed)
@@ -327,7 +329,7 @@ fun SmartPagesScreen(
                                     )
                                     sharePdf(context, source.absolutePath)
                                     null
-                                } catch (failure: Exception) {
+                                } catch (_: Exception) {
                                     context.getString(R.string.smart_pages_share_failed)
                                 }
                             },
@@ -347,7 +349,7 @@ fun SmartPagesScreen(
                                         "A2D Smart Pages ${result.pageSetId}",
                                     )
                                     null
-                                } catch (failure: Exception) {
+                                } catch (_: Exception) {
                                     context.getString(R.string.smart_pages_print_failed)
                                 }
                             },
