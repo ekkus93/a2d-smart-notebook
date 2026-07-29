@@ -150,11 +150,14 @@ impl A2dClient {
             .generate_example_smart_page_qr_payload()
             .map_err(Into::into)
     }
+}
 
-    /// Intentional panic endpoint for dedicated FFI containment tests only. The normal Android and
-    /// future iOS libraries are built without `ffi-test-panic`, so production users cannot call or
-    /// discover this defect-injection API.
-    #[cfg(feature = "ffi-test-panic")]
+/// Intentional panic endpoint for dedicated FFI containment tests only. The normal Android and
+/// future iOS libraries are built without `ffi-test-panic`, so production users cannot call or
+/// discover this defect-injection API.
+#[cfg(feature = "ffi-test-panic")]
+#[uniffi::export]
+impl A2dClient {
     pub fn trigger_panic_for_testing(&self) {
         panic!("intentional panic from trigger_panic_for_testing");
     }
