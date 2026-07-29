@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify photographed fixture metadata
+        run: python tools/verify_photographed_scan_fixtures.py
       # rust-toolchain.toml pins the compiler plus rustfmt and clippy.
       - name: Show resolved toolchain
         run: rustc --version && cargo --version
@@ -32,6 +34,7 @@ jobs:
           path: |
             crates/a2d-ffi/src/milestone7.rs
             crates/a2d-image/src/bin/a2d_fixture_measurements.rs
+            crates/a2d-image/src/bin/a2d_fingerprint_calibration.rs
             crates/a2d-image/tests/synthetic_processing_expectations.rs
           if-no-files-found: error
       - name: Fail if Rust formatting drifted
