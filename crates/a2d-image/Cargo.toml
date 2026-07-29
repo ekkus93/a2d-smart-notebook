@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = []
-fixture-tools = ["dep:a2d-identity", "dep:qrcode", "dep:serde_json", "dep:sha2"]
+fixture-tools = ["dep:a2d-identity", "dep:qrcode"]
 
 [dependencies]
 a2d-domain = { path = "../a2d-domain" }
@@ -20,8 +20,6 @@ a2d-layout = { path = "../a2d-layout" }
 apriltag-sys = "=0.4.0"
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 qrcode = { version = "0.14.1", default-features = false, optional = true }
-serde_json = { version = "1", optional = true }
-sha2 = { version = "0.10", optional = true }
 
 [[bin]]
 name = "a2d-fixture-support"
