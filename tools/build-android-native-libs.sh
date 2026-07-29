@@ -2,6 +2,9 @@
 # Builds the Rust UniFFI cdylib for the Android ABIs packaged by the v0.1 app.
 # This script writes only generated native libraries under app/src/main/jniLibs;
 # it does not regenerate or modify committed Kotlin bindings.
+#
+# Production callers leave A2D_FFI_CARGO_FEATURES unset. Dedicated test jobs may provide an explicit
+# whitespace-separated feature list; the script never enables defect-injection features implicitly.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -50,7 +53,11 @@ rustup target add "${rust_targets[@]}"
 output_dir="apps/android/app/src/main/jniLibs"
 mkdir -p "$output_dir"
 
-cargo ndk "${ndk_args[@]}" -o "$output_dir" build -p a2d-ffi --lib
+cargo_args=(build -p a2d-ffi --lib)
+if [ -n "${A2D_FFI_CARGO_FEATURES:-}" ]; then
+  cargo_args+=(--features "$A2D_FFI_CARGO_FEATURES")
+fi
+cargo ndk "${ndk_args[@]}" -o "$output_dir" "${cargo_args[@]}"
 
 for abi in $abis; do
   library="$output_dir/$abi/liba2d_ffi.so"
@@ -61,3 +68,6 @@ for abi in $abis; do
 done
 
 printf 'Built Android native libraries for: %s\n' "$abis"
+if [ -n "${A2D_FFI_CARGO_FEATURES:-}" ]; then
+  printf 'Enabled explicit a2d-ffi Cargo features: %s\n' "$A2D_FFI_CARGO_FEATURES"
+fi
