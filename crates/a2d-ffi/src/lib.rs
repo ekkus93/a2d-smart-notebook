@@ -151,12 +151,10 @@ impl A2dClient {
             .map_err(Into::into)
     }
 
-    /// Exists only so a test can demonstrate a Rust panic doesn't silently look like a
-    /// successful FFI call (spec §27: "Panics MUST be treated as defects and MUST NOT cross FFI
-    /// as success"). UniFFI's generated scaffolding catches unwinds at the `extern "C"`
-    /// boundary; fully proving that requires calling through real generated Kotlin/Swift
-    /// bindings, which don't exist yet (no Android/iOS project — Milestone 1.2/15). The test
-    /// here only proves the Rust-level behavior this relies on.
+    /// Intentional panic endpoint for dedicated FFI containment tests only. The normal Android and
+    /// future iOS libraries are built without `ffi-test-panic`, so production users cannot call or
+    /// discover this defect-injection API.
+    #[cfg(feature = "ffi-test-panic")]
     pub fn trigger_panic_for_testing(&self) {
         panic!("intentional panic from trigger_panic_for_testing");
     }
@@ -298,6 +296,7 @@ mod tests {
         std::fs::remove_file(&file).ok();
     }
 
+    #[cfg(feature = "ffi-test-panic")]
     #[test]
     #[should_panic(expected = "intentional panic")]
     fn trigger_panic_for_testing_panics_at_the_rust_level() {
