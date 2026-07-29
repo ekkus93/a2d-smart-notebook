@@ -198,9 +198,7 @@ impl PerceptualFingerprintDifference {
                 });
 
                 let mut enqueue_if_changed = |neighbor: usize| {
-                    if !visited[neighbor]
-                        && self.cell_absolute_differences[neighbor] >= threshold
-                    {
+                    if !visited[neighbor] && self.cell_absolute_differences[neighbor] >= threshold {
                         visited[neighbor] = true;
                         pending.push_back(neighbor);
                     }
@@ -313,7 +311,10 @@ mod tests {
         assert_eq!(comparison.changed_cell_count(), 3);
         assert_eq!((region.left_column(), region.top_row()), (4, 5));
         assert_eq!(
-            (region.right_column_exclusive(), region.bottom_row_exclusive()),
+            (
+                region.right_column_exclusive(),
+                region.bottom_row_exclusive()
+            ),
             (6, 7)
         );
         assert_eq!(region.width_cells(), 2);
