@@ -243,7 +243,11 @@ class LiveQrCodeScheduler(
                     if (it == null) workerScheduled = false
                 }
             } ?: return
-            val outcome = runCatching { decoder.decode(work.frame) }
+            val decoded = try {
+                Result.success(decoder.decode(work.frame))
+            } catch (failure: Exception) {
+                Result.failure(failure)
+            }
             val stale = synchronized(lock) {
                 when {
                     closed -> LiveQrDropReason.CLOSED
@@ -255,7 +259,7 @@ class LiveQrCodeScheduler(
             if (stale != null) {
                 publish(LiveQrCodeEvent.StaleResultDiscarded(work.sequence, stale))
             } else {
-                outcome.fold(
+                decoded.fold(
                     onSuccess = { payload ->
                         if (payload == null) {
                             publish(
@@ -277,13 +281,12 @@ class LiveQrCodeScheduler(
                         }
                     },
                     onFailure = { failure ->
-                        val exception = failure as? Exception ?: throw failure
                         publish(
                             LiveQrCodeEvent.Failed(
                                 work.sequence,
                                 work.frame.timestampNanos,
-                                exception.message ?: "live Page Code decoding failed",
-                                exception,
+                                failure.message ?: "live Page Code decoding failed",
+                                failure,
                             ),
                         )
                     },
