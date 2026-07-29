@@ -845,7 +845,10 @@ mod tests {
             .asset_store
             .resolve(&candidate.corrected.relative_path)
             .unwrap();
-        std::fs::write(candidate_path, b"tampered").unwrap();
+        let mut tampered_bytes = std::fs::read(&candidate_path).unwrap();
+        assert!(!tampered_bytes.is_empty());
+        tampered_bytes[0] ^= 0xff;
+        std::fs::write(candidate_path, tampered_bytes).unwrap();
         let tampered_error = core
             .compare_stored_scans(CompareStoredScansRequest {
                 baseline_scan_id: replacement_baseline.id,

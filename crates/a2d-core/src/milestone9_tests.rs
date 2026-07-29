@@ -295,7 +295,8 @@ fn a4_smart_page_registration_uses_a4_rectification_dimensions() {
             user_approved: true,
         })
         .unwrap();
-    let corrected = image::open(&registered.corrected_path).unwrap();
+    let corrected_bytes = std::fs::read(&registered.corrected_path).unwrap();
+    let corrected = image::load_from_memory(&corrected_bytes).unwrap();
     assert_eq!(corrected.dimensions(), (900, 1_273));
     let scan = core
         .lock_storage()
