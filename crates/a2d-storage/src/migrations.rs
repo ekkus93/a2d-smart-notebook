@@ -43,4 +43,9 @@ pub static MIGRATIONS: &[Migration] = &[
         name: "preferred_scan_selected_flag_sync",
         sql: include_str!("migrations/0007_preferred_scan_selected_flag_sync.sql"),
     },
+    Migration {
+        version: 8,
+        name: "preferred_scan_workflow_gate",
+        sql: include_str!("migrations/0008_preferred_scan_workflow_gate.sql"),
+    },
 ];
