@@ -34,6 +34,7 @@ fn verify_rejects_a_recorded_byte_length_that_does_not_match_the_file() {
         .commit(b"length-checked bytes", AssetKind::Corrected, "image/png")
         .unwrap();
     asset.byte_length += 1;
+    let expected_byte_length = asset.byte_length.to_string();
 
     let error = store.verify(&asset).unwrap_err();
     assert_eq!(error.code.to_string(), "STORAGE_ASSET_LENGTH_MISMATCH");
@@ -42,7 +43,7 @@ fn verify_rejects_a_recorded_byte_length_that_does_not_match_the_file() {
             .details
             .get("expected_byte_length")
             .map(String::as_str),
-        Some(asset.byte_length.to_string().as_str()),
+        Some(expected_byte_length.as_str()),
     );
 
     std::fs::remove_dir_all(root).ok();
