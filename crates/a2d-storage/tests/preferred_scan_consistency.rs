@@ -4,9 +4,7 @@ use a2d_domain::{
     AssetKind, CaptureSource, LayoutId, Page, PageId, PageKind, PageState, QualityStatus, Scan,
     ScanId, SmartPageId,
 };
-use a2d_storage::{
-    AssetRepository, AssetStore, PageRepository, ScanRepository, Storage,
-};
+use a2d_storage::{AssetRepository, AssetStore, PageRepository, ScanRepository, Storage};
 
 fn temp_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
@@ -67,7 +65,7 @@ fn committed_original(store: &AssetStore, bytes: &[u8]) -> a2d_domain::Asset {
 
 #[test]
 fn changing_the_page_pointer_synchronizes_all_scan_preferred_flags() {
-    let mut storage = Storage::open_in_memory().unwrap();
+    let storage = Storage::open_in_memory().unwrap();
     let root = temp_dir("switch");
     let assets = AssetStore::open(&root).unwrap();
     let page = page(100);
@@ -105,7 +103,7 @@ fn changing_the_page_pointer_synchronizes_all_scan_preferred_flags() {
 
 #[test]
 fn a_page_cannot_prefer_a_scan_owned_by_another_page() {
-    let mut storage = Storage::open_in_memory().unwrap();
+    let storage = Storage::open_in_memory().unwrap();
     let root = temp_dir("cross-page");
     let assets = AssetStore::open(&root).unwrap();
     let page_a = page(100);
@@ -139,7 +137,7 @@ fn a_page_cannot_prefer_a_scan_owned_by_another_page() {
 
 #[test]
 fn an_unknown_scan_cannot_become_a_page_preference() {
-    let mut storage = Storage::open_in_memory().unwrap();
+    let storage = Storage::open_in_memory().unwrap();
     let root = temp_dir("unknown");
     let assets = AssetStore::open(&root).unwrap();
     let page = page(100);
