@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the native analysis and notice contents of an Android APK."""
+"""Verify native analysis, production-only symbols, and notice contents of an Android APK."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import struct
 import sys
 import zipfile
 from pathlib import Path
+from typing import NoReturn
 
 EXPECTED_LIBRARIES = {
     "lib/arm64-v8a/liba2d_ffi.so": 183,  # EM_AARCH64
@@ -38,9 +39,12 @@ REQUIRED_NATIVE_SYMBOL_NAMES = (
     b"uniffi_a2d_ffi_fn_method_a2dclient_register_scan",
     b"uniffi_a2d_ffi_fn_method_a2dclient_compare_stored_scans",
 )
+FORBIDDEN_PRODUCTION_NATIVE_SYMBOL_NAMES = (
+    b"uniffi_a2d_ffi_fn_method_a2dclient_trigger_panic_for_testing",
+)
 
 
-def fail(message: str) -> "NoReturn":
+def fail(message: str) -> NoReturn:
     raise ValueError(message)
 
 
@@ -67,6 +71,12 @@ def verify_elf(path: str, data: bytes, expected_machine: int) -> None:
         if symbol not in data:
             fail(
                 f"{path} does not contain required native symbol name "
+                f"{symbol.decode('ascii')}"
+            )
+    for symbol in FORBIDDEN_PRODUCTION_NATIVE_SYMBOL_NAMES:
+        if symbol in data:
+            fail(
+                f"{path} contains forbidden production native symbol name "
                 f"{symbol.decode('ascii')}"
             )
 
@@ -127,8 +137,7 @@ def main() -> int:
     except (OSError, UnicodeDecodeError, ValueError, zipfile.BadZipFile) as error:
         print(f"APK verification failed: {error}", file=sys.stderr)
         return 1
-
-    print(f"Verified Android APK native packaging and notices: {args.apk}")
+    print(f"Verified Android APK native packaging, production symbols, and notices: {args.apk}")
     return 0
 
 
