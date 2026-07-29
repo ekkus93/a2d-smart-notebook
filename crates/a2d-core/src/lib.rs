@@ -12,10 +12,13 @@ use std::sync::{Arc, Mutex};
 
 use a2d_domain::{
     A2dError, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, LayoutId, NotebookDesignId, Page,
-    PageId, PageKind, PageSet, PageSetId, SmartPageId,
+    PageId, PageKind, PageSet, PageSetId, SmartPageId, system_now_ms,
 };
 use a2d_identity::PageCode;
-use a2d_storage::{AssetRepository, AssetStore, PageRepository, PageSetRepository, Storage};
+use a2d_storage::{
+    AssetPersistenceFailureStage, AssetRepository, AssetStore, PageRepository, PageSetRepository,
+    Storage,
+};
 
 mod milestone6;
 pub use milestone6::*;
@@ -106,14 +109,14 @@ impl A2dCore {
     /// status — see `a2d_identity::qr`'s module doc.
     pub fn generate_example_notebook_setup_qr_payload(&self) -> Result<String, A2dError> {
         PageCode::NotebookSetup {
-            design_id: NotebookDesignId::generate(),
+            design_id: NotebookDesignId::try_generate()?,
         }
         .encode()
     }
 
     pub fn generate_example_notebook_page_qr_payload(&self) -> Result<String, A2dError> {
         PageCode::NotebookPage {
-            design_id: NotebookDesignId::generate(),
+            design_id: NotebookDesignId::try_generate()?,
             logical_page_number: 12,
             layout_id: example_layout_id(),
         }
@@ -122,7 +125,7 @@ impl A2dCore {
 
     pub fn generate_example_smart_page_qr_payload(&self) -> Result<String, A2dError> {
         PageCode::SmartPage {
-            smart_page_id: SmartPageId::generate(),
+            smart_page_id: SmartPageId::try_generate()?,
             layout_id: example_layout_id(),
             visible_page_number: Some(3),
             page_set_id: None,
@@ -155,14 +158,10 @@ impl A2dCore {
     /// nothing here is idempotent by request identity (spec §12.2: every generation is supposed
     /// to mint new identities, not reuse them).
     ///
-    /// **Known gap**: if the DB transaction fails *after* the asset was already durably
-    /// committed to `assets/exports/`, that asset file is orphaned — there is no database row
-    /// referencing it. This function does not silently hide that: the returned error carries the
-    /// orphaned `AssetId` in its `details` so it's diagnosable, but there is no automated
-    /// orphan-cleanup or review-item mechanism yet (that needs Milestone 9.4/16's broader Needs
-    /// Review and integrity-check infrastructure, neither of which exists yet) — matching how
-    /// Milestone 3.3 left its own asset-commit orphan cleanup as documented future work rather
-    /// than building it ahead of need.
+    /// If SQLite registration fails after the PDF was durably finalized, the final file is retained
+    /// and the returned error contains a typed persistence stage plus immutable recovery evidence.
+    /// `Storage::discover_orphaned_final_assets` can report that file without deleting or importing
+    /// it automatically; any repair remains an explicit reviewed action.
     pub fn generate_and_register_page_set(
         &self,
         request: a2d_pdf::GeneratePageSetRequest,
@@ -174,14 +173,14 @@ impl A2dCore {
             self.asset_store
                 .commit(&generated.pdf_bytes, AssetKind::Export, "application/pdf")?;
 
-        let created_at = now_ms();
+        let created_at = system_now_ms()?;
         let page_set = PageSet::new(generated.page_set_id.clone(), None, created_at);
 
         let mut pages = Vec::with_capacity(generated.smart_page_ids.len());
         let mut registered_pages = Vec::with_capacity(generated.smart_page_ids.len());
         for (offset, smart_page_id) in generated.smart_page_ids.into_iter().enumerate() {
             let visible_number = starting_visible_page + offset as u32;
-            let page_id = PageId::generate();
+            let page_id = PageId::try_generate()?;
             let mut page = Page::new(
                 page_id.clone(),
                 PageKind::SmartPage {
@@ -213,12 +212,28 @@ impl A2dCore {
                 }
                 Ok(())
             })
-            .map_err(|e| {
-                e.with_detail("orphaned_asset_id", asset_id.to_string())
+            .map_err(|error| {
+                error
+                    .with_detail(
+                        "asset_commit_failure_stage",
+                        AssetPersistenceFailureStage::DatabaseRegistrationRolledBack
+                            .as_detail_value(),
+                    )
+                    .with_detail("asset_id", asset_id.to_string())
+                    .with_detail("orphaned_asset_id", asset_id.to_string())
+                    .with_detail("asset_kind", "Export")
+                    .with_detail("final_relative_path", &asset.relative_path)
+                    .with_detail("expected_sha256", &asset.sha256)
+                    .with_detail("byte_length", asset.byte_length.to_string())
+                    .with_detail("final_file_created", "true")
+                    .with_detail("file_sync_completed", "true")
+                    .with_detail("directory_sync_completed", "true")
+                    .with_detail("database_registration_started", "true")
+                    .with_detail("database_registration_committed", "false")
                     .with_detail(
                         "note",
                         "the PDF asset was durably committed to disk before this transaction \
-                     failed; no database row references it",
+                         failed; no database row references it",
                     )
             })?;
 
@@ -429,6 +444,53 @@ mod tests {
             .get("orphaned_asset_id")
             .expect("transaction failure after asset commit must identify the orphan")
             .clone();
+        assert_eq!(
+            err.details
+                .get("asset_commit_failure_stage")
+                .map(String::as_str),
+            Some("database_registration_rolled_back")
+        );
+        assert_eq!(
+            err.details.get("asset_id").map(String::as_str),
+            Some(orphaned_asset_id.as_str())
+        );
+        assert_eq!(
+            err.details.get("asset_kind").map(String::as_str),
+            Some("Export")
+        );
+        assert_eq!(
+            err.details
+                .get("final_file_created")
+                .map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            err.details
+                .get("file_sync_completed")
+                .map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            err.details
+                .get("directory_sync_completed")
+                .map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            err.details
+                .get("database_registration_started")
+                .map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            err.details
+                .get("database_registration_committed")
+                .map(String::as_str),
+            Some("false")
+        );
+        assert!(err.details.contains_key("final_relative_path"));
+        assert!(err.details.contains_key("expected_sha256"));
+        assert!(err.details.contains_key("byte_length"));
         assert!(err.details.contains_key("note"));
 
         let orphaned_path = dir.join("assets").join("exports").join(&orphaned_asset_id);
@@ -455,6 +517,21 @@ mod tests {
             })
             .unwrap();
         assert_eq!((page_sets, pages, assets), (0, 0, 0));
+
+        let discovered = storage.discover_orphaned_final_assets(&dir).unwrap();
+        assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0].asset_id.to_string(), orphaned_asset_id);
+        assert_eq!(discovered[0].kind, AssetKind::Export);
+        assert_eq!(
+            discovered[0].relative_path,
+            err.details["final_relative_path"]
+        );
+        assert_eq!(discovered[0].sha256, err.details["expected_sha256"]);
+        assert_eq!(
+            discovered[0].byte_length.to_string(),
+            err.details["byte_length"]
+        );
+        assert!(orphaned_path.is_file());
 
         drop(storage);
         drop(core);
