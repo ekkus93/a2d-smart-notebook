@@ -281,12 +281,13 @@ class LiveQrCodeScheduler(
                         }
                     },
                     onFailure = { failure ->
+                        val exception = failure as? Exception ?: throw failure
                         publish(
                             LiveQrCodeEvent.Failed(
                                 work.sequence,
                                 work.frame.timestampNanos,
-                                failure.message ?: "live Page Code decoding failed",
-                                failure,
+                                exception.message ?: "live Page Code decoding failed",
+                                exception,
                             ),
                         )
                     },
