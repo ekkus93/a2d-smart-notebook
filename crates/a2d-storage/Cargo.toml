@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+default = []
+test-util = []
+
 [lints]
 workspace = true
 
