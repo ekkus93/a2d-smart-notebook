@@ -78,10 +78,7 @@ fn a_forced_file_sync_failure_returns_before_finalization_and_creates_no_databas
         Some("before_finalization")
     );
     assert_eq!(
-        error
-            .details
-            .get("file_sync_completed")
-            .map(String::as_str),
+        error.details.get("file_sync_completed").map(String::as_str),
         Some("false")
     );
     assert_eq!(storage.get_asset(&id).unwrap(), None);
@@ -120,10 +117,7 @@ fn a_forced_destination_directory_sync_failure_reports_a_finalized_unregistered_
         Some("finalized_unregistered")
     );
     assert_eq!(
-        error
-            .details
-            .get("file_sync_completed")
-            .map(String::as_str),
+        error.details.get("file_sync_completed").map(String::as_str),
         Some("true")
     );
     assert_eq!(
@@ -208,7 +202,10 @@ fn a_forced_permission_failure_reports_the_asset_id_and_planned_final_path() {
         )
         .unwrap_err();
 
-    assert_eq!(error.code.to_string(), "STORAGE_ASSET_PERMISSION_SET_FAILED");
+    assert_eq!(
+        error.code.to_string(),
+        "STORAGE_ASSET_PERMISSION_SET_FAILED"
+    );
     assert_eq!(error.details.get("asset_id"), Some(&expected_id));
     assert_eq!(error.details.get("final_path"), Some(&expected_destination));
     assert_eq!(
