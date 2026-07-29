@@ -186,6 +186,17 @@ fn validate_scan_assets(conn: &Connection, scan: &Scan) -> Result<(), A2dError> 
 
 fn map_preferred_update_error(error: rusqlite::Error) -> A2dError {
     let message = error.to_string();
+    if message.contains("A2D_PREFERRED_SCAN_WORKFLOW_REQUIRED") {
+        return preferred_scan_error(
+            "STORAGE_PREFERRED_SCAN_WORKFLOW_REQUIRED",
+            ErrorCategory::Integrity,
+            "schema rejected a preferred-scan pointer change without an authorized workflow context",
+        )
+        .with_detail(
+            "sqlite_trigger",
+            "preferred_scan_pointer_update_requires_workflow",
+        );
+    }
     if message.contains("A2D_PREFERRED_SCAN_PAGE_MISMATCH") {
         return preferred_scan_error(
             "STORAGE_PREFERRED_SCAN_PAGE_MISMATCH",
@@ -211,7 +222,75 @@ fn map_preferred_update_error(error: rusqlite::Error) -> A2dError {
     map_sql_error("change_preferred_scan", error)
 }
 
+fn enter_workflow_context(
+    conn: &Connection,
+    request: &ChangePreferredScanRequest,
+) -> Result<(), A2dError> {
+    conn.execute(
+        "INSERT INTO preferred_scan_mutation_context \
+         (page_id, scan_id, operation_id, source) VALUES (?1, ?2, ?3, 'explicit_change')",
+        params![
+            request.page_id.to_string(),
+            request.scan_id.to_string(),
+            request.operation_id.to_string(),
+        ],
+    )
+    .map_err(|error| map_sql_error("entering preferred-scan workflow context", error))?;
+    Ok(())
+}
+
+fn leave_workflow_context(
+    conn: &Connection,
+    request: &ChangePreferredScanRequest,
+) -> Result<(), A2dError> {
+    let changed = conn
+        .execute(
+            "DELETE FROM preferred_scan_mutation_context \
+             WHERE page_id = ?1 AND scan_id = ?2 AND operation_id = ?3 \
+               AND source = 'explicit_change'",
+            params![
+                request.page_id.to_string(),
+                request.scan_id.to_string(),
+                request.operation_id.to_string(),
+            ],
+        )
+        .map_err(|error| map_sql_error("leaving preferred-scan workflow context", error))?;
+    if changed != 1 {
+        return Err(preferred_scan_error(
+            "STORAGE_PREFERRED_SCAN_CONTEXT_CLEANUP_FAILED",
+            ErrorCategory::Integrity,
+            "preferred-scan workflow context disappeared before transaction completion",
+        )
+        .with_detail("page_id", request.page_id.to_string())
+        .with_detail("scan_id", request.scan_id.to_string())
+        .with_detail("operation_id", request.operation_id.to_string()));
+    }
+    Ok(())
+}
+
 impl Storage {
+    /// Compatibility shim for the removed unaudited mutation contract.
+    ///
+    /// Explicit preference changes require actor, timestamp, and operation identity, so this method
+    /// always fails closed. Use [`Storage::change_preferred_scan`] instead.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use change_preferred_scan(ChangePreferredScanRequest)"
+    )]
+    pub fn set_preferred_scan(
+        &self,
+        page_id: &PageId,
+        scan_id: &ScanId,
+    ) -> Result<(), A2dError> {
+        Err(preferred_scan_error(
+            "STORAGE_PREFERRED_SCAN_WORKFLOW_REQUIRED",
+            ErrorCategory::Integrity,
+            "unaudited preferred-scan mutation is disabled; use change_preferred_scan",
+        )
+        .with_detail("page_id", page_id.to_string())
+        .with_detail("scan_id", scan_id.to_string()))
+    }
+
     /// Atomically selects a page's preferred scan and records the mutation.
     ///
     /// Re-selecting the already-consistent preferred scan is a no-op: the timestamp is preserved and
@@ -280,6 +359,7 @@ impl Storage {
                 });
             }
 
+            enter_workflow_context(tx, &request)?;
             let changed = tx
                 .execute(
                     "UPDATE pages SET preferred_scan_id = ?1, updated_at_ms = ?2 WHERE id = ?3",
@@ -345,6 +425,7 @@ impl Storage {
                 Some(request.operation_id.to_string()),
             );
             AuditEventRepository::insert_audit_event(tx, &event)?;
+            leave_workflow_context(tx, &request)?;
 
             Ok(ChangePreferredScanResult {
                 page_id: request.page_id.clone(),
