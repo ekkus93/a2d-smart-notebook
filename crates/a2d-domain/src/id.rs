@@ -151,7 +151,6 @@ macro_rules! define_id {
 
             /// Compatibility constructor retained while production call sites migrate to
             /// [`Self::try_generate`]. New production code must not use this method.
-            #[deprecated(note = "production code must use try_generate and propagate RNG failure")]
             pub fn generate() -> Self {
                 Self::try_generate().unwrap_or_else(|error| {
                     panic!("cryptographic ID generation failed: {error}")
@@ -278,7 +277,6 @@ mod tests {
         );
     }
 
-    #[allow(deprecated)]
     #[test]
     fn generate_then_parse_round_trips() {
         let id = ScanId::generate();
@@ -305,7 +303,6 @@ mod tests {
         assert!(PageId::parse(&first).is_err());
     }
 
-    #[allow(deprecated)]
     #[test]
     fn distinct_types_are_not_interchangeable_at_compile_time() {
         let page = PageId::generate();
