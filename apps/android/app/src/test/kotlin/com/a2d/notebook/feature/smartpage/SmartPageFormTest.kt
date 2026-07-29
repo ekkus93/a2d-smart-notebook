@@ -6,9 +6,13 @@ import org.junit.Test
 
 class SmartPageFormTest {
     @Test
-    fun acceptsSinglePagesAndPageSets() {
+    fun acceptsSinglePagesPageSetsAndTheQrBoundary() {
         assertEquals(1u, validateSmartPageForm("1", "1").getOrThrow().pageCount)
         assertEquals(20u, validateSmartPageForm("20", "5").getOrThrow().pageCount)
+        assertEquals(
+            2u,
+            validateSmartPageForm("2", "999998").getOrThrow().pageCount,
+        )
     }
 
     @Test
@@ -19,8 +23,11 @@ class SmartPageFormTest {
     }
 
     @Test
-    fun rejectsInvalidStartingNumbers() {
+    fun rejectsInvalidStartingNumbersAndFinalPageOverflow() {
         assertTrue(validateSmartPageForm("1", "0").isFailure)
         assertTrue(validateSmartPageForm("1", "x").isFailure)
+        assertTrue(validateSmartPageForm("1", "1000000").isFailure)
+        assertTrue(validateSmartPageForm("2", "999999").isFailure)
+        assertTrue(validateSmartPageForm("500", UInt.MAX_VALUE.toString()).isFailure)
     }
 }
