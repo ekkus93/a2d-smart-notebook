@@ -29,6 +29,18 @@ pub struct OpenLibraryRequest {
     pub library_path: String,
 }
 
+/// One nonsecret structured diagnostic detail attached by the Rust producer of an [`A2dError`].
+///
+/// A vector is used at the foreign boundary because UniFFI map support would not preserve the
+/// deterministic `BTreeMap` order relied on by tests, logs, and stable presentation. Producers
+/// remain responsible for the domain rule that detail values never contain secrets or raw note
+/// content.
+#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+pub struct A2dFfiErrorDetail {
+    pub key: String,
+    pub value: String,
+}
+
 /// The FFI-safe projection of [`A2dError`]'s fields. Boxed inside [`A2dFfiError`] for the same
 /// reason `A2dError` itself boxes its fields (clippy's `result_large_err`) — kept as a separate
 /// `Record` rather than flattening it into the enum variant so the reason is visible at the
@@ -47,6 +59,7 @@ pub struct A2dFfiErrorDetails {
     pub developer_message: String,
     pub retryable: bool,
     pub correlation_id: String,
+    pub details: Vec<A2dFfiErrorDetail>,
 }
 
 #[derive(Debug, uniffi::Error)]
@@ -70,6 +83,14 @@ impl std::error::Error for A2dFfiError {}
 
 impl From<A2dError> for A2dFfiError {
     fn from(err: A2dError) -> Self {
+        let details = err
+            .details
+            .iter()
+            .map(|(key, value)| A2dFfiErrorDetail {
+                key: key.clone(),
+                value: value.clone(),
+            })
+            .collect();
         A2dFfiError::Failed(Box::new(A2dFfiErrorDetails {
             code: err.code.to_string(),
             category: format!("{:?}", err.category),
@@ -78,6 +99,7 @@ impl From<A2dError> for A2dFfiError {
             developer_message: err.developer_message.clone(),
             retryable: err.retryable,
             correlation_id: err.correlation_id.clone(),
+            details,
         }))
     }
 }
@@ -164,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_page_id_maps_domain_errors_to_ffi_errors() {
+    fn parse_page_id_maps_domain_errors_and_details_to_ffi_errors() {
         let client = open_test_client();
         let err = client
             .parse_page_id("not-a-valid-id".to_string())
@@ -172,6 +194,48 @@ mod tests {
         let A2dFfiError::Failed(details) = err;
         assert!(details.code.contains("PAGE_ID"));
         assert!(!details.retryable);
+        assert_eq!(
+            details.details,
+            vec![A2dFfiErrorDetail {
+                key: "input".to_string(),
+                value: "not-a-valid-id".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn error_mapping_preserves_empty_details() {
+        let mapped = A2dFfiError::from(A2dError::internal_unknown("no details"));
+        let A2dFfiError::Failed(details) = mapped;
+        assert!(details.details.is_empty());
+    }
+
+    #[test]
+    fn error_mapping_preserves_multiple_details_in_btree_order() {
+        let error = a2d_domain::A2dError::new(
+            a2d_domain::ErrorCode::new("TEST_DETAILS"),
+            a2d_domain::ErrorCategory::Integrity,
+            a2d_domain::ErrorSeverity::Critical,
+            "error.test_details",
+            "test details",
+            false,
+        )
+        .with_detail("zeta", "last")
+        .with_detail("alpha", "first")
+        .with_detail("middle", "second");
+        let mapped = A2dFfiError::from(error);
+        let A2dFfiError::Failed(details) = mapped;
+        assert_eq!(
+            details
+                .details
+                .iter()
+                .map(|detail| detail.key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["alpha", "middle", "zeta"]
+        );
+        assert_eq!(details.details[0].value, "first");
+        assert_eq!(details.details[1].value, "second");
+        assert_eq!(details.details[2].value, "last");
     }
 
     #[test]
