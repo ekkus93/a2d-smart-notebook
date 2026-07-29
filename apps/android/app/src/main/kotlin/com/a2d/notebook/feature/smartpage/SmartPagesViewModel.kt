@@ -15,6 +15,9 @@ import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.GeneratedSmartPages
 import uniffi.a2d_ffi.SmartPageGenerationRequest
 
+private const val PRESENTATION_MAX_PAGE_SET_PAGE_COUNT = 500
+private const val PRESENTATION_MAX_QR_VISIBLE_PAGE_NUMBER = 999_999
+
 data class SmartPagesUiState(
     val generated: GeneratedSmartPages? = null,
     val busy: Boolean = false,
@@ -54,19 +57,29 @@ data class ValidatedSmartPageForm(
     val startingVisiblePage: UInt,
 )
 
+/**
+ * Presentation-only mirror of the Rust validation policy for immediate form feedback. Rust repeats
+ * every check and remains authoritative for direct FFI and future platform callers.
+ */
 fun validateSmartPageForm(
     pageCountText: String,
     startingVisiblePageText: String,
 ): Result<ValidatedSmartPageForm> {
     val pageCount = pageCountText.toUIntOrNull()
         ?: return Result.failure(IllegalArgumentException("page_count"))
-    if (pageCount !in 1u..500u) {
+    if (pageCount == 0u || pageCount > PRESENTATION_MAX_PAGE_SET_PAGE_COUNT.toUInt()) {
         return Result.failure(IllegalArgumentException("page_count"))
     }
+
     val startingPage = startingVisiblePageText.toUIntOrNull()
         ?: return Result.failure(IllegalArgumentException("starting_page"))
-    if (startingPage == 0u) {
+    if (startingPage == 0u || startingPage > PRESENTATION_MAX_QR_VISIBLE_PAGE_NUMBER.toUInt()) {
         return Result.failure(IllegalArgumentException("starting_page"))
+    }
+
+    val lastVisiblePage = startingPage.toLong() + pageCount.toLong() - 1L
+    if (lastVisiblePage > PRESENTATION_MAX_QR_VISIBLE_PAGE_NUMBER.toLong()) {
+        return Result.failure(IllegalArgumentException("visible_page_range"))
     }
     return Result.success(ValidatedSmartPageForm(pageCount, startingPage))
 }
