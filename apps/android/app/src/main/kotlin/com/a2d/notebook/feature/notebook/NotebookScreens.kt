@@ -199,7 +199,7 @@ fun NotebookSetupScreen(
             onFailure = { failure ->
                 val message = failure?.message ?: context.getString(R.string.setup_capture_failed)
                 payload = ""
-                viewModel.resolveSetupCode(message)
+                viewModel.reportPlatformError(message)
             },
         )
         OutlinedTextField(
@@ -318,7 +318,7 @@ fun PageCodeScreen(
             onFailure = { failure ->
                 payload = ""
                 val message = failure?.message ?: context.getString(R.string.setup_capture_failed)
-                viewModel.resolvePageCode(message, notebookId)
+                viewModel.reportPlatformError(message)
             },
         )
         OutlinedTextField(
