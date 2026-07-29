@@ -1,6 +1,6 @@
 name: Apply FIX-001 PDF Source Repair
 
-# Retriggered with an anchored semantic guard for the final layout-ID move.
+# Retriggered with a block-specific guard for the GeneratedSmartPageBytes move.
 on:
   push:
     branches: [master]
@@ -21,7 +21,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import re
           from pathlib import Path
 
           def replace_once(path, before, after):
@@ -80,19 +79,17 @@ jobs:
               "&layout.page_number_rect",
               "&layout.visible_page_number_rect",
           )
-
-          generate = Path("crates/a2d-pdf/src/generate.rs")
-          generate_text = generate.read_text(encoding="utf-8")
-          generate_text, count = re.subn(
-              r"(?m)^(\s*)layout_id:\s*layout\.id,\s*$",
-              r"\1layout_id: layout.id.clone(),",
-              generate_text,
+          replace_once(
+              "crates/a2d-pdf/src/generate.rs",
+              """    Ok(GeneratedSmartPageBytes {
+                  smart_page_id,
+                  layout_id: layout.id,
+          """,
+              """    Ok(GeneratedSmartPageBytes {
+                  smart_page_id,
+                  layout_id: layout.id.clone(),
+          """,
           )
-          if count != 1:
-              raise SystemExit(
-                  f"crates/a2d-pdf/src/generate.rs: expected one layout_id move, found {count}"
-              )
-          generate.write_text(generate_text, encoding="utf-8")
 
           Path(".github/workflows/apply-fix-001-pdf-source.yml").unlink()
           PY
