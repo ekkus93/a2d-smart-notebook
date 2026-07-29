@@ -145,18 +145,39 @@ impl AssetStore {
 
     /// Runs the durable no-replace asset commit protocol for in-memory `data`, returning an
     /// `Asset` value the caller may insert into SQLite only after this function succeeds.
-    ///
-    /// The final path is created with a hard link from the synchronized temp inode. Hard-link
-    /// creation is atomic, remains on the same filesystem, and fails rather than replacing an
-    /// existing destination. Android and Apple targets are Unix platforms; on Unix, both the
-    /// destination and temp directories are synchronized before success is returned.
     pub fn commit(
         &self,
         data: &[u8],
         kind: AssetKind,
         media_type: impl Into<String>,
     ) -> Result<Asset, A2dError> {
-        let id = AssetId::generate();
+        self.commit_with_id(AssetId::generate(), data, kind, media_type.into())
+    }
+
+    /// Test-only deterministic entry point for collision and interruption coverage. Production
+    /// callers cannot select an asset ID.
+    #[cfg(feature = "test-util")]
+    pub fn commit_with_id_for_test(
+        &self,
+        id: AssetId,
+        data: &[u8],
+        kind: AssetKind,
+        media_type: impl Into<String>,
+    ) -> Result<Asset, A2dError> {
+        self.commit_with_id(id, data, kind, media_type.into())
+    }
+
+    /// The final path is created with a hard link from the synchronized temp inode. Hard-link
+    /// creation is atomic, remains on the same filesystem, and fails rather than replacing an
+    /// existing destination. Android and Apple targets are Unix platforms; on Unix, both the
+    /// destination and temp directories are synchronized before success is returned.
+    fn commit_with_id(
+        &self,
+        id: AssetId,
+        data: &[u8],
+        kind: AssetKind,
+        media_type: String,
+    ) -> Result<Asset, A2dError> {
         let tmp_path = self.tmp_dir().join(format!("{id}.tmp"));
         let relative_path = format!("assets/{}/{id}", asset_kind_dir(kind));
         let final_path = self.root.join(&relative_path);
@@ -166,26 +187,26 @@ impl AssetStore {
             .create_new(true)
             .open(&tmp_path)
             .map_err(|error| {
-                let code = if error.kind() == std::io::ErrorKind::AlreadyExists {
-                    "STORAGE_ASSET_TEMP_PATH_COLLISION"
-                } else {
-                    "STORAGE_ASSET_TEMP_CREATE_FAILED"
-                };
+                let already_exists = error.kind() == std::io::ErrorKind::AlreadyExists;
                 A2dError::new(
-                    ErrorCode::new(code),
-                    if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    ErrorCode::new(if already_exists {
+                        "STORAGE_ASSET_TEMP_PATH_COLLISION"
+                    } else {
+                        "STORAGE_ASSET_TEMP_CREATE_FAILED"
+                    }),
+                    if already_exists {
                         ErrorCategory::Integrity
                     } else {
                         ErrorCategory::Storage
                     },
-                    if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    if already_exists {
                         ErrorSeverity::Critical
                     } else {
                         ErrorSeverity::Error
                     },
                     "error.storage.asset_temp_create_failed",
                     format!("creating the asset temp file failed: {error}"),
-                    error.kind() != std::io::ErrorKind::AlreadyExists,
+                    !already_exists,
                 )
                 .with_detail("asset_id", id.to_string())
                 .with_detail("temp_path", tmp_path.to_string_lossy())
@@ -210,10 +231,18 @@ impl AssetStore {
 
         let immutable = kind == AssetKind::Original;
         if immutable {
-            let mut permissions = file
-                .metadata()
-                .map_err(|error| map_io_error("reading asset temp metadata", error))?
-                .permissions();
+            let metadata = match file.metadata() {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    drop(file);
+                    return Err(with_cleanup_result(
+                        map_io_error("reading asset temp metadata", error),
+                        &tmp_path,
+                    )
+                    .with_detail("asset_id", id.to_string()));
+                }
+            };
+            let mut permissions = metadata.permissions();
             permissions.set_readonly(true);
             if let Err(error) = std::fs::set_permissions(&tmp_path, permissions) {
                 drop(file);
@@ -276,6 +305,7 @@ impl AssetStore {
                 .with_detail("temp_path", tmp_path.to_string_lossy())
                 .with_detail("final_path", final_path.to_string_lossy())
                 .with_detail("final_file_created", "true")
+                .with_detail("file_sync_completed", "true")
                 .with_detail("directory_sync_completed", "false"));
         }
 
@@ -285,6 +315,7 @@ impl AssetStore {
                 .with_detail("temp_path", tmp_path.to_string_lossy())
                 .with_detail("final_path", final_path.to_string_lossy())
                 .with_detail("final_file_created", "true")
+                .with_detail("file_sync_completed", "true")
                 .with_detail("directory_sync_completed", "true")
                 .with_detail("temp_cleanup_completed", "false"));
         }
@@ -294,6 +325,7 @@ impl AssetStore {
                 .with_detail("temp_path", tmp_path.to_string_lossy())
                 .with_detail("final_path", final_path.to_string_lossy())
                 .with_detail("final_file_created", "true")
+                .with_detail("file_sync_completed", "true")
                 .with_detail("directory_sync_completed", "true")
                 .with_detail("temp_cleanup_completed", "true")
                 .with_detail("temp_directory_sync_completed", "false"));
@@ -303,7 +335,7 @@ impl AssetStore {
             id,
             kind,
             relative_path,
-            media_type.into(),
+            media_type,
             data.len() as u64,
             expected_hash,
             now_ms(),
