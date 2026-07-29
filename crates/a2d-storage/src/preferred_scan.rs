@@ -277,11 +277,7 @@ impl Storage {
         since = "0.1.0",
         note = "use change_preferred_scan(ChangePreferredScanRequest)"
     )]
-    pub fn set_preferred_scan(
-        &self,
-        page_id: &PageId,
-        scan_id: &ScanId,
-    ) -> Result<(), A2dError> {
+    pub fn set_preferred_scan(&self, page_id: &PageId, scan_id: &ScanId) -> Result<(), A2dError> {
         Err(preferred_scan_error(
             "STORAGE_PREFERRED_SCAN_WORKFLOW_REQUIRED",
             ErrorCategory::Integrity,
