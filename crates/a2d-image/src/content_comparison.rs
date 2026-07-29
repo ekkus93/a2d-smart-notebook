@@ -1,8 +1,6 @@
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
-use crate::{
-    AlignedChangeRegionComparison, AlignedChangeRegionConfig, PerceptualFingerprintV1,
-};
+use crate::{AlignedChangeRegionComparison, AlignedChangeRegionConfig, PerceptualFingerprintV1};
 
 const CONTENT_FINGERPRINT_PREFIX: &str = "scan-content-v1;corrected-sha256=";
 const PERCEPTUAL_FINGERPRINT_SEPARATOR: &str = ";perceptual=";
@@ -142,9 +140,7 @@ impl ScanContentComparisonConfidence {
     pub const fn code(self) -> &'static str {
         match self {
             Self::ConclusiveExactMatch => "CONCLUSIVE_EXACT_MATCH",
-            Self::UnavailableUntilFixtureCalibration => {
-                "UNAVAILABLE_UNTIL_FIXTURE_CALIBRATION"
-            }
+            Self::UnavailableUntilFixtureCalibration => "UNAVAILABLE_UNTIL_FIXTURE_CALIBRATION",
         }
     }
 }
@@ -240,9 +236,14 @@ mod tests {
         assert!(encoded.starts_with(
             "scan-content-v1;corrected-sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;perceptual=mean-grid-16x24-v1:"
         ));
-        assert_eq!(ScanContentFingerprintV1::parse(&encoded).unwrap(), fingerprint);
+        assert_eq!(
+            ScanContentFingerprintV1::parse(&encoded).unwrap(),
+            fingerprint
+        );
         assert!(ScanContentFingerprintV1::parse("exact-sha256-v1:00").is_err());
-        assert!(ScanContentFingerprintV1::new("not-a-sha256", perceptual_with_changes(&[])).is_err());
+        assert!(
+            ScanContentFingerprintV1::new("not-a-sha256", perceptual_with_changes(&[])).is_err()
+        );
     }
 
     #[test]
