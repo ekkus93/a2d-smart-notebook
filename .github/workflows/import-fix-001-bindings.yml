@@ -7,6 +7,7 @@ on:
 permissions:
   actions: read
   contents: write
+  issues: write
 
 jobs:
   import:
@@ -17,7 +18,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download and verify generator artifact
+      - id: artifact
+        name: Download and verify generator artifact
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,7 +55,8 @@ jobs:
             apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
           install -m 0644 "${generated_lock}" Cargo.lock
 
-      - name: Apply clippy-only source cleanups
+      - id: cleanup
+        name: Apply clippy-only source cleanups
         shell: bash
         run: |
           set -euo pipefail
@@ -81,7 +84,8 @@ jobs:
           PY
           cargo fmt --all
 
-      - name: Commit exact generated files
+      - id: commit
+        name: Commit exact generated files
         shell: bash
         run: |
           set -euo pipefail
@@ -92,3 +96,41 @@ jobs:
           git diff --cached --check
           git commit -m "Regenerate UniFFI bindings and clear focused clippy gates"
           git push origin HEAD:master
+
+      - name: Publish import workflow outcome
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          ARTIFACT_OUTCOME: ${{ steps.artifact.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+          COMMIT_OUTCOME: ${{ steps.commit.outcome }}
+        run: |
+          set -euo pipefail
+          body_file="${RUNNER_TEMP}/fix001-import-status.md"
+          patch_file="${RUNNER_TEMP}/fix001-import-patch.json"
+          cat > "${body_file}" <<EOF
+          <!-- maintained temporarily by import-fix-001-bindings.yml -->
+          # FIX-001 Binding Import Status
+
+          - **Run:** [${RUN_ID}](${RUN_URL})
+          - **Commit:** \`${HEAD_SHA}\`
+          - **Artifact verification/import:** \`${ARTIFACT_OUTCOME}\`
+          - **Clippy source cleanup/format:** \`${CLEANUP_OUTCOME}\`
+          - **Commit/push:** \`${COMMIT_OUTCOME}\`
+          EOF
+          python3 - "${body_file}" "${patch_file}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          Path(sys.argv[2]).write_text(json.dumps({
+              "title": "CI Status: Hosted Quality Gates",
+              "body": Path(sys.argv[1]).read_text(encoding="utf-8"),
+              "state": "open",
+          }), encoding="utf-8")
+          PY
+          gh api --method PATCH "repos/${REPOSITORY}/issues/22" --input "${patch_file}" >/dev/null
