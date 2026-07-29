@@ -6,6 +6,7 @@
 //! small reviewed unsafe wrapper around the official AprilTag 3 C detector.
 //! Native pointers, ownership, and allocation never cross the public Rust API.
 
+mod change_regions;
 mod derived;
 mod detection;
 mod detector;
@@ -16,6 +17,10 @@ mod input;
 mod quality;
 mod rectification;
 
+pub use change_regions::{
+    AlignedChangeCell, AlignedChangeRegion, AlignedChangeRegionComparison,
+    AlignedChangeRegionConfig,
+};
 pub use derived::{
     ContrastNormalizationConfig, ContrastNormalizationProvenance, DerivedImageConfig,
     DerivedImageLimits, DerivedImagePipeline, DerivedImageProvenance, DerivedImages,
