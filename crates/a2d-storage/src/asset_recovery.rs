@@ -388,7 +388,7 @@ mod tests {
 
         let discovered = storage.discover_orphaned_final_assets(&root).unwrap();
         assert_eq!(discovered.len(), 1);
-        assert_eq!(discovered[0].asset_id, *orphan.id());
+        assert_eq!(&discovered[0].asset_id, orphan.id());
         assert_eq!(discovered[0].kind, AssetKind::Export);
         assert_eq!(discovered[0].relative_path, orphan.relative_path);
         assert_eq!(discovered[0].byte_length, orphan.byte_length);
@@ -398,6 +398,25 @@ mod tests {
         let repeated = storage.discover_orphaned_final_assets(&root).unwrap();
         assert_eq!(repeated, discovered);
         assert!(store.resolve(&orphan.relative_path).unwrap().is_file());
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn invalid_final_asset_filename_fails_closed_without_deleting_it() {
+        let root = temp_root("invalid-name");
+        let storage = Storage::open_in_memory().unwrap();
+        let _store = AssetStore::open(&root).unwrap();
+        let invalid_path = root.join("assets").join("exports").join("not-an-asset-id");
+        std::fs::write(&invalid_path, b"unknown bytes").unwrap();
+
+        let error = storage
+            .discover_orphaned_final_assets(&root)
+            .unwrap_err();
+        assert_eq!(
+            error.code.to_string(),
+            "STORAGE_ORPHAN_DISCOVERY_ASSET_ID_INVALID"
+        );
+        assert!(invalid_path.is_file());
         std::fs::remove_dir_all(root).ok();
     }
 
