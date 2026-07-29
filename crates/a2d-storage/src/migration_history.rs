@@ -9,14 +9,12 @@
 
 use std::collections::BTreeSet;
 
-use a2d_domain::{
-    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, system_now_ms,
-};
+use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity, system_now_ms};
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 
-use crate::migrations::{MIGRATIONS, Migration};
 use crate::map_rusqlite_error;
+use crate::migrations::{MIGRATIONS, Migration};
 
 const TRACKING_TABLE: &str = "schema_migrations";
 const HASH_COLUMN: &str = "sha256";
@@ -31,8 +29,7 @@ struct AppliedMigration {
 pub(crate) fn migrate(conn: &mut Connection) -> Result<(), A2dError> {
     validate_compiled_catalog()?;
 
-    let table_exists = tracking_table_exists(conn)?;
-    if !table_exists {
+    if !tracking_table_exists(conn)? {
         create_tracking_table(conn)?;
     }
 
@@ -47,12 +44,11 @@ pub(crate) fn migrate(conn: &mut Connection) -> Result<(), A2dError> {
     }
     backfill_missing_hashes(conn, &applied)?;
 
-    let next_index = applied.len();
-    for migration in MIGRATIONS.iter().skip(next_index) {
+    for migration in MIGRATIONS.iter().skip(applied.len()) {
         apply_one(conn, migration)?;
     }
 
-    // Re-read and verify the final durable state rather than trusting only successful statements.
+    // Re-read and verify the final durable state rather than trusting successful statements alone.
     let final_columns = tracking_columns(conn)?;
     if !final_columns.contains(HASH_COLUMN) {
         return Err(migration_integrity_error(
@@ -263,21 +259,19 @@ fn validate_applied_history(
             .with_detail("compiled_name", migration.name));
         }
 
-        if hash_column_exists {
-            if let Some(recorded_hash) = row.sha256.as_deref() {
-                let expected_hash = migration_sha256(migration);
-                if recorded_hash != expected_hash {
-                    return Err(migration_integrity_error(
-                        "STORAGE_MIGRATION_HASH_MISMATCH",
-                        format!(
-                            "migration {} SQL digest differs from the immutable recorded digest",
-                            row.version,
-                        ),
-                    )
-                    .with_detail("version", row.version.to_string())
-                    .with_detail("recorded_sha256", recorded_hash)
-                    .with_detail("compiled_sha256", expected_hash));
-                }
+        if hash_column_exists && let Some(recorded_hash) = row.sha256.as_deref() {
+            let expected_hash = migration_sha256(migration);
+            if recorded_hash != expected_hash {
+                return Err(migration_integrity_error(
+                    "STORAGE_MIGRATION_HASH_MISMATCH",
+                    format!(
+                        "migration {} SQL digest differs from the immutable recorded digest",
+                        row.version,
+                    ),
+                )
+                .with_detail("version", row.version.to_string())
+                .with_detail("recorded_sha256", recorded_hash)
+                .with_detail("compiled_sha256", expected_hash));
             }
         }
     }
@@ -384,141 +378,4 @@ fn migration_integrity_error(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn connection() -> Connection {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "foreign_keys", true).unwrap();
-        conn
-    }
-
-    #[test]
-    fn fresh_database_records_every_exact_sql_digest() {
-        let mut conn = connection();
-        migrate(&mut conn).unwrap();
-
-        let rows = load_applied(&conn, true).unwrap();
-        assert_eq!(rows.len(), MIGRATIONS.len());
-        for (row, migration) in rows.iter().zip(MIGRATIONS) {
-            assert_eq!(row.version, migration.version);
-            assert_eq!(row.name, migration.name);
-            assert_eq!(row.sha256.as_deref(), Some(migration_sha256(migration).as_str()));
-        }
-    }
-
-    #[test]
-    fn legacy_tracking_table_is_validated_then_backfilled() {
-        let mut conn = connection();
-        conn.execute_batch(
-            "CREATE TABLE schema_migrations (
-                version INTEGER PRIMARY KEY NOT NULL,
-                name TEXT NOT NULL,
-                applied_at_ms INTEGER NOT NULL
-            );",
-        )
-        .unwrap();
-        conn.execute_batch(MIGRATIONS[0].sql).unwrap();
-        conn.execute(
-            "INSERT INTO schema_migrations (version, name, applied_at_ms) VALUES (1, ?1, 123)",
-            [MIGRATIONS[0].name],
-        )
-        .unwrap();
-
-        migrate(&mut conn).unwrap();
-        let rows = load_applied(&conn, true).unwrap();
-        assert_eq!(rows.len(), MIGRATIONS.len());
-        assert_eq!(rows[0].sha256.as_deref(), Some(migration_sha256(&MIGRATIONS[0]).as_str()));
-        let original_time: i64 = conn
-            .query_row(
-                "SELECT applied_at_ms FROM schema_migrations WHERE version = 1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(original_time, 123);
-    }
-
-    #[test]
-    fn digest_tampering_is_rejected() {
-        let mut conn = connection();
-        migrate(&mut conn).unwrap();
-        conn.execute(
-            "UPDATE schema_migrations SET sha256 = ?1 WHERE version = 1",
-            ["0".repeat(64)],
-        )
-        .unwrap();
-
-        let error = migrate(&mut conn).unwrap_err();
-        assert_eq!(error.code.to_string(), "STORAGE_MIGRATION_HASH_MISMATCH");
-    }
-
-    #[test]
-    fn a_future_database_version_is_rejected_before_pending_work() {
-        let mut conn = connection();
-        create_tracking_table(&conn).unwrap();
-        let future = MIGRATIONS.last().unwrap().version + 1;
-        conn.execute(
-            "INSERT INTO schema_migrations (version, name, applied_at_ms, sha256) \
-             VALUES (?1, 'future', 1, ?2)",
-            params![future, "0".repeat(64)],
-        )
-        .unwrap();
-
-        let error = migrate(&mut conn).unwrap_err();
-        assert_eq!(
-            error.code.to_string(),
-            "STORAGE_DATABASE_SCHEMA_NEWER_THAN_APP"
-        );
-    }
-
-    #[test]
-    fn a_history_gap_is_rejected() {
-        let mut conn = connection();
-        create_tracking_table(&conn).unwrap();
-        for migration in [&MIGRATIONS[0], &MIGRATIONS[2]] {
-            conn.execute(
-                "INSERT INTO schema_migrations (version, name, applied_at_ms, sha256) \
-                 VALUES (?1, ?2, 1, ?3)",
-                params![
-                    migration.version,
-                    migration.name,
-                    migration_sha256(migration),
-                ],
-            )
-            .unwrap();
-        }
-
-        let error = migrate(&mut conn).unwrap_err();
-        assert_eq!(error.code.to_string(), "STORAGE_MIGRATION_HISTORY_GAP");
-    }
-
-    #[test]
-    fn migration_sql_and_tracking_row_are_atomic() {
-        let mut conn = connection();
-        create_tracking_table(&conn).unwrap();
-        let broken = Migration {
-            version: 1,
-            name: "broken",
-            sql: "CREATE TABLE should_roll_back (id INTEGER); THIS IS NOT SQL;",
-        };
-
-        assert!(apply_one(&mut conn, &broken).is_err());
-        assert!(!tracking_table_named(&conn, "should_roll_back"));
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(count, 0);
-    }
-
-    fn tracking_table_named(conn: &Connection, name: &str) -> bool {
-        conn.query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-            [name],
-            |_| Ok(()),
-        )
-        .optional()
-        .unwrap()
-        .is_some()
-    }
-}
+mod tests;
