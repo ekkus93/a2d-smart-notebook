@@ -16,7 +16,7 @@ pub use notebook::{
 pub use page_layout::{CalibrationMark, ContentStyle, MarkerPlacement, MarkerRole, PageLayout};
 pub use scan_layout::{
     ResolvedMarkerRole, ResolvedScanLayout, SCAN_PROCESSING_POLICY_VERSION,
-    V1_CORRECTED_WIDTH_PX, V1_MARKER_FAMILY, marker_id_for_role, resolve_bundled_scan_layout,
-    resolve_scan_layout_for_page,
+    V1_CORRECTED_WIDTH_PX, V1_MARKER_FAMILY, V1_MARKER_ID_LAYOUT, marker_id_for_role,
+    resolve_bundled_scan_layout, resolve_scan_layout_for_page,
 };
 pub use smart_page::{PaperSize, SmartPageStyle, smart_page_layout};
