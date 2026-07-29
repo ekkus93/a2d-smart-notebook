@@ -79,7 +79,7 @@ fn resolve_reports_a_missing_asset_with_the_dedicated_code() {
 fn resolve_rejects_a_symlink_even_when_its_target_is_inside_the_library() {
     use std::os::unix::fs::symlink;
 
-    let root = temp_dir("symlink");
+    let root = temp_dir("symlink-inside");
     let store = AssetStore::open(&root).unwrap();
     let asset = store
         .commit(b"real bytes", AssetKind::Corrected, "image/png")
@@ -92,6 +92,30 @@ fn resolve_rejects_a_symlink_even_when_its_target_is_inside_the_library() {
     let error = store.resolve(link_relative).unwrap_err();
     assert_eq!(error.code.to_string(), "STORAGE_ASSET_PATH_IS_SYMLINK");
 
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn resolve_rejects_a_symlink_inside_the_library_that_targets_outside() {
+    use std::os::unix::fs::symlink;
+
+    let root = temp_dir("symlink-outside");
+    let store = AssetStore::open(&root).unwrap();
+    let outside = std::env::temp_dir().join(format!(
+        "a2d-asset-hardening-outside-{}",
+        PageId::generate()
+    ));
+    std::fs::write(&outside, b"outside bytes").unwrap();
+    let link_relative = "assets/corrected/outside-target";
+    let link = root.join(link_relative);
+    symlink(&outside, &link).unwrap();
+
+    let error = store.resolve(link_relative).unwrap_err();
+    assert_eq!(error.code.to_string(), "STORAGE_ASSET_PATH_IS_SYMLINK");
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside bytes");
+
+    std::fs::remove_file(outside).ok();
     std::fs::remove_dir_all(root).ok();
 }
 
