@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use a2d_domain::{A2dError, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity};
 use rusqlite::Connection;
@@ -294,6 +294,8 @@ fn recovery_error(
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use a2d_domain::PageId;
 
     use super::*;
