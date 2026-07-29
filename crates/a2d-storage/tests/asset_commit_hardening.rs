@@ -112,6 +112,8 @@ fn final_path_collision_never_replaces_existing_asset_bytes() {
         .unwrap();
     let final_path = store.resolve(&first.relative_path).unwrap();
     let replacement = b"replacement content";
+    let replacement_sha256 = sha256(replacement);
+    let replacement_byte_length = replacement.len().to_string();
 
     let error = store
         .commit_with_id_for_test(
@@ -146,11 +148,11 @@ fn final_path_collision_never_replaces_existing_asset_bytes() {
     );
     assert_eq!(
         error.details.get("expected_sha256").map(String::as_str),
-        Some(sha256(replacement).as_str())
+        Some(replacement_sha256.as_str())
     );
     assert_eq!(
         error.details.get("byte_length").map(String::as_str),
-        Some(replacement.len().to_string().as_str())
+        Some(replacement_byte_length.as_str())
     );
     assert_eq!(
         error
@@ -194,6 +196,8 @@ fn temp_path_collision_preserves_the_existing_temp_file() {
     let temp_path = root.join("tmp").join(format!("{id}.tmp"));
     std::fs::write(&temp_path, b"pre-existing recovery data").unwrap();
     let new_bytes = b"new bytes";
+    let new_sha256 = sha256(new_bytes);
+    let new_byte_length = new_bytes.len().to_string();
 
     let error = store
         .commit_with_id_for_test(
@@ -231,11 +235,11 @@ fn temp_path_collision_preserves_the_existing_temp_file() {
     );
     assert_eq!(
         error.details.get("expected_sha256").map(String::as_str),
-        Some(sha256(new_bytes).as_str())
+        Some(new_sha256.as_str())
     );
     assert_eq!(
         error.details.get("byte_length").map(String::as_str),
-        Some(new_bytes.len().to_string().as_str())
+        Some(new_byte_length.as_str())
     );
     assert_eq!(
         error
