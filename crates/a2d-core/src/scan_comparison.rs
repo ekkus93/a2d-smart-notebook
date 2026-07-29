@@ -1,19 +1,20 @@
 //! Read-only stored-scan comparison for Milestone 9.2.
 //!
-//! This module loads two persisted scans, validates that they target the same page, parses their
-//! versioned content fingerprints, and projects the image-layer measurements into a stable core
-//! evidence record. It deliberately does not classify a non-exact comparison as a duplicate,
-//! revision, or substantially different page until photographed-fixture calibration exists.
+//! This module loads two persisted scans, validates that they target the same page, verifies each
+//! corrected asset against its recorded SHA-256, checks that the versioned fingerprint names that
+//! same hash, and projects image-layer measurements into a stable core evidence record. It does not
+//! classify a non-exact comparison as a duplicate, revision, or substantially different page until
+//! photographed-fixture calibration exists.
 
 use a2d_domain::{
-    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, PageId, PhysicalCopyId, QualityStatus, Scan,
-    ScanId,
+    A2dError, Asset, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, PageId, PhysicalCopyId,
+    QualityStatus, Scan, ScanId,
 };
 use a2d_image::{
     ScanContentComparisonConfidence, ScanContentComparisonConfig, ScanContentComparisonReason,
     ScanContentFingerprintV1,
 };
-use a2d_storage::ScanRepository;
+use a2d_storage::{AssetRepository, AssetStore, ScanRepository};
 
 use super::A2dCore;
 
@@ -178,7 +179,6 @@ impl A2dCore {
             "CORE_SCAN_COMPARISON_CANDIDATE_NOT_FOUND",
             "candidate",
         )?;
-        drop(storage);
 
         if baseline.page_id != candidate.page_id {
             return Err(comparison_error(
@@ -196,8 +196,26 @@ impl A2dCore {
 
         let baseline_fingerprint = parse_stored_fingerprint(&baseline, "baseline")?;
         let candidate_fingerprint = parse_stored_fingerprint(&candidate, "candidate")?;
-        let comparison = baseline_fingerprint.compare(&candidate_fingerprint, config)?;
+        let baseline_asset = load_required_corrected_asset(&storage, &baseline, "baseline")?;
+        let candidate_asset = load_required_corrected_asset(&storage, &candidate, "candidate")?;
+        drop(storage);
 
+        verify_corrected_asset(
+            &self.asset_store,
+            &baseline,
+            "baseline",
+            &baseline_asset,
+            &baseline_fingerprint,
+        )?;
+        verify_corrected_asset(
+            &self.asset_store,
+            &candidate,
+            "candidate",
+            &candidate_asset,
+            &candidate_fingerprint,
+        )?;
+
+        let comparison = baseline_fingerprint.compare(&candidate_fingerprint, config)?;
         let same_physical_copy = match (
             baseline.physical_copy_id.as_ref(),
             candidate.physical_copy_id.as_ref(),
@@ -285,6 +303,70 @@ fn load_required_scan(
     })
 }
 
+fn load_required_corrected_asset(
+    storage: &a2d_storage::Storage,
+    scan: &Scan,
+    role: &'static str,
+) -> Result<Asset, A2dError> {
+    let asset_id = scan.corrected_asset_id.as_ref().ok_or_else(|| {
+        comparison_error(
+            "CORE_SCAN_COMPARISON_CORRECTED_ASSET_MISSING",
+            ErrorCategory::Integrity,
+            "stored scan comparison requires a corrected asset",
+        )
+        .with_detail("scan_id", scan.id().to_string())
+        .with_detail("comparison_role", role)
+    })?;
+    let asset = storage.get_asset(asset_id)?.ok_or_else(|| {
+        comparison_error(
+            "CORE_SCAN_COMPARISON_CORRECTED_ASSET_ROW_MISSING",
+            ErrorCategory::Integrity,
+            "stored scan references a corrected asset row that does not exist",
+        )
+        .with_detail("scan_id", scan.id().to_string())
+        .with_detail("asset_id", asset_id.to_string())
+        .with_detail("comparison_role", role)
+    })?;
+    if asset.kind != AssetKind::Corrected {
+        return Err(comparison_error(
+            "CORE_SCAN_COMPARISON_CORRECTED_ASSET_KIND_INVALID",
+            ErrorCategory::Integrity,
+            "stored scan corrected_asset_id does not identify a corrected asset",
+        )
+        .with_detail("scan_id", scan.id().to_string())
+        .with_detail("asset_id", asset.id().to_string())
+        .with_detail("comparison_role", role));
+    }
+    Ok(asset)
+}
+
+fn verify_corrected_asset(
+    asset_store: &AssetStore,
+    scan: &Scan,
+    role: &'static str,
+    asset: &Asset,
+    fingerprint: &ScanContentFingerprintV1,
+) -> Result<(), A2dError> {
+    if asset.sha256.as_str() != fingerprint.corrected_sha256() {
+        return Err(comparison_error(
+            "CORE_SCAN_COMPARISON_FINGERPRINT_ASSET_HASH_MISMATCH",
+            ErrorCategory::Integrity,
+            "stored content fingerprint does not name the corrected asset's recorded SHA-256",
+        )
+        .with_detail("scan_id", scan.id().to_string())
+        .with_detail("asset_id", asset.id().to_string())
+        .with_detail("comparison_role", role)
+        .with_detail("asset_sha256", &asset.sha256)
+        .with_detail("fingerprint_sha256", fingerprint.corrected_sha256()));
+    }
+    asset_store.verify(asset).map_err(|error| {
+        error
+            .with_detail("scan_id", scan.id().to_string())
+            .with_detail("asset_id", asset.id().to_string())
+            .with_detail("comparison_role", role)
+    })
+}
+
 fn validate_pipeline_version(scan: &Scan, role: &'static str) -> Result<(), A2dError> {
     if scan.pipeline_version.trim().is_empty() {
         return Err(comparison_error(
@@ -327,10 +409,14 @@ fn comparison_error(
     category: ErrorCategory,
     message: impl Into<String>,
 ) -> A2dError {
+    let severity = match category {
+        ErrorCategory::Integrity | ErrorCategory::Internal => ErrorSeverity::Critical,
+        _ => ErrorSeverity::Error,
+    };
     A2dError::new(
         ErrorCode::new(code),
         category,
-        ErrorSeverity::Error,
+        severity,
         "error.core.scan_comparison",
         message.into(),
         false,
@@ -343,14 +429,19 @@ mod tests {
     use std::sync::Arc;
 
     use a2d_domain::{
-        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, Page, PageId, PageKind,
-        PageState, QualityStatus, Scan, ScanId, SmartPageId,
+        AssetKind, CaptureSource, LayoutId, Page, PageId, PageKind, PageState, QualityStatus, Scan,
+        ScanId, SmartPageId,
     };
     use a2d_image::PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT;
     use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
 
     use super::*;
     use crate::OpenLibraryRequest;
+
+    struct InsertedScan {
+        id: ScanId,
+        corrected: Asset,
+    }
 
     fn test_core() -> (Arc<A2dCore>, PathBuf) {
         let root = std::env::temp_dir().join(format!(
@@ -382,7 +473,7 @@ mod tests {
         page_id
     }
 
-    fn content_fingerprint(hash: char, changes: &[(usize, u8)]) -> String {
+    fn fingerprint(corrected_sha256: &str, changes: &[(usize, u8)]) -> String {
         let mut cells = vec![180_u8; PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT];
         for &(index, value) in changes {
             cells[index] = value;
@@ -392,39 +483,43 @@ mod tests {
             .map(|cell| format!("{cell:02x}"))
             .collect::<String>();
         format!(
-            "scan-content-v1;corrected-sha256={};perceptual=mean-grid-16x24-v1:{payload}",
-            hash.to_string().repeat(64)
+            "scan-content-v1;corrected-sha256={corrected_sha256};perceptual=mean-grid-16x24-v1:{payload}"
         )
     }
 
     fn insert_scan(
         core: &A2dCore,
         page_id: PageId,
-        content_fingerprint: String,
+        corrected_bytes: &[u8],
+        changes: &[(usize, u8)],
+        fingerprint_override: Option<String>,
         pipeline_version: &str,
         preferred: bool,
-    ) -> ScanId {
-        let asset_id = AssetId::generate();
-        let asset = Asset::new(
-            asset_id.clone(),
-            AssetKind::Original,
-            format!("assets/originals/{asset_id}"),
-            "image/png".to_string(),
-            1,
-            "0".repeat(64),
-            1,
-            true,
-            EncryptionState::Plaintext,
-        );
+    ) -> InsertedScan {
         let scan_id = ScanId::generate();
+        let original_bytes = format!("original-{scan_id}");
+        let original = core
+            .asset_store
+            .commit(
+                original_bytes.as_bytes(),
+                AssetKind::Original,
+                "image/jpeg",
+            )
+            .unwrap();
+        let corrected = core
+            .asset_store
+            .commit(corrected_bytes, AssetKind::Corrected, "image/png")
+            .unwrap();
+        let content_fingerprint = fingerprint_override
+            .unwrap_or_else(|| fingerprint(&corrected.sha256, changes));
         let scan = Scan::new(
             scan_id.clone(),
             page_id,
             None,
             CaptureSource::Camera,
             1,
-            asset_id,
-            None,
+            original.id().clone(),
+            Some(corrected.id().clone()),
             None,
             None,
             pipeline_version.to_string(),
@@ -437,7 +532,45 @@ mod tests {
         core.lock_storage()
             .unwrap()
             .transaction(|tx| {
-                tx.insert_asset(&asset)?;
+                tx.insert_asset(&original)?;
+                tx.insert_asset(&corrected)?;
+                tx.insert_scan(&scan)?;
+                Ok(())
+            })
+            .unwrap();
+        InsertedScan {
+            id: scan_id,
+            corrected,
+        }
+    }
+
+    fn insert_scan_without_corrected(core: &A2dCore, page_id: PageId, preferred: bool) -> ScanId {
+        let scan_id = ScanId::generate();
+        let original = core
+            .asset_store
+            .commit(b"original-only", AssetKind::Original, "image/jpeg")
+            .unwrap();
+        let scan = Scan::new(
+            scan_id.clone(),
+            page_id,
+            None,
+            CaptureSource::Camera,
+            1,
+            original.id().clone(),
+            None,
+            None,
+            None,
+            "1".to_string(),
+            QualityStatus::Accepted,
+            Vec::new(),
+            preferred,
+            None,
+            fingerprint(&"1".repeat(64), &[]),
+        );
+        core.lock_storage()
+            .unwrap()
+            .transaction(|tx| {
+                tx.insert_asset(&original)?;
                 tx.insert_scan(&scan)?;
                 Ok(())
             })
@@ -446,28 +579,32 @@ mod tests {
     }
 
     #[test]
-    fn exact_stored_content_is_conclusive_without_change_regions() {
+    fn exact_stored_content_is_conclusive_only_after_both_assets_verify() {
         let (core, root) = test_core();
         let page_id = insert_page(&core);
         let baseline = insert_scan(
             &core,
             page_id.clone(),
-            content_fingerprint('1', &[]),
+            b"same corrected bytes",
+            &[],
+            None,
             "1",
             true,
         );
         let candidate = insert_scan(
             &core,
             page_id.clone(),
-            content_fingerprint('1', &[]),
+            b"same corrected bytes",
+            &[],
+            None,
             "1",
             false,
         );
 
         let evidence = core
             .compare_stored_scans(CompareStoredScansRequest {
-                baseline_scan_id: baseline,
-                candidate_scan_id: candidate,
+                baseline_scan_id: baseline.id,
+                candidate_scan_id: candidate.id,
                 minimum_cell_absolute_difference: 1,
             })
             .unwrap();
@@ -500,22 +637,26 @@ mod tests {
         let baseline = insert_scan(
             &core,
             page_id.clone(),
-            content_fingerprint('1', &[]),
+            b"baseline corrected bytes",
+            &[],
+            None,
             "1",
             true,
         );
         let candidate = insert_scan(
             &core,
             page_id,
-            content_fingerprint('2', &[(17, 40)]),
+            b"candidate corrected bytes",
+            &[(17, 40)],
+            None,
             "2",
             false,
         );
 
         let evidence = core
             .compare_stored_scans(CompareStoredScansRequest {
-                baseline_scan_id: baseline,
-                candidate_scan_id: candidate,
+                baseline_scan_id: baseline.id,
+                candidate_scan_id: candidate.id,
                 minimum_cell_absolute_difference: 20,
             })
             .unwrap();
@@ -541,27 +682,31 @@ mod tests {
     }
 
     #[test]
-    fn scans_from_different_pages_are_rejected() {
+    fn scans_from_different_pages_are_rejected_before_asset_comparison() {
         let (core, root) = test_core();
         let baseline = insert_scan(
             &core,
             insert_page(&core),
-            content_fingerprint('1', &[]),
+            b"baseline",
+            &[],
+            None,
             "1",
             true,
         );
         let candidate = insert_scan(
             &core,
             insert_page(&core),
-            content_fingerprint('1', &[]),
+            b"candidate",
+            &[],
+            None,
             "1",
-            false,
+            true,
         );
 
         let error = core
             .compare_stored_scans(CompareStoredScansRequest {
-                baseline_scan_id: baseline,
-                candidate_scan_id: candidate,
+                baseline_scan_id: baseline.id,
+                candidate_scan_id: candidate.id,
                 minimum_cell_absolute_difference: 1,
             })
             .unwrap_err();
@@ -579,7 +724,9 @@ mod tests {
         let baseline = insert_scan(
             &core,
             page_id.clone(),
-            "legacy-fingerprint".to_string(),
+            b"baseline",
+            &[],
+            Some("legacy-fingerprint".to_string()),
             "1",
             true,
         );
@@ -587,7 +734,7 @@ mod tests {
 
         let missing_error = core
             .compare_stored_scans(CompareStoredScansRequest {
-                baseline_scan_id: baseline.clone(),
+                baseline_scan_id: baseline.id.clone(),
                 candidate_scan_id: missing,
                 minimum_cell_absolute_difference: 1,
             })
@@ -600,14 +747,16 @@ mod tests {
         let candidate = insert_scan(
             &core,
             page_id,
-            content_fingerprint('1', &[]),
+            b"candidate",
+            &[],
+            None,
             "1",
             false,
         );
         let malformed_error = core
             .compare_stored_scans(CompareStoredScansRequest {
-                baseline_scan_id: baseline,
-                candidate_scan_id: candidate,
+                baseline_scan_id: baseline.id,
+                candidate_scan_id: candidate.id,
                 minimum_cell_absolute_difference: 1,
             })
             .unwrap_err();
@@ -616,8 +765,164 @@ mod tests {
             "IMAGE_SCAN_CONTENT_FINGERPRINT_VERSION_UNSUPPORTED"
         );
         assert_eq!(
-            malformed_error.details.get("comparison_role").map(String::as_str),
+            malformed_error
+                .details
+                .get("comparison_role")
+                .map(String::as_str),
             Some("baseline")
+        );
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn missing_corrected_asset_is_rejected() {
+        let (core, root) = test_core();
+        let page_id = insert_page(&core);
+        let baseline = insert_scan_without_corrected(&core, page_id.clone(), true);
+        let candidate = insert_scan(
+            &core,
+            page_id,
+            b"candidate",
+            &[],
+            None,
+            "1",
+            false,
+        );
+
+        let error = core
+            .compare_stored_scans(CompareStoredScansRequest {
+                baseline_scan_id: baseline,
+                candidate_scan_id: candidate.id,
+                minimum_cell_absolute_difference: 1,
+            })
+            .unwrap_err();
+        assert_eq!(
+            error.code.to_string(),
+            "CORE_SCAN_COMPARISON_CORRECTED_ASSET_MISSING"
+        );
+        assert_eq!(
+            error.details.get("comparison_role").map(String::as_str),
+            Some("baseline")
+        );
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn fingerprint_hash_must_match_the_corrected_asset_row() {
+        let (core, root) = test_core();
+        let page_id = insert_page(&core);
+        let baseline = insert_scan(
+            &core,
+            page_id.clone(),
+            b"baseline",
+            &[],
+            Some(fingerprint(&"9".repeat(64), &[])),
+            "1",
+            true,
+        );
+        let candidate = insert_scan(
+            &core,
+            page_id,
+            b"candidate",
+            &[],
+            None,
+            "1",
+            false,
+        );
+
+        let error = core
+            .compare_stored_scans(CompareStoredScansRequest {
+                baseline_scan_id: baseline.id,
+                candidate_scan_id: candidate.id,
+                minimum_cell_absolute_difference: 1,
+            })
+            .unwrap_err();
+        assert_eq!(
+            error.code.to_string(),
+            "CORE_SCAN_COMPARISON_FINGERPRINT_ASSET_HASH_MISMATCH"
+        );
+        assert_eq!(
+            error.details.get("comparison_role").map(String::as_str),
+            Some("baseline")
+        );
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn missing_or_tampered_corrected_files_block_conclusive_evidence() {
+        let (core, root) = test_core();
+        let page_id = insert_page(&core);
+        let baseline = insert_scan(
+            &core,
+            page_id.clone(),
+            b"baseline",
+            &[],
+            None,
+            "1",
+            true,
+        );
+        let candidate = insert_scan(
+            &core,
+            page_id.clone(),
+            b"candidate",
+            &[],
+            None,
+            "1",
+            false,
+        );
+        let baseline_path = core
+            .asset_store
+            .resolve(&baseline.corrected.relative_path)
+            .unwrap();
+        std::fs::remove_file(baseline_path).unwrap();
+
+        let missing_error = core
+            .compare_stored_scans(CompareStoredScansRequest {
+                baseline_scan_id: baseline.id,
+                candidate_scan_id: candidate.id.clone(),
+                minimum_cell_absolute_difference: 1,
+            })
+            .unwrap_err();
+        assert_eq!(missing_error.code.to_string(), "STORAGE_ASSET_MISSING");
+        assert_eq!(
+            missing_error
+                .details
+                .get("comparison_role")
+                .map(String::as_str),
+            Some("baseline")
+        );
+
+        let replacement_baseline = insert_scan(
+            &core,
+            page_id,
+            b"replacement baseline",
+            &[],
+            None,
+            "1",
+            false,
+        );
+        let candidate_path = core
+            .asset_store
+            .resolve(&candidate.corrected.relative_path)
+            .unwrap();
+        std::fs::write(candidate_path, b"tampered").unwrap();
+        let tampered_error = core
+            .compare_stored_scans(CompareStoredScansRequest {
+                baseline_scan_id: replacement_baseline.id,
+                candidate_scan_id: candidate.id,
+                minimum_cell_absolute_difference: 1,
+            })
+            .unwrap_err();
+        assert_eq!(
+            tampered_error.code.to_string(),
+            "STORAGE_ASSET_HASH_MISMATCH"
+        );
+        assert_eq!(
+            tampered_error
+                .details
+                .get("comparison_role")
+                .map(String::as_str),
+            Some("candidate")
         );
         std::fs::remove_dir_all(root).ok();
     }
