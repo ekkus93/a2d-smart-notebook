@@ -178,6 +178,13 @@ impl AssetStore {
         kind: AssetKind,
         media_type: String,
     ) -> Result<Asset, A2dError> {
+        let byte_length = u64::try_from(data.len()).map_err(|_| {
+            integrity_error(
+                "STORAGE_ASSET_LENGTH_UNSUPPORTED",
+                "asset byte length does not fit the portable stored representation",
+            )
+            .with_detail("asset_id", id.to_string())
+        })?;
         let tmp_path = self.tmp_dir().join(format!("{id}.tmp"));
         let relative_path = format!("assets/{}/{id}", asset_kind_dir(kind));
         let final_path = self.root.join(&relative_path);
@@ -266,11 +273,33 @@ impl AssetStore {
         let expected_hash = hex_sha256(data);
         let on_disk = std::fs::read(&tmp_path).map_err(|error| {
             with_cleanup_result(
-                map_io_error("re-reading the asset temp file to verify its hash", error),
+                map_io_error("re-reading the asset temp file to verify its contents", error),
                 &tmp_path,
             )
             .with_detail("asset_id", id.to_string())
         })?;
+        let actual_byte_length = u64::try_from(on_disk.len()).map_err(|_| {
+            with_cleanup_result(
+                integrity_error(
+                    "STORAGE_ASSET_LENGTH_UNSUPPORTED",
+                    "written asset byte length does not fit the portable stored representation",
+                ),
+                &tmp_path,
+            )
+            .with_detail("asset_id", id.to_string())
+        })?;
+        if actual_byte_length != byte_length {
+            return Err(with_cleanup_result(
+                integrity_error(
+                    "STORAGE_ASSET_LENGTH_MISMATCH_ON_WRITE",
+                    "the temp file byte length differs from the supplied asset bytes",
+                )
+                .with_detail("expected_byte_length", byte_length.to_string())
+                .with_detail("actual_byte_length", actual_byte_length.to_string()),
+                &tmp_path,
+            )
+            .with_detail("asset_id", id.to_string()));
+        }
         let actual_hash = hex_sha256(&on_disk);
         if actual_hash != expected_hash {
             return Err(with_cleanup_result(
@@ -336,7 +365,7 @@ impl AssetStore {
             kind,
             relative_path,
             media_type,
-            data.len() as u64,
+            byte_length,
             expected_hash,
             now_ms(),
             immutable,
@@ -352,7 +381,23 @@ impl AssetStore {
                 .with_detail("relative_path", &asset.relative_path)
         })?;
         let on_disk = std::fs::read(&path)
-            .map_err(|e| map_io_error("reading asset to verify", e))?;
+            .map_err(|error| map_io_error("reading asset to verify", error))?;
+        let actual_byte_length = u64::try_from(on_disk.len()).map_err(|_| {
+            integrity_error(
+                "STORAGE_ASSET_LENGTH_UNSUPPORTED",
+                "asset file byte length does not fit the portable stored representation",
+            )
+            .with_detail("asset_id", asset.id().to_string())
+        })?;
+        if actual_byte_length != asset.byte_length {
+            return Err(integrity_error(
+                "STORAGE_ASSET_LENGTH_MISMATCH",
+                "the asset file's current byte length does not match its recorded length",
+            )
+            .with_detail("asset_id", asset.id().to_string())
+            .with_detail("expected_byte_length", asset.byte_length.to_string())
+            .with_detail("actual_byte_length", actual_byte_length.to_string()));
+        }
         let actual_hash = hex_sha256(&on_disk);
         if actual_hash != asset.sha256 {
             return Err(integrity_error(
