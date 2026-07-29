@@ -3,13 +3,15 @@ use std::path::{Path, PathBuf};
 
 use a2d_domain::{
     CaptureSource, LayoutId, Notebook, NotebookDesign, NotebookDesignId, NotebookId, Page, PageId,
-    PageKind, PageState, QualityStatus, ScanId, TrimSizeMm, TrustState,
+    PageKind, PageState, QualityStatus, ScanId, SmartPageId, TrimSizeMm, TrustState,
 };
 use a2d_identity::PageCode;
 use a2d_image::{AprilTagDetector, DetectorConfig};
-use a2d_layout::{MarkerRole, writable_page_layout};
+use a2d_layout::{
+    MarkerRole, PageLayout, PaperSize, SmartPageStyle, smart_page_layout, writable_page_layout,
+};
 use a2d_storage::{NotebookDesignRepository, NotebookRepository, PageRepository, ScanRepository};
-use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
+use image::{DynamicImage, GenericImageView, ImageFormat, Rgb, RgbImage};
 
 use super::*;
 
@@ -29,18 +31,18 @@ fn test_core() -> (std::sync::Arc<A2dCore>, PathBuf, PageId, NotebookId, String)
         "Test Design".to_string(),
         1,
         TrimSizeMm {
-            width: 216,
-            height: 279,
+            width: 152,
+            height: 229,
         },
         100,
         layout_id.clone(),
         layout_id.clone(),
-        "tagStandard41h12".to_string(),
+        "apriltag-placeholder".to_string(),
         vec![
-            "TL:0".to_string(),
-            "TR:1".to_string(),
-            "BR:2".to_string(),
-            "BL:3".to_string(),
+            "TL".to_string(),
+            "TR".to_string(),
+            "BL".to_string(),
+            "BR".to_string(),
         ],
         "test-manifest".to_string(),
         TrustState::Trusted,
@@ -90,15 +92,16 @@ fn test_core() -> (std::sync::Arc<A2dCore>, PathBuf, PageId, NotebookId, String)
     (core, root, page_id, notebook_id, payload)
 }
 
-fn production_layout_page() -> Vec<u8> {
+fn rendered_layout_page(layout: &PageLayout) -> Vec<u8> {
     const PAGE_WIDTH: u32 = 1_216;
-    const PAGE_HEIGHT: u32 = 1_832;
     const BORDER: u32 = 64;
-    let layout = writable_page_layout();
+    let page_height =
+        (f64::from(PAGE_WIDTH) * layout.physical_size.height_mm / layout.physical_size.width_mm)
+            .round() as u32;
     let source_width = PAGE_WIDTH + 2 * BORDER;
-    let source_height = PAGE_HEIGHT + 2 * BORDER;
+    let source_height = page_height + 2 * BORDER;
     let mut image = RgbImage::from_pixel(source_width, source_height, Rgb([45, 48, 56]));
-    for y in BORDER..BORDER + PAGE_HEIGHT {
+    for y in BORDER..BORDER + page_height {
         for x in BORDER..BORDER + PAGE_WIDTH {
             image.put_pixel(x, y, Rgb([250, 249, 246]));
         }
@@ -120,13 +123,14 @@ fn production_layout_page() -> Vec<u8> {
             + (placement.rect.left() / layout.physical_size.width_mm * f64::from(PAGE_WIDTH - 1))
                 .round() as u32;
         let top = BORDER
-            + (placement.rect.top() / layout.physical_size.height_mm * f64::from(PAGE_HEIGHT - 1))
-                .round() as u32;
+            + (placement.rect.top() / layout.physical_size.height_mm
+                * f64::from(page_height - 1))
+            .round() as u32;
         let target_width = (placement.rect.size.width_mm / layout.physical_size.width_mm
             * f64::from(PAGE_WIDTH - 1))
         .round() as u32;
         let target_height = (placement.rect.size.height_mm / layout.physical_size.height_mm
-            * f64::from(PAGE_HEIGHT - 1))
+            * f64::from(page_height - 1))
         .round() as u32;
         for y in 0..target_height {
             let source_y = y as usize * tag.height() / target_height as usize;
@@ -142,6 +146,31 @@ fn production_layout_page() -> Vec<u8> {
         .write_to(&mut output, ImageFormat::Png)
         .unwrap();
     output.into_inner()
+}
+
+fn production_layout_page() -> Vec<u8> {
+    rendered_layout_page(&writable_page_layout())
+}
+
+fn approved_markers() -> Vec<RegistrationMarker> {
+    vec![
+        RegistrationMarker {
+            role: "TL".to_string(),
+            id: 0,
+        },
+        RegistrationMarker {
+            role: "TR".to_string(),
+            id: 1,
+        },
+        RegistrationMarker {
+            role: "BR".to_string(),
+            id: 2,
+        },
+        RegistrationMarker {
+            role: "BL".to_string(),
+            id: 3,
+        },
+    ]
 }
 
 fn request(
@@ -164,24 +193,7 @@ fn request(
         image_format: ScanImageFormat::Png,
         image_rotation: ScanImageRotation::Degrees0,
         captured_at_ms: 1_000,
-        observed_markers: vec![
-            RegistrationMarker {
-                role: "TL".to_string(),
-                id: 0,
-            },
-            RegistrationMarker {
-                role: "TR".to_string(),
-                id: 1,
-            },
-            RegistrationMarker {
-                role: "BR".to_string(),
-                id: 2,
-            },
-            RegistrationMarker {
-                role: "BL".to_string(),
-                id: 3,
-            },
-        ],
+        observed_markers: approved_markers(),
         preview_warnings: Vec::new(),
         user_approved: true,
     }
@@ -206,6 +218,14 @@ fn first_registration_commits_assets_scan_and_preferred_page_atomically() {
     let scan = storage.get_scan(&registered.scan_id).unwrap().unwrap();
     assert!(scan.preferred);
     assert!(
+        scan.pipeline_version
+            .starts_with("image-pipeline-v1;scan-policy-v1;layout=notebook-design:")
+    );
+    assert!(
+        scan.pipeline_version
+            .ends_with(";marker-family=tagStandard41h12")
+    );
+    assert!(
         scan.content_fingerprint
             .starts_with("scan-content-v1;corrected-sha256=")
     );
@@ -222,6 +242,74 @@ fn first_registration_commits_assets_scan_and_preferred_page_atomically() {
         assert!(Path::new(&path).is_file());
     }
     drop(storage);
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn a4_smart_page_registration_uses_a4_rectification_dimensions() {
+    let root = std::env::temp_dir().join(format!("a2d-m9-smart-{}", PageId::generate()));
+    let core = A2dCore::open(crate::OpenLibraryRequest {
+        library_path: root.to_string_lossy().into_owned(),
+    })
+    .unwrap();
+    let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
+    let smart_page_id = SmartPageId::generate();
+    let page_id = PageId::generate();
+    let page = Page::new(
+        page_id.clone(),
+        PageKind::SmartPage {
+            smart_page_id: smart_page_id.clone(),
+            page_set_id: None,
+            visible_page_number: Some(7),
+        },
+        layout.id.clone(),
+        None,
+        PageState::GeneratedNotScanned,
+        1,
+    );
+    core.lock_storage().unwrap().insert_page(&page).unwrap();
+    let payload = PageCode::SmartPage {
+        smart_page_id,
+        layout_id: layout.id.clone(),
+        visible_page_number: Some(7),
+        page_set_id: None,
+    }
+    .encode()
+    .unwrap();
+    let staging_root = root.join("tmp").join(SCANNER_STAGING_DIRECTORY);
+    std::fs::create_dir_all(&staging_root).unwrap();
+    let staging_path = staging_root.join("smart-a4.png");
+    std::fs::write(&staging_path, rendered_layout_page(&layout)).unwrap();
+
+    let registered = core
+        .register_scan(RegisterScanRequest {
+            staging_path: staging_path.to_string_lossy().into_owned(),
+            page_code_payload: payload,
+            expected_page_id: page_id,
+            active_notebook_id: None,
+            capture_source: CaptureSource::Camera,
+            image_format: ScanImageFormat::Png,
+            image_rotation: ScanImageRotation::Degrees0,
+            captured_at_ms: 1_000,
+            observed_markers: approved_markers(),
+            preview_warnings: Vec::new(),
+            user_approved: true,
+        })
+        .unwrap();
+    let corrected = image::open(&registered.corrected_path).unwrap();
+    assert_eq!(corrected.dimensions(), (900, 1_273));
+    let scan = core
+        .lock_storage()
+        .unwrap()
+        .get_scan(&registered.scan_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        scan.pipeline_version,
+        "image-pipeline-v1;scan-policy-v1;layout=SP-A4-BLANK-V1;marker-family=tagStandard41h12"
+    );
+
+    drop(core);
     std::fs::remove_dir_all(root).ok();
 }
 
