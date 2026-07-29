@@ -18,9 +18,9 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use a2d_domain::A2dError;
 use a2d_domain::{
-    Asset, AssetId, AssetKind, EncryptionState, ErrorCategory, ErrorCode, ErrorSeverity,
+    A2dError, Asset, AssetId, AssetKind, EncryptionState, ErrorCategory, ErrorCode, ErrorSeverity,
+    system_now_ms,
 };
 use sha2::{Digest, Sha256};
 
@@ -185,6 +185,9 @@ impl AssetStore {
             )
             .with_detail("asset_id", id.to_string())
         })?;
+        // Resolve the canonical timestamp before creating a temp file. A clock failure therefore
+        // leaves no filesystem mutation and cannot produce an asset with an invented zero time.
+        let created_at_ms = system_now_ms()?;
         let tmp_path = self.tmp_dir().join(format!("{id}.tmp"));
         let relative_path = format!("assets/{}/{id}", asset_kind_dir(kind));
         let final_path = self.root.join(&relative_path);
@@ -367,7 +370,7 @@ impl AssetStore {
             media_type,
             byte_length,
             expected_hash,
-            now_ms(),
+            created_at_ms,
             immutable,
             EncryptionState::Plaintext,
         ))
@@ -462,12 +465,5 @@ fn hex_sha256(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
     let digest = hasher.finalize();
-    digest.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
