@@ -15,28 +15,27 @@ use std::path::{Path, PathBuf};
 use a2d_domain::{
     A2dError, Asset, AssetKind, AuditEvent, AuditEventId, CaptureSource, ErrorCategory, ErrorCode,
     ErrorSeverity, NotebookId, Page, PageId, PageKind, PageState, QualityStatus, Scan, ScanId,
+    system_now_ms,
 };
 use a2d_identity::PageCode;
 use a2d_image::{
     AprilTagDetector, ContrastNormalizationConfig, DerivedImageConfig, DerivedImageLimits,
     DerivedImagePipeline, DetectorConfig, EncodedImage, EncodedImageFormat, EncodedImageLimits,
-    GrayQualityMetrics, ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerIdLayout,
-    OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,
-    RectificationLimits, RectificationPlan, RectifiedImageSize, ResolvedPageMarkers,
-    ThumbnailConfig, measure_gray_quality, resolve_page_markers,
+    GrayQualityMetrics, ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerFamily,
+    MarkerIdLayout, OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,
+    RectificationLimits, RectificationPlan, RectifiedImageSize, ResolvedPageMarkers, ThumbnailConfig,
+    measure_gray_quality, resolve_page_markers,
 };
-use a2d_layout::{MarkerRole, writable_page_layout};
+use a2d_layout::ResolvedScanLayout;
 use a2d_storage::{AssetRepository, AuditEventRepository, PageRepository, ScanRepository};
 use image::{DynamicImage, GrayImage, ImageFormat, RgbImage};
 use serde_json::json;
 
-use super::{A2dCore, PageResolution, now_ms};
+use super::{A2dCore, PageResolution};
 
 const MAX_ENCODED_BYTES: usize = 24 * 1024 * 1024;
 const MAX_DECODED_PIXELS: u64 = 32_000_000;
 const MAX_DECODED_BYTES: u64 = 96_000_000;
-const CORRECTED_WIDTH: u32 = 900;
-const CORRECTED_HEIGHT: u32 = 1_356;
 const PIPELINE_VERSION: u32 = 1;
 const JOURNAL_DIRECTORY: &str = "asset-commit-journals";
 const SCANNER_STAGING_DIRECTORY: &str = "scanner-staging";
@@ -194,12 +193,13 @@ impl RegistrationJournal {
             path,
             file: Some(file),
         };
+        let started_at_ms = system_now_ms()?;
         journal.record(json!({
             "schema_version": 1,
             "operation": "scan_registration",
             "scan_id": scan_id.to_string(),
             "staging_path": staging_path.to_string_lossy(),
-            "started_at_ms": now_ms(),
+            "started_at_ms": started_at_ms,
             "phase": "started"
         }))?;
         Ok(journal)
@@ -210,10 +210,12 @@ impl RegistrationJournal {
     }
 
     fn record_phase(&mut self, phase: &'static str) -> Result<(), A2dError> {
-        self.record(json!({"phase": phase, "at_ms": now_ms()}))
+        let at_ms = system_now_ms()?;
+        self.record(json!({"phase": phase, "at_ms": at_ms}))
     }
 
     fn record_asset(&mut self, asset: &Asset) -> Result<(), A2dError> {
+        let at_ms = system_now_ms()?;
         self.record(json!({
             "phase": "asset_committed",
             "asset_id": asset.id().to_string(),
@@ -221,7 +223,7 @@ impl RegistrationJournal {
             "relative_path": asset.relative_path,
             "sha256": asset.sha256,
             "byte_length": asset.byte_length,
-            "at_ms": now_ms()
+            "at_ms": at_ms
         }))
     }
 
@@ -247,7 +249,8 @@ impl RegistrationJournal {
     }
 
     fn complete(mut self) -> Result<(), A2dError> {
-        self.record(json!({"phase": "database_committed", "at_ms": now_ms()}))?;
+        let at_ms = system_now_ms()?;
+        self.record(json!({"phase": "database_committed", "at_ms": at_ms}))?;
         self.file.take();
         std::fs::remove_file(&self.path)
             .map_err(|error| journal_io_error("removing completed asset commit journal", error))
@@ -344,8 +347,22 @@ impl A2dCore {
             ));
         }
 
-        let processed =
-            process_capture(&staged.bytes, request.image_format, request.image_rotation)?;
+        let scan_layout = self.resolve_stored_scan_layout(&request.expected_page_id)?;
+        let processed = process_capture(
+            &staged.bytes,
+            request.image_format,
+            request.image_rotation,
+            &scan_layout,
+        )
+        .map_err(|error| {
+            error
+                .with_detail("layout_id", scan_layout.layout_id.to_string())
+                .with_detail(
+                    "scan_processing_policy_version",
+                    scan_layout.processing_policy_version.to_string(),
+                )
+                .with_detail("layout_version", &scan_layout.layout_version)
+        })?;
         validate_observed_markers(&request.observed_markers, &processed.resolved_markers)?;
         let mut warnings = quality_warnings(&processed);
         merge_preview_warnings(&request.preview_warnings, &mut warnings)?;
@@ -361,6 +378,16 @@ impl A2dCore {
                 )
             })?;
         validate_page_target(&page, &page_code, request.active_notebook_id.as_ref())?;
+        if page.layout_id != scan_layout.layout_id {
+            return Err(registration_error(
+                "CORE_SCAN_LAYOUT_CHANGED_DURING_PROCESSING",
+                ErrorCategory::Integrity,
+                "the stored page layout changed while scan processing was in progress",
+            )
+            .with_detail("page_id", page.id().to_string())
+            .with_detail("processed_layout_id", scan_layout.layout_id.to_string())
+            .with_detail("current_layout_id", page.layout_id.to_string()));
+        }
         if matches!(page.state, PageState::Archived | PageState::Trashed) {
             return Err(registration_error(
                 "CORE_SCAN_PAGE_NOT_WRITABLE",
@@ -407,7 +434,7 @@ impl A2dCore {
             QualityStatus::NeedsReview
         };
 
-        let scan_id = ScanId::generate();
+        let scan_id = ScanId::try_generate()?;
         let mut journal =
             RegistrationJournal::begin(&self.library_path, &scan_id, &staged.canonical_path)?;
         let journal_path = journal.path_string();
@@ -460,6 +487,13 @@ impl A2dCore {
         let corrected_path = resolve_path(&corrected)?;
         let ocr_path = resolve_path(&ocr)?;
         let thumbnail_path = resolve_path(&thumbnail)?;
+        let pipeline_version = format!(
+            "image-pipeline-v{};scan-policy-v{};layout={};marker-family={}",
+            processed.pipeline_version,
+            scan_layout.processing_policy_version,
+            scan_layout.layout_version,
+            scan_layout.marker_family
+        );
 
         let scan = Scan::new(
             scan_id.clone(),
@@ -471,7 +505,7 @@ impl A2dCore {
             Some(corrected.id().clone()),
             Some(ocr.id().clone()),
             Some(thumbnail.id().clone()),
-            processed.pipeline_version.to_string(),
+            pipeline_version,
             quality_status,
             warnings
                 .iter()
@@ -485,7 +519,7 @@ impl A2dCore {
                 processed.perceptual_fingerprint.encode()
             ),
         );
-        let audit = scan_audit_event(&scan, request.active_notebook_id.as_ref());
+        let audit = scan_audit_event(&scan, request.active_notebook_id.as_ref())?;
 
         let transaction_result = storage.transaction(|tx| {
             let current_page = tx.get_page(&request.expected_page_id)?.ok_or_else(|| {
@@ -500,6 +534,16 @@ impl A2dCore {
                 &page_code,
                 request.active_notebook_id.as_ref(),
             )?;
+            if current_page.layout_id != scan_layout.layout_id {
+                return Err(registration_error(
+                    "CORE_SCAN_LAYOUT_CHANGED_BEFORE_COMMIT",
+                    ErrorCategory::Integrity,
+                    "the stored page layout changed before the registration transaction committed",
+                )
+                .with_detail("page_id", current_page.id().to_string())
+                .with_detail("processed_layout_id", scan_layout.layout_id.to_string())
+                .with_detail("current_layout_id", current_page.layout_id.to_string()));
+            }
             if current_page.preferred_scan_id != existing_preferred {
                 return Err(registration_error(
                     "CORE_SCAN_PAGE_VERSION_CHANGED",
@@ -785,7 +829,17 @@ fn process_capture(
     encoded_bytes: &[u8],
     format: ScanImageFormat,
     rotation: ScanImageRotation,
+    scan_layout: &ResolvedScanLayout,
 ) -> Result<ProcessedCapture, A2dError> {
+    if scan_layout.marker_family != MarkerFamily::TagStandard41h12.as_str() {
+        return Err(registration_error(
+            "CORE_SCAN_MARKER_FAMILY_UNSUPPORTED",
+            ErrorCategory::UnsupportedFormat,
+            "the resolved page layout requires a marker family this build cannot detect",
+        )
+        .with_detail("marker_family", &scan_layout.marker_family)
+        .with_detail("layout_id", scan_layout.layout_id.to_string()));
+    }
     let image_limits = ImageLimits::new(MAX_DECODED_PIXELS)?;
     let source = EncodedImage::new(
         encoded_bytes,
@@ -806,21 +860,21 @@ fn process_capture(
         bits_corrected: 2,
     })?;
     let detections = detector.detect(frame)?;
-    let marker_layout = MarkerIdLayout::new([
-        (0, MarkerRole::TopLeft),
-        (1, MarkerRole::TopRight),
-        (2, MarkerRole::BottomRight),
-        (3, MarkerRole::BottomLeft),
-    ])?;
+    let marker_layout = MarkerIdLayout::new(
+        scan_layout
+            .marker_roles
+            .iter()
+            .map(|marker| (marker.marker_id, marker.role)),
+    )?;
     let resolved_markers = resolve_page_markers(&detections, &marker_layout)?;
     let rectification = RectificationPlan::from_page_markers(
         source.width(),
         source.height(),
         &resolved_markers,
-        &writable_page_layout(),
+        &scan_layout.page_layout,
         RectifiedImageSize::new(
-            CORRECTED_WIDTH,
-            CORRECTED_HEIGHT,
+            scan_layout.corrected_width,
+            scan_layout.corrected_height,
             RectificationLimits::new(2_000_000, 6_000_000)?,
         )?,
     )?;
@@ -995,7 +1049,10 @@ fn merge_preview_warnings(
     Ok(())
 }
 
-fn scan_audit_event(scan: &Scan, notebook_id: Option<&NotebookId>) -> AuditEvent {
+fn scan_audit_event(
+    scan: &Scan,
+    notebook_id: Option<&NotebookId>,
+) -> Result<AuditEvent, A2dError> {
     let mut details = BTreeMap::new();
     details.insert("page_id".to_string(), scan.page_id.to_string());
     details.insert("scan_id".to_string(), scan.id().to_string());
@@ -1010,15 +1067,16 @@ fn scan_audit_event(scan: &Scan, notebook_id: Option<&NotebookId>) -> AuditEvent
         "quality_status".to_string(),
         format!("{:?}", scan.quality_status),
     );
-    AuditEvent::new(
-        AuditEventId::generate(),
-        now_ms(),
+    details.insert("pipeline_version".to_string(), scan.pipeline_version.clone());
+    Ok(AuditEvent::new(
+        AuditEventId::try_generate()?,
+        system_now_ms()?,
         "scan.registered".to_string(),
         "rust-core".to_string(),
         Some(scan.id().to_string()),
         details,
         None,
-    )
+    ))
 }
 
 #[cfg(test)]
