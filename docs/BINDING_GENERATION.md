@@ -82,6 +82,25 @@ bash tools/build-android-native.sh
 
 Then run the repository's full required checks, or push to `master` and verify every permanent CI job for the exact commit.
 
+## Remote CI status and generated-artifact recovery
+
+The permanent `Publish Hosted CI Status` workflow mirrors the latest `CI` run into GitHub issue #22, titled `CI Status: Hosted Quality Gates`. The issue is an overwritten status record, not a historical discussion. It includes the exact commit SHA, run ID, job IDs, step conclusions, failed-step summary, and machine-readable JSON.
+
+The Kotlin binding-drift job uploads this artifact even when its final drift comparison fails:
+
+```text
+regenerated-android-ffi-files
+```
+
+The artifact contains:
+
+```text
+apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
+Cargo.lock
+```
+
+Use the artifact ID published in issue #22 to retrieve the exact generator-produced files. Never reconstruct generated Kotlin from Rust declarations or manually patch a stale committed binding. Confirm that the artifact's recorded `head_sha` is the exact commit being repaired before using it.
+
 A change is not complete when:
 
 - Rust exports a new type or method but the committed Kotlin file is stale.
