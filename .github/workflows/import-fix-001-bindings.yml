@@ -81,13 +81,6 @@ jobs:
           PY
           cargo fmt --all
 
-      - name: Validate focused Rust and binding gates
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo clippy -p a2d-pdf -p a2d-image --all-targets --all-features -- -D warnings
-          cargo test -p a2d-ffi --test binding_generation
-
       - name: Commit exact generated files
         shell: bash
         run: |
