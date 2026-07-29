@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,8 +35,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.a2d.notebook.R
-import java.io.File
+import com.a2d.notebook.rustbridge.catchingOperationFailure
+import com.a2d.notebook.rustbridge.resolveGeneratedPdfAsset
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.SmartPageContentStyle
@@ -46,6 +51,13 @@ private enum class SmartPageMode { SINGLE, SET }
 private enum class UiPaper(val label: String) { LETTER("US Letter"), A4("A4") }
 private enum class UiStyle(val label: String) {
     BLANK("Blank"), LINED("Lined"), DOT_GRID("Dot grid"), GRAPH("Graph")
+}
+
+private sealed interface SmartPagePreviewState {
+    data object Idle : SmartPagePreviewState
+    data object Loading : SmartPagePreviewState
+    data class Ready(val bitmap: Bitmap) : SmartPagePreviewState
+    data class Failed(val message: String) : SmartPagePreviewState
 }
 
 @Composable
@@ -63,27 +75,65 @@ fun SmartPagesScreen(
     var startingPage by rememberSaveable { mutableStateOf("1") }
     var formError by rememberSaveable { mutableStateOf<String?>(null) }
     var platformMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    var preview by remember { mutableStateOf<Bitmap?>(null) }
-    var pendingSavePath by remember { mutableStateOf<String?>(null) }
+    var platformError by rememberSaveable { mutableStateOf<String?>(null) }
+    var preview by remember { mutableStateOf<SmartPagePreviewState>(SmartPagePreviewState.Idle) }
+
+    fun replacePreview(next: SmartPagePreviewState) {
+        val oldBitmap = (preview as? SmartPagePreviewState.Ready)?.bitmap
+        val nextBitmap = (next as? SmartPagePreviewState.Ready)?.bitmap
+        preview = next
+        if (oldBitmap != null && oldBitmap !== nextBitmap && !oldBitmap.isRecycled) {
+            oldBitmap.recycle()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            (preview as? SmartPagePreviewState.Ready)?.bitmap
+                ?.takeUnless(Bitmap::isRecycled)
+                ?.recycle()
+        }
+    }
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf"),
     ) { uri ->
-        val path = pendingSavePath
-        pendingSavePath = null
-        if (uri == null || path == null) return@rememberLauncherForActivityResult
+        val pending = viewModel.consumePendingSave().getOrElse {
+            platformMessage = null
+            platformError = context.getString(R.string.smart_pages_save_stale)
+            return@rememberLauncherForActivityResult
+        }
+        if (uri == null) {
+            platformMessage = null
+            platformError = null
+            return@rememberLauncherForActivityResult
+        }
+
         scope.launch {
-            runCatching {
+            val result = catchingOperationFailure {
                 withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        File(path).inputStream().use { input -> input.copyTo(output) }
-                    } ?: error("destination could not be opened")
+                    val source = resolveGeneratedPdfAsset(
+                        context = context,
+                        assetId = pending.assetId,
+                        path = pending.path,
+                    )
+                    context.contentResolver.openOutputStream(uri, "w")?.use { output ->
+                        source.inputStream().use { input -> input.copyTo(output) }
+                        output.flush()
+                    } ?: throw IOException("selected destination could not be opened")
                 }
-            }.onSuccess {
-                platformMessage = context.getString(R.string.smart_pages_saved)
-            }.onFailure {
-                platformMessage = context.getString(R.string.smart_pages_save_failed)
             }
+            currentCoroutineContext().ensureActive()
+            result.fold(
+                onSuccess = {
+                    platformError = null
+                    platformMessage = context.getString(R.string.smart_pages_saved)
+                },
+                onFailure = {
+                    platformMessage = null
+                    platformError = context.getString(R.string.smart_pages_save_failed)
+                },
+            )
         }
     }
 
@@ -93,6 +143,7 @@ fun SmartPagesScreen(
         if (validated.isFailure) {
             formError = when (validated.exceptionOrNull()?.message) {
                 "starting_page" -> context.getString(R.string.smart_pages_invalid_start)
+                "visible_page_range" -> context.getString(R.string.smart_pages_invalid_range)
                 else -> context.getString(R.string.smart_pages_invalid_count)
             }
             return
@@ -100,7 +151,8 @@ fun SmartPagesScreen(
         val values = validated.getOrThrow()
         formError = null
         platformMessage = null
-        preview = null
+        platformError = null
+        replacePreview(SmartPagePreviewState.Idle)
         viewModel.generate(
             SmartPageGenerationRequest(
                 paperSize = when (paper) {
@@ -119,11 +171,45 @@ fun SmartPagesScreen(
         )
     }
 
-    LaunchedEffect(state.generated?.pdfPath) {
-        val path = state.generated?.pdfPath ?: return@LaunchedEffect
-        preview = runCatching {
-            withContext(Dispatchers.IO) { renderFirstPdfPage(path) }
-        }.getOrNull()
+    LaunchedEffect(state.generated?.pdfAssetId, state.generated?.pdfPath) {
+        val generated = state.generated
+        if (generated == null) {
+            replacePreview(SmartPagePreviewState.Idle)
+            return@LaunchedEffect
+        }
+
+        replacePreview(SmartPagePreviewState.Loading)
+        var renderedBitmap: Bitmap? = null
+        try {
+            val result = catchingOperationFailure {
+                withContext(Dispatchers.IO) {
+                    val source = resolveGeneratedPdfAsset(
+                        context = context,
+                        assetId = generated.pdfAssetId,
+                        path = generated.pdfPath,
+                    )
+                    renderFirstPdfPage(source.absolutePath).also { renderedBitmap = it }
+                }
+            }
+            currentCoroutineContext().ensureActive()
+            result.fold(
+                onSuccess = { bitmap ->
+                    replacePreview(SmartPagePreviewState.Ready(bitmap))
+                    renderedBitmap = null
+                },
+                onFailure = {
+                    replacePreview(
+                        SmartPagePreviewState.Failed(
+                            context.getString(R.string.smart_pages_preview_failed),
+                        ),
+                    )
+                },
+            )
+        } finally {
+            renderedBitmap
+                ?.takeUnless(Bitmap::isRecycled)
+                ?.recycle()
+        }
     }
 
     Column(
@@ -160,17 +246,26 @@ fun SmartPagesScreen(
             label = { Text(stringResource(R.string.smart_pages_start_number)) },
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(onClick = ::generate, enabled = !state.busy) {
+        Button(
+            onClick = ::generate,
+            enabled = !state.busy && state.pendingSave == null,
+        ) {
             Text(stringResource(R.string.smart_pages_generate))
         }
         if (state.busy) Text(stringResource(R.string.common_loading))
         (formError ?: state.error)?.let { error ->
             Text(stringResource(R.string.common_error_prefix, error), color = MaterialTheme.colorScheme.error)
-            Button(onClick = ::generate, enabled = !state.busy) {
+            Button(
+                onClick = ::generate,
+                enabled = !state.busy && state.pendingSave == null,
+            ) {
                 Text(stringResource(R.string.common_retry))
             }
         }
         platformMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        platformError?.let {
+            Text(stringResource(R.string.common_error_prefix, it), color = MaterialTheme.colorScheme.error)
+        }
 
         state.generated?.let { result ->
             Card(Modifier.fillMaxWidth()) {
@@ -178,31 +273,83 @@ fun SmartPagesScreen(
                     Text(stringResource(R.string.smart_pages_generated), style = MaterialTheme.typography.titleLarge)
                     Text(stringResource(R.string.smart_pages_set_id, result.pageSetId))
                     Text(stringResource(R.string.smart_pages_page_total, result.pageIds.size))
-                    preview?.let { bitmap ->
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = stringResource(R.string.smart_pages_preview_description),
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
-                        )
-                    } ?: Text(stringResource(R.string.smart_pages_preview_unavailable))
+                    when (val currentPreview = preview) {
+                        SmartPagePreviewState.Idle -> {
+                            Text(stringResource(R.string.smart_pages_preview_unavailable))
+                        }
+                        SmartPagePreviewState.Loading -> {
+                            Text(stringResource(R.string.smart_pages_preview_loading))
+                        }
+                        is SmartPagePreviewState.Failed -> {
+                            Text(
+                                currentPreview.message,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                        is SmartPagePreviewState.Ready -> {
+                            Image(
+                                bitmap = currentPreview.bitmap.asImageBitmap(),
+                                contentDescription = stringResource(R.string.smart_pages_preview_description),
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+                            )
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
+                            enabled = state.pendingSave == null,
                             onClick = {
-                                pendingSavePath = result.pdfPath
-                                saveLauncher.launch("a2d-smart-pages-${result.pageSetId}.pdf")
+                                platformMessage = null
+                                platformError = null
+                                val pending = viewModel.beginSave(result).getOrElse {
+                                    platformError = context.getString(R.string.smart_pages_save_pending)
+                                    return@Button
+                                }
+                                try {
+                                    saveLauncher.launch("a2d-smart-pages-${result.pageSetId}.pdf")
+                                } catch (failure: Exception) {
+                                    val consumed = viewModel.consumePendingSave()
+                                    if (consumed.isFailure || consumed.getOrNull()?.token != pending.token) {
+                                        platformError = context.getString(R.string.smart_pages_save_stale)
+                                    } else {
+                                        platformError = context.getString(R.string.smart_pages_save_failed)
+                                    }
+                                }
                             },
                         ) { Text(stringResource(R.string.smart_pages_save)) }
                         Button(
                             onClick = {
-                                runCatching { sharePdf(context, result.pdfPath) }
-                                    .onFailure { platformMessage = it.message }
+                                platformMessage = null
+                                platformError = try {
+                                    val source = resolveGeneratedPdfAsset(
+                                        context = context,
+                                        assetId = result.pdfAssetId,
+                                        path = result.pdfPath,
+                                    )
+                                    sharePdf(context, source.absolutePath)
+                                    null
+                                } catch (failure: Exception) {
+                                    context.getString(R.string.smart_pages_share_failed)
+                                }
                             },
                         ) { Text(stringResource(R.string.smart_pages_share)) }
                         Button(
                             onClick = {
-                                runCatching {
-                                    printPdf(context, result.pdfPath, "A2D Smart Pages ${result.pageSetId}")
-                                }.onFailure { platformMessage = it.message }
+                                platformMessage = null
+                                platformError = try {
+                                    val source = resolveGeneratedPdfAsset(
+                                        context = context,
+                                        assetId = result.pdfAssetId,
+                                        path = result.pdfPath,
+                                    )
+                                    printPdf(
+                                        context,
+                                        source.absolutePath,
+                                        "A2D Smart Pages ${result.pageSetId}",
+                                    )
+                                    null
+                                } catch (failure: Exception) {
+                                    context.getString(R.string.smart_pages_print_failed)
+                                }
                             },
                         ) { Text(stringResource(R.string.smart_pages_print)) }
                     }
