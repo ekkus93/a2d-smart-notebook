@@ -197,20 +197,25 @@ impl PerceptualFingerprintDifference {
                     absolute_difference,
                 });
 
-                let neighbors = [
-                    (column > 0).then_some(index - 1),
-                    (column + 1 < PERCEPTUAL_FINGERPRINT_V1_WIDTH).then_some(index + 1),
-                    (row > 0).then_some(index - PERCEPTUAL_FINGERPRINT_V1_WIDTH),
-                    (row + 1 < PERCEPTUAL_FINGERPRINT_V1_HEIGHT)
-                        .then_some(index + PERCEPTUAL_FINGERPRINT_V1_WIDTH),
-                ];
-                for neighbor in neighbors.into_iter().flatten() {
+                let mut enqueue_if_changed = |neighbor: usize| {
                     if !visited[neighbor]
                         && self.cell_absolute_differences[neighbor] >= threshold
                     {
                         visited[neighbor] = true;
                         pending.push_back(neighbor);
                     }
+                };
+                if column > 0 {
+                    enqueue_if_changed(index - 1);
+                }
+                if column + 1 < PERCEPTUAL_FINGERPRINT_V1_WIDTH {
+                    enqueue_if_changed(index + 1);
+                }
+                if row > 0 {
+                    enqueue_if_changed(index - PERCEPTUAL_FINGERPRINT_V1_WIDTH);
+                }
+                if row + 1 < PERCEPTUAL_FINGERPRINT_V1_HEIGHT {
+                    enqueue_if_changed(index + PERCEPTUAL_FINGERPRINT_V1_WIDTH);
                 }
             }
 
