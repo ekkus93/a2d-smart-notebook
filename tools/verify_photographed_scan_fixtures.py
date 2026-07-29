@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,11 @@ EXPECTED_RELATIONS = {
     "substantially_different",
 }
 HEX_DIGITS = frozenset("0123456789abcdef")
+CALIBRATION_INPUT_HEADER = (
+    "pair_id\texpected_relation\tbaseline_fixture_id\tbaseline_normalized_ocr_path\t"
+    "baseline_pipeline_version\tcandidate_fixture_id\tcandidate_normalized_ocr_path\t"
+    "candidate_pipeline_version\n"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,6 +34,11 @@ def parse_args() -> argparse.Namespace:
         "--manifest",
         type=Path,
         default=Path("fixtures/scans/photographed/manifest.json"),
+    )
+    parser.add_argument(
+        "--calibration-input",
+        type=Path,
+        help="write a validated TSV for the Rust fingerprint calibration reporter",
     )
     return parser.parse_args()
 
@@ -50,25 +61,37 @@ def require_array(value: Any, context: str) -> list[Any]:
 def require_text(obj: dict[str, Any], key: str, context: str) -> str:
     value = obj.get(key)
     require(isinstance(value, str) and value.strip(), f"{context}: missing non-empty {key}")
-    require("\t" not in value and "\r" not in value and "\n" not in value, f"{context}: {key} contains control whitespace")
+    require(
+        "\t" not in value and "\r" not in value and "\n" not in value,
+        f"{context}: {key} contains control whitespace",
+    )
     return value
 
 
 def require_positive_int(obj: dict[str, Any], key: str, context: str) -> int:
     value = obj.get(key)
-    require(isinstance(value, int) and not isinstance(value, bool) and value > 0, f"{context}: {key} must be a positive integer")
+    require(
+        isinstance(value, int) and not isinstance(value, bool) and value > 0,
+        f"{context}: {key} must be a positive integer",
+    )
     return value
 
 
 def require_positive_number(obj: dict[str, Any], key: str, context: str) -> float:
     value = obj.get(key)
-    require(isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0, f"{context}: {key} must be positive")
+    require(
+        isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0,
+        f"{context}: {key} must be positive",
+    )
     return float(value)
 
 
 def require_sha256(obj: dict[str, Any], key: str, context: str) -> str:
     value = require_text(obj, key, context)
-    require(len(value) == 64 and set(value) <= HEX_DIGITS, f"{context}: {key} must be 64 lowercase hexadecimal characters")
+    require(
+        len(value) == 64 and set(value) <= HEX_DIGITS,
+        f"{context}: {key} must be 64 lowercase hexadecimal characters",
+    )
     return value
 
 
@@ -83,7 +106,10 @@ def sha256(path: Path) -> str:
 def resolve_fixture_path(root: Path, relative_path: str, context: str) -> Path:
     relative = Path(relative_path)
     require(not relative.is_absolute(), f"{context}: absolute paths are forbidden")
-    require(relative.parts and all(part not in {"", ".", ".."} for part in relative.parts), f"{context}: path traversal or ambiguous components are forbidden")
+    require(
+        relative.parts and all(part not in {"", ".", ".."} for part in relative.parts),
+        f"{context}: path traversal or ambiguous components are forbidden",
+    )
     resolved = (root / relative).resolve()
     require(resolved.is_relative_to(root), f"{context}: path escapes the photographed fixture root")
     require(resolved.is_file(), f"{context}: missing file {resolved}")
@@ -117,7 +143,10 @@ def verify_fixture(root: Path, value: Any) -> dict[str, Any]:
     require(raw_format in {"jpeg", "png"}, f"{context}: unsupported raw_capture_format")
     normalized_format = require_text(fixture, "normalized_ocr_format", context)
     require(normalized_format == "png", f"{context}: normalized OCR evidence must be PNG")
-    require(fixture.get("normalized_rotation_degrees") == 0, f"{context}: normalized OCR evidence must be upright")
+    require(
+        fixture.get("normalized_rotation_degrees") == 0,
+        f"{context}: normalized OCR evidence must be upright",
+    )
     require_positive_int(fixture, "pipeline_version", context)
 
     verify_file(
@@ -136,7 +165,10 @@ def verify_fixture(root: Path, value: Any) -> dict[str, Any]:
         "normalized_ocr_sha256",
         context,
     )
-    require(normalized_path.suffix.lower() == ".png", f"{context}: normalized OCR path must end in .png")
+    require(
+        normalized_path.suffix.lower() == ".png",
+        f"{context}: normalized OCR path must end in .png",
+    )
 
     source = require_object(fixture.get("source"), f"{context}.source")
     require_text(source, "description", f"{context}.source")
@@ -195,14 +227,53 @@ def verify_pair(value: Any, fixtures: dict[str, dict[str, Any]]) -> str:
 
     require(same_identity, f"{context}: calibration pairs must target the same page identity")
     if relation == "near_duplicate":
-        require(same_sheet and same_revision, f"{context}: near_duplicate requires the same physical sheet and content revision")
+        require(
+            same_sheet and same_revision,
+            f"{context}: near_duplicate requires the same physical sheet and content revision",
+        )
     elif relation == "revision":
-        require(same_sheet and not same_revision, f"{context}: revision requires one physical sheet with different content revisions")
+        require(
+            same_sheet and not same_revision,
+            f"{context}: revision requires one physical sheet with different content revisions",
+        )
     else:
-        require(not (same_sheet and same_revision), f"{context}: substantially_different cannot reuse the same sheet and revision label")
+        require(
+            not (same_sheet and same_revision),
+            f"{context}: substantially_different cannot reuse the same sheet and revision label",
+        )
 
     require_text(pair, "labeling_notes", context)
     return pair_id
+
+
+def write_calibration_input(
+    output_path: Path,
+    fixtures: dict[str, dict[str, Any]],
+    pair_values: list[Any],
+) -> None:
+    require(pair_values, "cannot write calibration input without photographed comparison pairs")
+    output_path = output_path.resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("x", encoding="utf-8", newline="\n") as output:
+        output.write(CALIBRATION_INPUT_HEADER)
+        for value in pair_values:
+            pair = require_object(value, "comparison pair")
+            baseline = fixtures[pair["baseline_fixture_id"]]
+            candidate = fixtures[pair["candidate_fixture_id"]]
+            fields = [
+                pair["id"],
+                pair["expected_relation"],
+                baseline["id"],
+                baseline["normalized_ocr_path"],
+                str(baseline["pipeline_version"]),
+                candidate["id"],
+                candidate["normalized_ocr_path"],
+                str(candidate["pipeline_version"]),
+            ]
+            output.write("\t".join(fields) + "\n")
+        output.flush()
+        os.fsync(output.fileno())
+    print(f"wrote validated calibration input to {output_path}")
 
 
 def main() -> None:
@@ -210,10 +281,16 @@ def main() -> None:
     manifest_path = args.manifest.resolve()
     require(manifest_path.is_file(), f"missing photographed fixture manifest: {manifest_path}")
     root = manifest_path.parent.resolve()
-    manifest = require_object(json.loads(manifest_path.read_text(encoding="utf-8")), "manifest")
+    manifest = require_object(
+        json.loads(manifest_path.read_text(encoding="utf-8")),
+        "manifest",
+    )
 
     require(manifest.get("schema_version") == 1, "unsupported photographed fixture manifest schema")
-    require(manifest.get("photographed") is True, "photographed fixture manifest must set photographed=true")
+    require(
+        manifest.get("photographed") is True,
+        "photographed fixture manifest must set photographed=true",
+    )
     fixture_values = require_array(manifest.get("fixtures"), "manifest.fixtures")
     pair_values = require_array(manifest.get("comparison_pairs"), "manifest.comparison_pairs")
 
@@ -227,7 +304,10 @@ def main() -> None:
         raw_path = fixture["raw_capture_path"]
         normalized_path = fixture["normalized_ocr_path"]
         require(raw_path not in raw_paths, f"duplicate raw capture path: {raw_path}")
-        require(normalized_path not in normalized_paths, f"duplicate normalized OCR path: {normalized_path}")
+        require(
+            normalized_path not in normalized_paths,
+            f"duplicate normalized OCR path: {normalized_path}",
+        )
         fixtures[fixture_id] = fixture
         raw_paths.add(raw_path)
         normalized_paths.add(normalized_path)
@@ -239,12 +319,21 @@ def main() -> None:
         pair = require_object(value, f"comparison pair {pair_id}")
         key = tuple(sorted((pair["baseline_fixture_id"], pair["candidate_fixture_id"])))
         require(pair_id not in pair_ids, f"duplicate comparison pair id: {pair_id}")
-        require(key not in pair_keys, f"duplicate unordered comparison pair: {key[0]} / {key[1]}")
+        require(
+            key not in pair_keys,
+            f"duplicate unordered comparison pair: {key[0]} / {key[1]}",
+        )
         pair_ids.add(pair_id)
         pair_keys.add(key)
 
+    if args.calibration_input is not None:
+        write_calibration_input(args.calibration_input, fixtures, pair_values)
+
     if pair_values:
-        print(f"verified {len(fixtures)} photographed fixtures and {len(pair_values)} labeled comparison pairs")
+        print(
+            f"verified {len(fixtures)} photographed fixtures and "
+            f"{len(pair_values)} labeled comparison pairs"
+        )
     else:
         print("verified photographed fixture manifest; no photographed calibration pairs are committed")
 
