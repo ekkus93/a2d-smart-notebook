@@ -98,7 +98,7 @@ jobs:
           if-no-files-found: error
 
   android-shared-analysis:
-    name: Android emulator (scanner, QR recovery, FFI panic containment)
+    name: Android emulator (scanner, recovery, FFI panic containment)
     needs: android
     runs-on: ubuntu-latest
     env:
@@ -133,7 +133,7 @@ jobs:
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Prepare CI-only feature-enabled FFI panic test build
         run: bash ./tools/prepare-android-ffi-panic-test.sh
-      - name: Run scanner, QR recovery, and panic-containment tests
+      - name: Run scanner, recovery, and panic-containment tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -147,7 +147,7 @@ jobs:
           script: >-
             cd apps/android &&
             ./gradlew connectedDebugAndroidTest --no-daemon
-            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.PanicPropagationTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.GeneratedPdfAssetValidationTest,com.a2d.notebook.app.PanicPropagationTest
       - name: Upload Android instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
