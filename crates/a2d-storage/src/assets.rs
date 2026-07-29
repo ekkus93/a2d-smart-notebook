@@ -19,7 +19,10 @@
 //! └── tmp/
 //! ```
 
-use std::io::Write;
+#[path = "asset_platform.rs"]
+mod platform;
+
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use a2d_domain::{
@@ -30,11 +33,20 @@ use sha2::{Digest, Sha256};
 
 use crate::AssetPersistenceFailureStage;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CommitFault {
+    None,
+    FileSync,
+    DestinationDirectorySync,
+    TempDirectorySync,
+    PermissionSet,
+}
+
 pub struct AssetStore {
     root: PathBuf,
 }
 
-fn map_io_error(context: &str, err: std::io::Error) -> A2dError {
+fn map_io_error(context: &str, err: io::Error) -> A2dError {
     A2dError::new(
         ErrorCode::new("STORAGE_ASSET_IO_ERROR"),
         ErrorCategory::Storage,
@@ -44,6 +56,20 @@ fn map_io_error(context: &str, err: std::io::Error) -> A2dError {
         true,
     )
     .with_detail("context", context)
+    .with_detail("io_error_kind", format!("{:?}", err.kind()))
+}
+
+fn stage_io_error(code: &'static str, context: &str, err: io::Error) -> A2dError {
+    A2dError::new(
+        ErrorCode::new(code),
+        ErrorCategory::Storage,
+        ErrorSeverity::Error,
+        "error.storage.asset_io",
+        format!("{context}: {err}"),
+        true,
+    )
+    .with_detail("context", context)
+    .with_detail("io_error_kind", format!("{:?}", err.kind()))
 }
 
 fn integrity_error(code: &'static str, message: impl Into<String>) -> A2dError {
@@ -57,6 +83,54 @@ fn integrity_error(code: &'static str, message: impl Into<String>) -> A2dError {
     )
 }
 
+fn map_finalization_error(temp_path: &Path, final_path: &Path, error: io::Error) -> A2dError {
+    let mapped = match error.kind() {
+        io::ErrorKind::AlreadyExists => integrity_error(
+            "STORAGE_ASSET_FINAL_PATH_COLLISION",
+            "asset final path already exists; existing content was not replaced",
+        ),
+        io::ErrorKind::Unsupported | io::ErrorKind::CrossesDevices => A2dError::new(
+            ErrorCode::new("STORAGE_ASSET_FINALIZATION_UNSUPPORTED"),
+            ErrorCategory::PlatformAdapter,
+            ErrorSeverity::Error,
+            "error.storage.asset_finalization_unsupported",
+            format!(
+                "the platform or filesystem cannot provide required same-filesystem no-replace asset finalization: {error}"
+            ),
+            false,
+        ),
+        _ => stage_io_error(
+            "STORAGE_ASSET_FINALIZATION_FAILED",
+            "atomically finalizing the asset without replacement",
+            error,
+        ),
+    };
+    mapped
+        .with_detail("temp_path", temp_path.to_string_lossy())
+        .with_detail("final_path", final_path.to_string_lossy())
+}
+
+fn map_directory_sync_error(
+    code: &'static str,
+    context: &str,
+    directory: &Path,
+    error: io::Error,
+) -> A2dError {
+    let mapped = if error.kind() == io::ErrorKind::Unsupported {
+        A2dError::new(
+            ErrorCode::new("STORAGE_DIRECTORY_SYNC_UNSUPPORTED"),
+            ErrorCategory::PlatformAdapter,
+            ErrorSeverity::Error,
+            "error.storage.directory_sync_unsupported",
+            format!("the platform cannot provide required asset directory synchronization: {error}"),
+            false,
+        )
+    } else {
+        stage_io_error(code, context, error)
+    };
+    mapped.with_detail("directory", directory.to_string_lossy())
+}
+
 fn asset_kind_dir(kind: AssetKind) -> &'static str {
     match kind {
         AssetKind::Original => "originals",
@@ -64,6 +138,20 @@ fn asset_kind_dir(kind: AssetKind) -> &'static str {
         AssetKind::Ocr => "ocr",
         AssetKind::Thumbnail => "thumbnails",
         AssetKind::Export => "exports",
+    }
+}
+
+fn maybe_inject_fault(
+    configured: CommitFault,
+    requested: CommitFault,
+    operation: &'static str,
+) -> io::Result<()> {
+    if configured == requested {
+        Err(io::Error::other(format!(
+            "injected FIX-021 test failure during {operation}"
+        )))
+    } else {
+        Ok(())
     }
 }
 
@@ -102,7 +190,7 @@ impl AssetStore {
     pub fn resolve(&self, relative_path: &str) -> Result<PathBuf, A2dError> {
         let candidate = self.root.join(relative_path);
         let metadata = std::fs::symlink_metadata(&candidate).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
+            if error.kind() == io::ErrorKind::NotFound {
                 A2dError::new(
                     ErrorCode::new("STORAGE_ASSET_MISSING"),
                     ErrorCategory::Integrity,
@@ -149,15 +237,22 @@ impl AssetStore {
         Ok(canonical_candidate)
     }
 
-    /// Runs the durable no-replace asset commit protocol for in-memory `data`, returning an
-    /// `Asset` value the caller may insert into SQLite only after this function succeeds.
+    /// Runs the no-replace asset filesystem commit protocol for in-memory `data`, returning an
+    /// `Asset` value the caller may insert into SQLite only after every required synchronization
+    /// and verification step succeeds.
     pub fn commit(
         &self,
         data: &[u8],
         kind: AssetKind,
         media_type: impl Into<String>,
     ) -> Result<Asset, A2dError> {
-        self.commit_with_id(AssetId::try_generate()?, data, kind, media_type.into())
+        self.commit_with_id_and_fault(
+            AssetId::try_generate()?,
+            data,
+            kind,
+            media_type.into(),
+            CommitFault::None,
+        )
     }
 
     /// Test-only deterministic entry point for collision and interruption coverage. Production
@@ -170,19 +265,78 @@ impl AssetStore {
         kind: AssetKind,
         media_type: impl Into<String>,
     ) -> Result<Asset, A2dError> {
-        self.commit_with_id(id, data, kind, media_type.into())
+        self.commit_with_id_and_fault(id, data, kind, media_type.into(), CommitFault::None)
     }
 
-    /// The final path is created with a hard link from the synchronized temp inode. Hard-link
-    /// creation is atomic, remains on the same filesystem, and fails rather than replacing an
-    /// existing destination. Android and Apple targets are Unix platforms; on Unix, both the
-    /// destination and temp directories are synchronized before success is returned.
-    fn commit_with_id(
+    #[cfg(feature = "test-util")]
+    pub fn commit_with_file_sync_failure_for_test(
+        &self,
+        id: AssetId,
+        data: &[u8],
+        kind: AssetKind,
+        media_type: impl Into<String>,
+    ) -> Result<Asset, A2dError> {
+        self.commit_with_id_and_fault(id, data, kind, media_type.into(), CommitFault::FileSync)
+    }
+
+    #[cfg(feature = "test-util")]
+    pub fn commit_with_destination_directory_sync_failure_for_test(
+        &self,
+        id: AssetId,
+        data: &[u8],
+        kind: AssetKind,
+        media_type: impl Into<String>,
+    ) -> Result<Asset, A2dError> {
+        self.commit_with_id_and_fault(
+            id,
+            data,
+            kind,
+            media_type.into(),
+            CommitFault::DestinationDirectorySync,
+        )
+    }
+
+    #[cfg(feature = "test-util")]
+    pub fn commit_with_temp_directory_sync_failure_for_test(
+        &self,
+        id: AssetId,
+        data: &[u8],
+        kind: AssetKind,
+        media_type: impl Into<String>,
+    ) -> Result<Asset, A2dError> {
+        self.commit_with_id_and_fault(
+            id,
+            data,
+            kind,
+            media_type.into(),
+            CommitFault::TempDirectorySync,
+        )
+    }
+
+    #[cfg(feature = "test-util")]
+    pub fn commit_with_permission_failure_for_test(
+        &self,
+        id: AssetId,
+        data: &[u8],
+        kind: AssetKind,
+        media_type: impl Into<String>,
+    ) -> Result<Asset, A2dError> {
+        self.commit_with_id_and_fault(
+            id,
+            data,
+            kind,
+            media_type.into(),
+            CommitFault::PermissionSet,
+        )
+    }
+
+    fn commit_with_id_and_fault(
         &self,
         id: AssetId,
         data: &[u8],
         kind: AssetKind,
         media_type: String,
+        fault: CommitFault,
     ) -> Result<Asset, A2dError> {
         let byte_length = u64::try_from(data.len()).map_err(|_| {
             integrity_error(
@@ -192,8 +346,6 @@ impl AssetStore {
             .with_detail("asset_id", id.to_string())
         })?;
         let expected_hash = hex_sha256(data);
-        // Resolve the canonical timestamp before creating a temp file. A clock failure therefore
-        // leaves no filesystem mutation and cannot produce an asset with an invented zero time.
         let created_at_ms = system_now_ms()?;
         let tmp_path = self.tmp_dir().join(format!("{id}.tmp"));
         let relative_path = format!("assets/{}/{id}", asset_kind_dir(kind));
@@ -204,7 +356,7 @@ impl AssetStore {
             .create_new(true)
             .open(&tmp_path)
             .map_err(|error| {
-                let already_exists = error.kind() == std::io::ErrorKind::AlreadyExists;
+                let already_exists = error.kind() == io::ErrorKind::AlreadyExists;
                 with_persistence_details(
                     A2dError::new(
                         ErrorCode::new(if already_exists {
@@ -241,10 +393,7 @@ impl AssetStore {
         if let Err(error) = file.write_all(data) {
             drop(file);
             return Err(with_persistence_details(
-                with_cleanup_result(
-                    map_io_error("writing the asset temp file", error),
-                    &tmp_path,
-                ),
+                with_cleanup_result(map_io_error("writing the asset temp file", error), &tmp_path),
                 AssetPersistenceFailureStage::BeforeFinalization,
                 &id,
                 kind,
@@ -258,10 +407,7 @@ impl AssetStore {
         if let Err(error) = file.flush() {
             drop(file);
             return Err(with_persistence_details(
-                with_cleanup_result(
-                    map_io_error("flushing the asset temp file", error),
-                    &tmp_path,
-                ),
+                with_cleanup_result(map_io_error("flushing the asset temp file", error), &tmp_path),
                 AssetPersistenceFailureStage::BeforeFinalization,
                 &id,
                 kind,
@@ -297,11 +443,22 @@ impl AssetStore {
             };
             let mut permissions = metadata.permissions();
             permissions.set_readonly(true);
-            if let Err(error) = std::fs::set_permissions(&tmp_path, permissions) {
+            let permission_result = maybe_inject_fault(
+                fault,
+                CommitFault::PermissionSet,
+                "setting immutable original permissions",
+            )
+            .and_then(|()| file.set_permissions(permissions));
+            if let Err(error) = permission_result {
                 drop(file);
                 return Err(with_persistence_details(
                     with_cleanup_result(
-                        map_io_error("marking the original asset read-only", error),
+                        stage_io_error(
+                            "STORAGE_ASSET_PERMISSION_SET_FAILED",
+                            "marking the original asset read-only",
+                            error,
+                        )
+                        .with_detail("final_path", final_path.to_string_lossy()),
                         &tmp_path,
                     ),
                     AssetPersistenceFailureStage::BeforeFinalization,
@@ -315,11 +472,22 @@ impl AssetStore {
                 ));
             }
         }
-        if let Err(error) = file.sync_all() {
+
+        let file_sync_result = maybe_inject_fault(
+            fault,
+            CommitFault::FileSync,
+            "synchronizing the asset temp file",
+        )
+        .and_then(|()| file.sync_all());
+        if let Err(error) = file_sync_result {
             drop(file);
             return Err(with_persistence_details(
                 with_cleanup_result(
-                    map_io_error("synchronizing the asset temp file", error),
+                    stage_io_error(
+                        "STORAGE_ASSET_FILE_SYNC_FAILED",
+                        "synchronizing the asset temp file",
+                        error,
+                    ),
                     &tmp_path,
                 ),
                 AssetPersistenceFailureStage::BeforeFinalization,
@@ -416,18 +584,12 @@ impl AssetStore {
             ));
         }
 
-        if let Err(error) = std::fs::hard_link(&tmp_path, &final_path) {
-            let mapped = if error.kind() == std::io::ErrorKind::AlreadyExists {
-                integrity_error(
-                    "STORAGE_ASSET_FINAL_PATH_COLLISION",
-                    "asset final path already exists; existing content was not replaced",
-                )
-            } else {
-                map_io_error("atomically finalizing the asset without replacement", error)
-            };
+        if let Err(error) = platform::finalize_no_replace(&tmp_path, &final_path) {
             return Err(with_persistence_details(
-                with_cleanup_result(mapped, &tmp_path)
-                    .with_detail("final_path", final_path.to_string_lossy()),
+                with_cleanup_result(
+                    map_finalization_error(&tmp_path, &final_path, error),
+                    &tmp_path,
+                ),
                 AssetPersistenceFailureStage::BeforeFinalization,
                 &id,
                 kind,
@@ -441,7 +603,9 @@ impl AssetStore {
 
         if let Err(error) = verify_finalized_metadata(&final_path, byte_length, immutable) {
             return Err(with_persistence_details(
-                error.with_detail("final_path", final_path.to_string_lossy()),
+                error
+                    .with_detail("temp_path", tmp_path.to_string_lossy())
+                    .with_detail("final_path", final_path.to_string_lossy()),
                 AssetPersistenceFailureStage::FinalizedUnregistered,
                 &id,
                 kind,
@@ -453,11 +617,23 @@ impl AssetStore {
             ));
         }
 
-        if let Err(error) = sync_directory(&self.kind_dir(kind)) {
+        let destination_directory = self.kind_dir(kind);
+        let destination_sync_result = maybe_inject_fault(
+            fault,
+            CommitFault::DestinationDirectorySync,
+            "synchronizing the destination asset directory",
+        )
+        .and_then(|()| platform::sync_directory(&destination_directory));
+        if let Err(error) = destination_sync_result {
             return Err(with_persistence_details(
-                error
-                    .with_detail("temp_path", tmp_path.to_string_lossy())
-                    .with_detail("final_path", final_path.to_string_lossy()),
+                map_directory_sync_error(
+                    "STORAGE_ASSET_DESTINATION_DIRECTORY_SYNC_FAILED",
+                    "synchronizing the destination asset directory",
+                    &destination_directory,
+                    error,
+                )
+                .with_detail("temp_path", tmp_path.to_string_lossy())
+                .with_detail("final_path", final_path.to_string_lossy()),
                 AssetPersistenceFailureStage::FinalizedUnregistered,
                 &id,
                 kind,
@@ -485,13 +661,26 @@ impl AssetStore {
                 true,
             ));
         }
-        if let Err(error) = sync_directory(&self.tmp_dir()) {
+
+        let temp_directory = self.tmp_dir();
+        let temp_sync_result = maybe_inject_fault(
+            fault,
+            CommitFault::TempDirectorySync,
+            "synchronizing the temporary asset directory",
+        )
+        .and_then(|()| platform::sync_directory(&temp_directory));
+        if let Err(error) = temp_sync_result {
             return Err(with_persistence_details(
-                error
-                    .with_detail("temp_path", tmp_path.to_string_lossy())
-                    .with_detail("final_path", final_path.to_string_lossy())
-                    .with_detail("temp_cleanup_completed", "true")
-                    .with_detail("temp_directory_sync_completed", "false"),
+                map_directory_sync_error(
+                    "STORAGE_ASSET_TEMP_DIRECTORY_SYNC_FAILED",
+                    "synchronizing the temporary asset directory",
+                    &temp_directory,
+                    error,
+                )
+                .with_detail("temp_path", tmp_path.to_string_lossy())
+                .with_detail("final_path", final_path.to_string_lossy())
+                .with_detail("temp_cleanup_completed", "true")
+                .with_detail("temp_directory_sync_completed", "false"),
                 AssetPersistenceFailureStage::FinalizedUnregistered,
                 &id,
                 kind,
@@ -606,7 +795,7 @@ fn with_cleanup_result(error: A2dError, tmp_path: &Path) -> A2dError {
         Ok(()) => error
             .with_detail("temp_path", tmp_path.to_string_lossy())
             .with_detail("temp_cleanup_completed", "true"),
-        Err(cleanup_error) if cleanup_error.kind() == std::io::ErrorKind::NotFound => error
+        Err(cleanup_error) if cleanup_error.kind() == io::ErrorKind::NotFound => error
             .with_detail("temp_path", tmp_path.to_string_lossy())
             .with_detail("temp_cleanup_completed", "true"),
         Err(cleanup_error) => error
@@ -644,26 +833,6 @@ fn verify_finalized_metadata(
         ));
     }
     Ok(())
-}
-
-#[cfg(unix)]
-fn sync_directory(path: &Path) -> Result<(), A2dError> {
-    std::fs::File::open(path)
-        .and_then(|directory| directory.sync_all())
-        .map_err(|error| map_io_error("synchronizing an asset directory", error))
-}
-
-#[cfg(not(unix))]
-fn sync_directory(path: &Path) -> Result<(), A2dError> {
-    Err(A2dError::new(
-        ErrorCode::new("STORAGE_DIRECTORY_SYNC_UNSUPPORTED"),
-        ErrorCategory::PlatformAdapter,
-        ErrorSeverity::Error,
-        "error.storage.directory_sync_unsupported",
-        "this platform cannot provide the required asset directory synchronization semantics",
-        false,
-    )
-    .with_detail("directory", path.to_string_lossy()))
 }
 
 fn hex_sha256(data: &[u8]) -> String {
