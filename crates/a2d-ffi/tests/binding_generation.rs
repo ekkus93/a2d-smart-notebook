@@ -81,9 +81,10 @@ fn temp_out_dir(label: &str) -> PathBuf {
     dir
 }
 
-const EXPECTED_API_SYMBOLS: [&str; 19] = [
+const EXPECTED_API_SYMBOLS: [&str; 20] = [
     "A2dClient",
     "OpenLibraryRequest",
+    "A2dFfiErrorDetail",
     "generatePageId",
     "parsePageId",
     "generateExampleSmartPageQrPayload",
