@@ -114,12 +114,9 @@ fn audited_change_synchronizes_page_pointer_scan_flags_and_audit_event() {
             operation_id.clone(),
         ))
         .unwrap();
-    assert_eq!(result.page_id, *page.id());
-    assert_eq!(
-        result.previous_preferred_scan_id,
-        Some(first.id().clone())
-    );
-    assert_eq!(result.preferred_scan_id, *second.id());
+    assert_eq!(result.page_id, page.id().clone());
+    assert_eq!(result.previous_preferred_scan_id, Some(first.id().clone()));
+    assert_eq!(result.preferred_scan_id, second.id().clone());
     assert!(result.changed);
     assert_eq!(result.audit_event_id, Some(operation_id.clone()));
 
@@ -136,7 +133,11 @@ fn audited_change_synchronizes_page_pointer_scan_flags_and_audit_event() {
     assert_eq!(audit.occurred_at_ms, 400);
     assert_eq!(audit.event_kind, "scan.preferred_changed");
     assert_eq!(audit.actor, "integration-test");
-    assert_eq!(audit.subject.as_deref(), Some(page.id().to_string().as_str()));
+    let expected_page_subject = page.id().to_string();
+    assert_eq!(
+        audit.subject.as_deref(),
+        Some(expected_page_subject.as_str())
+    );
     assert_eq!(audit.correlation_id, Some(operation_id.to_string()));
     assert_eq!(
         audit.details.get("previous_preferred_scan_id"),
