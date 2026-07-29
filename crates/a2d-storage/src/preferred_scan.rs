@@ -90,7 +90,7 @@ fn validate_current_state(conn: &Connection, page: &Page) -> Result<(), A2dError
                 .with_detail("page_id", page.id().to_string())
                 .with_detail("preferred_scan_id", scan_id.to_string())
             })?;
-            if scan.page_id != *page.id() || !scan.preferred || count != 1 {
+            if &scan.page_id != page.id() || !scan.preferred || count != 1 {
                 return Err(preferred_scan_error(
                     "STORAGE_PREFERRED_SCAN_STATE_INCONSISTENT",
                     ErrorCategory::Integrity,
@@ -192,7 +192,10 @@ fn map_preferred_update_error(error: rusqlite::Error) -> A2dError {
             ErrorCategory::Integrity,
             "schema rejected a preferred scan that belongs to another page",
         )
-        .with_detail("sqlite_trigger", "preferred_scan_page_ownership_before_update");
+        .with_detail(
+            "sqlite_trigger",
+            "preferred_scan_page_ownership_before_update",
+        );
     }
     if message.contains("A2D_PREFERRED_SCAN_FLAG_MISMATCH") {
         return preferred_scan_error(
@@ -200,7 +203,10 @@ fn map_preferred_update_error(error: rusqlite::Error) -> A2dError {
             ErrorCategory::Integrity,
             "schema rejected a preferred-scan flag mutation inconsistent with the page pointer",
         )
-        .with_detail("sqlite_trigger", "preferred_scan_flag_update_requires_page_pointer");
+        .with_detail(
+            "sqlite_trigger",
+            "preferred_scan_flag_update_requires_page_pointer",
+        );
     }
     map_sql_error("change_preferred_scan", error)
 }
