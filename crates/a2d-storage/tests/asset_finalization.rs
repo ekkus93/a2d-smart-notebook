@@ -4,7 +4,10 @@ use a2d_domain::{AssetId, AssetKind, ErrorCategory, ErrorSeverity};
 use a2d_storage::{AssetRepository, AssetStore, Storage};
 
 fn temp_dir(label: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("a2d-asset-finalization-{label}-{}", AssetId::generate()))
+    std::env::temp_dir().join(format!(
+        "a2d-asset-finalization-{label}-{}",
+        AssetId::generate()
+    ))
 }
 
 fn final_path(root: &std::path::Path, kind: &str, id: &AssetId) -> std::path::PathBuf {
@@ -27,6 +30,8 @@ fn an_existing_destination_is_never_overwritten_and_reports_a_critical_collision
         .unwrap();
     let destination = root.join(&first.relative_path);
     let original_bytes = std::fs::read(&destination).unwrap();
+    let expected_id = id.to_string();
+    let expected_destination = destination.to_string_lossy().into_owned();
 
     let error = store
         .commit_with_id_for_test(
@@ -40,11 +45,8 @@ fn an_existing_destination_is_never_overwritten_and_reports_a_critical_collision
     assert_eq!(error.code.to_string(), "STORAGE_ASSET_FINAL_PATH_COLLISION");
     assert_eq!(error.category, ErrorCategory::Integrity);
     assert_eq!(error.severity, ErrorSeverity::Critical);
-    assert_eq!(error.details.get("asset_id"), Some(&id.to_string()));
-    assert_eq!(
-        error.details.get("final_path"),
-        Some(&destination.to_string_lossy().into_owned())
-    );
+    assert_eq!(error.details.get("asset_id"), Some(&expected_id));
+    assert_eq!(error.details.get("final_path"), Some(&expected_destination));
     assert_eq!(std::fs::read(&destination).unwrap(), original_bytes);
     assert!(!root.join("tmp").join(format!("{id}.tmp")).exists());
 
@@ -69,11 +71,17 @@ fn a_forced_file_sync_failure_returns_before_finalization_and_creates_no_databas
 
     assert_eq!(error.code.to_string(), "STORAGE_ASSET_FILE_SYNC_FAILED");
     assert_eq!(
-        error.details.get("asset_commit_failure_stage").map(String::as_str),
+        error
+            .details
+            .get("asset_commit_failure_stage")
+            .map(String::as_str),
         Some("before_finalization")
     );
     assert_eq!(
-        error.details.get("file_sync_completed").map(String::as_str),
+        error
+            .details
+            .get("file_sync_completed")
+            .map(String::as_str),
         Some("false")
     );
     assert_eq!(storage.get_asset(&id).unwrap(), None);
@@ -105,15 +113,24 @@ fn a_forced_destination_directory_sync_failure_reports_a_finalized_unregistered_
         "STORAGE_ASSET_DESTINATION_DIRECTORY_SYNC_FAILED"
     );
     assert_eq!(
-        error.details.get("asset_commit_failure_stage").map(String::as_str),
+        error
+            .details
+            .get("asset_commit_failure_stage")
+            .map(String::as_str),
         Some("finalized_unregistered")
     );
     assert_eq!(
-        error.details.get("file_sync_completed").map(String::as_str),
+        error
+            .details
+            .get("file_sync_completed")
+            .map(String::as_str),
         Some("true")
     );
     assert_eq!(
-        error.details.get("directory_sync_completed").map(String::as_str),
+        error
+            .details
+            .get("directory_sync_completed")
+            .map(String::as_str),
         Some("false")
     );
     assert_eq!(std::fs::read(&destination).unwrap(), expected);
@@ -143,11 +160,17 @@ fn a_forced_temp_directory_sync_failure_preserves_the_final_asset_and_reports_cl
         "STORAGE_ASSET_TEMP_DIRECTORY_SYNC_FAILED"
     );
     assert_eq!(
-        error.details.get("asset_commit_failure_stage").map(String::as_str),
+        error
+            .details
+            .get("asset_commit_failure_stage")
+            .map(String::as_str),
         Some("finalized_unregistered")
     );
     assert_eq!(
-        error.details.get("temp_cleanup_completed").map(String::as_str),
+        error
+            .details
+            .get("temp_cleanup_completed")
+            .map(String::as_str),
         Some("true")
     );
     assert_eq!(
@@ -157,7 +180,10 @@ fn a_forced_temp_directory_sync_failure_preserves_the_final_asset_and_reports_cl
             .map(String::as_str),
         Some("false")
     );
-    assert_eq!(std::fs::read(final_path(&root, "exports", &id)).unwrap(), expected);
+    assert_eq!(
+        std::fs::read(final_path(&root, "exports", &id)).unwrap(),
+        expected
+    );
     assert!(!root.join("tmp").join(format!("{id}.tmp")).exists());
 
     std::fs::remove_dir_all(root).unwrap();
@@ -169,6 +195,9 @@ fn a_forced_permission_failure_reports_the_asset_id_and_planned_final_path() {
     let store = AssetStore::open(&root).unwrap();
     let id = AssetId::generate();
     let destination = final_path(&root, "originals", &id);
+    let expected_id = id.to_string();
+    let expected_destination = destination.to_string_lossy().into_owned();
+    let expected_relative_path = format!("assets/originals/{id}");
 
     let error = store
         .commit_with_permission_failure_for_test(
@@ -180,14 +209,11 @@ fn a_forced_permission_failure_reports_the_asset_id_and_planned_final_path() {
         .unwrap_err();
 
     assert_eq!(error.code.to_string(), "STORAGE_ASSET_PERMISSION_SET_FAILED");
-    assert_eq!(error.details.get("asset_id"), Some(&id.to_string()));
+    assert_eq!(error.details.get("asset_id"), Some(&expected_id));
+    assert_eq!(error.details.get("final_path"), Some(&expected_destination));
     assert_eq!(
-        error.details.get("final_path"),
-        Some(&destination.to_string_lossy().into_owned())
-    );
-    assert_eq!(
-        error.details.get("final_relative_path").map(String::as_str),
-        Some(format!("assets/originals/{id}").as_str())
+        error.details.get("final_relative_path"),
+        Some(&expected_relative_path)
     );
     assert!(!destination.exists());
     assert!(!root.join("tmp").join(format!("{id}.tmp")).exists());
