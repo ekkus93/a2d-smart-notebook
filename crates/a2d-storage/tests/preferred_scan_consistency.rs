@@ -7,10 +7,7 @@ use a2d_domain::{
 use a2d_storage::{AssetRepository, AssetStore, PageRepository, ScanRepository, Storage};
 
 fn temp_dir(label: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!(
-        "a2d-preferred-scan-{label}-{}",
-        PageId::generate()
-    ))
+    std::env::temp_dir().join(format!("a2d-preferred-scan-{label}-{}", PageId::generate()))
 }
 
 fn page(created_at_ms: i64) -> Page {
@@ -146,13 +143,7 @@ fn audited_change_rejects_a_scan_owned_by_another_page() {
     storage.insert_scan(&scan_b).unwrap();
 
     let error = storage
-        .change_preferred_scan(
-            page_a.id(),
-            scan_b.id(),
-            300,
-            "integration-test",
-            None,
-        )
+        .change_preferred_scan(page_a.id(), scan_b.id(), 300, "integration-test", None)
         .unwrap_err();
     assert_eq!(
         error.code.to_string(),
@@ -191,7 +182,10 @@ fn audited_change_rejects_unknown_records_and_invalid_audit_context() {
             None,
         )
         .unwrap_err();
-    assert_eq!(unknown_scan_error.code.to_string(), "STORAGE_SCAN_NOT_FOUND");
+    assert_eq!(
+        unknown_scan_error.code.to_string(),
+        "STORAGE_SCAN_NOT_FOUND"
+    );
 
     let unknown_page_error = storage
         .change_preferred_scan(
@@ -202,7 +196,10 @@ fn audited_change_rejects_unknown_records_and_invalid_audit_context() {
             None,
         )
         .unwrap_err();
-    assert_eq!(unknown_page_error.code.to_string(), "STORAGE_PAGE_NOT_FOUND");
+    assert_eq!(
+        unknown_page_error.code.to_string(),
+        "STORAGE_PAGE_NOT_FOUND"
+    );
 
     let invalid_time = storage
         .change_preferred_scan(page.id(), known.id(), 0, "integration-test", None)
@@ -221,7 +218,11 @@ fn audited_change_rejects_unknown_records_and_invalid_audit_context() {
     );
 
     assert_eq!(
-        storage.get_page(page.id()).unwrap().unwrap().preferred_scan_id,
+        storage
+            .get_page(page.id())
+            .unwrap()
+            .unwrap()
+            .preferred_scan_id,
         Some(known.id().clone())
     );
     assert!(storage.get_scan(known.id()).unwrap().unwrap().preferred);
@@ -253,7 +254,11 @@ fn low_level_page_pointer_update_is_still_guarded_by_the_schema() {
         .unwrap_err();
     assert!(error.code.to_string().contains("CONSTRAINT"));
     assert_eq!(
-        storage.get_page(page_a.id()).unwrap().unwrap().preferred_scan_id,
+        storage
+            .get_page(page_a.id())
+            .unwrap()
+            .unwrap()
+            .preferred_scan_id,
         Some(scan_a.id().clone())
     );
     assert!(storage.get_scan(scan_a.id()).unwrap().unwrap().preferred);

@@ -140,18 +140,13 @@ fn final_path_collision_never_replaces_existing_asset_bytes() {
     let replacement_byte_length = replacement.len().to_string();
 
     let error = store
-        .commit_with_id_for_test(
-            id.clone(),
-            replacement,
-            AssetKind::Corrected,
-            "image/png",
-        )
+        .commit_with_id_for_test(id.clone(), replacement, AssetKind::Corrected, "image/png")
         .unwrap_err();
+    assert_eq!(error.code.to_string(), "STORAGE_ASSET_FINAL_PATH_COLLISION");
     assert_eq!(
-        error.code.to_string(),
-        "STORAGE_ASSET_FINAL_PATH_COLLISION"
+        std::fs::read(&final_path).unwrap(),
+        b"first immutable content"
     );
-    assert_eq!(std::fs::read(&final_path).unwrap(), b"first immutable content");
     assert_eq!(
         error.details.get("asset_id").map(String::as_str),
         Some(id.as_str())
@@ -164,10 +159,7 @@ fn final_path_collision_never_replaces_existing_asset_bytes() {
         Some("before_finalization")
     );
     assert_eq!(
-        error
-            .details
-            .get("final_relative_path")
-            .map(String::as_str),
+        error.details.get("final_relative_path").map(String::as_str),
         Some(first.relative_path.as_str())
     );
     assert_eq!(
@@ -179,17 +171,11 @@ fn final_path_collision_never_replaces_existing_asset_bytes() {
         Some(replacement_byte_length.as_str())
     );
     assert_eq!(
-        error
-            .details
-            .get("final_file_created")
-            .map(String::as_str),
+        error.details.get("final_file_created").map(String::as_str),
         Some("false")
     );
     assert_eq!(
-        error
-            .details
-            .get("file_sync_completed")
-            .map(String::as_str),
+        error.details.get("file_sync_completed").map(String::as_str),
         Some("true")
     );
     assert_eq!(
@@ -224,17 +210,9 @@ fn temp_path_collision_preserves_the_existing_temp_file() {
     let new_byte_length = new_bytes.len().to_string();
 
     let error = store
-        .commit_with_id_for_test(
-            id.clone(),
-            new_bytes,
-            AssetKind::Thumbnail,
-            "image/png",
-        )
+        .commit_with_id_for_test(id.clone(), new_bytes, AssetKind::Thumbnail, "image/png")
         .unwrap_err();
-    assert_eq!(
-        error.code.to_string(),
-        "STORAGE_ASSET_TEMP_PATH_COLLISION"
-    );
+    assert_eq!(error.code.to_string(), "STORAGE_ASSET_TEMP_PATH_COLLISION");
     assert_eq!(
         std::fs::read(&temp_path).unwrap(),
         b"pre-existing recovery data"
@@ -251,10 +229,7 @@ fn temp_path_collision_preserves_the_existing_temp_file() {
         Some("before_finalization")
     );
     assert_eq!(
-        error
-            .details
-            .get("final_relative_path")
-            .map(String::as_str),
+        error.details.get("final_relative_path").map(String::as_str),
         Some("assets/thumbnails/00000000000000000000000001")
     );
     assert_eq!(
@@ -266,17 +241,11 @@ fn temp_path_collision_preserves_the_existing_temp_file() {
         Some(new_byte_length.as_str())
     );
     assert_eq!(
-        error
-            .details
-            .get("final_file_created")
-            .map(String::as_str),
+        error.details.get("final_file_created").map(String::as_str),
         Some("false")
     );
     assert_eq!(
-        error
-            .details
-            .get("file_sync_completed")
-            .map(String::as_str),
+        error.details.get("file_sync_completed").map(String::as_str),
         Some("false")
     );
     assert_eq!(

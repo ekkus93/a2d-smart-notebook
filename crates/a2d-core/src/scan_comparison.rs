@@ -37,9 +37,7 @@ impl StoredScanComparisonConfidence {
     pub const fn code(self) -> &'static str {
         match self {
             Self::ConclusiveExactMatch => "CONCLUSIVE_EXACT_MATCH",
-            Self::UnavailableUntilFixtureCalibration => {
-                "UNAVAILABLE_UNTIL_FIXTURE_CALIBRATION"
-            }
+            Self::UnavailableUntilFixtureCalibration => "UNAVAILABLE_UNTIL_FIXTURE_CALIBRATION",
         }
     }
 }
@@ -164,8 +162,7 @@ impl A2dCore {
             .with_detail("scan_id", request.baseline_scan_id.to_string()));
         }
 
-        let config =
-            ScanContentComparisonConfig::new(request.minimum_cell_absolute_difference)?;
+        let config = ScanContentComparisonConfig::new(request.minimum_cell_absolute_difference)?;
         let storage = self.lock_storage()?;
         let baseline = load_required_scan(
             &storage,
@@ -444,10 +441,8 @@ mod tests {
     }
 
     fn test_core() -> (Arc<A2dCore>, PathBuf) {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-scan-comparison-test-{}",
-            PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-scan-comparison-test-{}", PageId::generate()));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })
@@ -500,18 +495,14 @@ mod tests {
         let original_bytes = format!("original-{scan_id}");
         let original = core
             .asset_store
-            .commit(
-                original_bytes.as_bytes(),
-                AssetKind::Original,
-                "image/jpeg",
-            )
+            .commit(original_bytes.as_bytes(), AssetKind::Original, "image/jpeg")
             .unwrap();
         let corrected = core
             .asset_store
             .commit(corrected_bytes, AssetKind::Corrected, "image/png")
             .unwrap();
-        let content_fingerprint = fingerprint_override
-            .unwrap_or_else(|| fingerprint(&corrected.sha256, changes));
+        let content_fingerprint =
+            fingerprint_override.unwrap_or_else(|| fingerprint(&corrected.sha256, changes));
         let scan = Scan::new(
             scan_id.clone(),
             page_id,
@@ -684,15 +675,7 @@ mod tests {
     #[test]
     fn scans_from_different_pages_are_rejected_before_asset_comparison() {
         let (core, root) = test_core();
-        let baseline = insert_scan(
-            &core,
-            insert_page(&core),
-            b"baseline",
-            &[],
-            None,
-            "1",
-            true,
-        );
+        let baseline = insert_scan(&core, insert_page(&core), b"baseline", &[], None, "1", true);
         let candidate = insert_scan(
             &core,
             insert_page(&core),
@@ -710,10 +693,7 @@ mod tests {
                 minimum_cell_absolute_difference: 1,
             })
             .unwrap_err();
-        assert_eq!(
-            error.code.to_string(),
-            "CORE_SCAN_COMPARISON_PAGE_MISMATCH"
-        );
+        assert_eq!(error.code.to_string(), "CORE_SCAN_COMPARISON_PAGE_MISMATCH");
         std::fs::remove_dir_all(root).ok();
     }
 
@@ -744,15 +724,7 @@ mod tests {
             "CORE_SCAN_COMPARISON_CANDIDATE_NOT_FOUND"
         );
 
-        let candidate = insert_scan(
-            &core,
-            page_id,
-            b"candidate",
-            &[],
-            None,
-            "1",
-            false,
-        );
+        let candidate = insert_scan(&core, page_id, b"candidate", &[], None, "1", false);
         let malformed_error = core
             .compare_stored_scans(CompareStoredScansRequest {
                 baseline_scan_id: baseline.id,
@@ -779,15 +751,7 @@ mod tests {
         let (core, root) = test_core();
         let page_id = insert_page(&core);
         let baseline = insert_scan_without_corrected(&core, page_id.clone(), true);
-        let candidate = insert_scan(
-            &core,
-            page_id,
-            b"candidate",
-            &[],
-            None,
-            "1",
-            false,
-        );
+        let candidate = insert_scan(&core, page_id, b"candidate", &[], None, "1", false);
 
         let error = core
             .compare_stored_scans(CompareStoredScansRequest {
@@ -820,15 +784,7 @@ mod tests {
             "1",
             true,
         );
-        let candidate = insert_scan(
-            &core,
-            page_id,
-            b"candidate",
-            &[],
-            None,
-            "1",
-            false,
-        );
+        let candidate = insert_scan(&core, page_id, b"candidate", &[], None, "1", false);
 
         let error = core
             .compare_stored_scans(CompareStoredScansRequest {
@@ -852,24 +808,8 @@ mod tests {
     fn missing_or_tampered_corrected_files_block_conclusive_evidence() {
         let (core, root) = test_core();
         let page_id = insert_page(&core);
-        let baseline = insert_scan(
-            &core,
-            page_id.clone(),
-            b"baseline",
-            &[],
-            None,
-            "1",
-            true,
-        );
-        let candidate = insert_scan(
-            &core,
-            page_id.clone(),
-            b"candidate",
-            &[],
-            None,
-            "1",
-            false,
-        );
+        let baseline = insert_scan(&core, page_id.clone(), b"baseline", &[], None, "1", true);
+        let candidate = insert_scan(&core, page_id.clone(), b"candidate", &[], None, "1", false);
         let baseline_path = core
             .asset_store
             .resolve(&baseline.corrected.relative_path)

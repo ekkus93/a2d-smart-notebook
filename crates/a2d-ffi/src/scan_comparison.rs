@@ -5,9 +5,7 @@
 //! the shared Rust core.
 
 use a2d_core as core;
-use a2d_domain::{
-    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, QualityStatus, ScanId,
-};
+use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity, QualityStatus, ScanId};
 
 use super::{A2dClient, A2dFfiError};
 
@@ -176,16 +174,10 @@ impl From<core::StoredScanComparisonEvidence> for StoredScanComparisonEvidence {
             candidate_quality_status: value.candidate_quality_status.into(),
             baseline_preferred: value.baseline_preferred,
             candidate_preferred: value.candidate_preferred,
-            baseline_physical_copy_id: value
-                .baseline_physical_copy_id
-                .map(|id| id.to_string()),
-            candidate_physical_copy_id: value
-                .candidate_physical_copy_id
-                .map(|id| id.to_string()),
+            baseline_physical_copy_id: value.baseline_physical_copy_id.map(|id| id.to_string()),
+            candidate_physical_copy_id: value.candidate_physical_copy_id.map(|id| id.to_string()),
             same_physical_copy: value.same_physical_copy,
-            minimum_cell_absolute_difference: u32::from(
-                value.minimum_cell_absolute_difference,
-            ),
+            minimum_cell_absolute_difference: u32::from(value.minimum_cell_absolute_difference),
             corrected_asset_hash_match: value.corrected_asset_hash_match,
             exact_content_match: value.exact_content_match,
             confidence: value.confidence.into(),
@@ -312,7 +304,10 @@ mod tests {
                 StoredScanComparisonReason::FixtureCalibrationRequired,
             ]
         );
-        assert_eq!(projected.change_regions[0].cells[0].absolute_difference, 140);
+        assert_eq!(
+            projected.change_regions[0].cells[0].absolute_difference,
+            140
+        );
     }
 
     #[test]
@@ -355,10 +350,7 @@ mod tests {
             })
             .unwrap_err();
         let A2dFfiError::Failed(details) = error;
-        assert_eq!(
-            details.code,
-            "FFI_SCAN_COMPARISON_THRESHOLD_OUT_OF_RANGE"
-        );
+        assert_eq!(details.code, "FFI_SCAN_COMPARISON_THRESHOLD_OUT_OF_RANGE");
         std::fs::remove_dir_all(root).ok();
     }
 }

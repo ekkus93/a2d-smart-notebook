@@ -23,8 +23,8 @@ use a2d_image::{
     DerivedImagePipeline, DetectorConfig, EncodedImage, EncodedImageFormat, EncodedImageLimits,
     GrayQualityMetrics, ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerFamily,
     MarkerIdLayout, OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,
-    RectificationLimits, RectificationPlan, RectifiedImageSize, ResolvedPageMarkers, ThumbnailConfig,
-    measure_gray_quality, resolve_page_markers,
+    RectificationLimits, RectificationPlan, RectifiedImageSize, ResolvedPageMarkers,
+    ThumbnailConfig, measure_gray_quality, resolve_page_markers,
 };
 use a2d_layout::ResolvedScanLayout;
 use a2d_storage::{AssetRepository, AuditEventRepository, PageRepository, ScanRepository};
@@ -1049,10 +1049,7 @@ fn merge_preview_warnings(
     Ok(())
 }
 
-fn scan_audit_event(
-    scan: &Scan,
-    notebook_id: Option<&NotebookId>,
-) -> Result<AuditEvent, A2dError> {
+fn scan_audit_event(scan: &Scan, notebook_id: Option<&NotebookId>) -> Result<AuditEvent, A2dError> {
     let mut details = BTreeMap::new();
     details.insert("page_id".to_string(), scan.page_id.to_string());
     details.insert("scan_id".to_string(), scan.id().to_string());
@@ -1067,7 +1064,10 @@ fn scan_audit_event(
         "quality_status".to_string(),
         format!("{:?}", scan.quality_status),
     );
-    details.insert("pipeline_version".to_string(), scan.pipeline_version.clone());
+    details.insert(
+        "pipeline_version".to_string(),
+        scan.pipeline_version.clone(),
+    );
     Ok(AuditEvent::new(
         AuditEventId::try_generate()?,
         system_now_ms()?,

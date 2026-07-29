@@ -219,9 +219,7 @@ fn corrected_height_for(layout: &PageLayout) -> Result<u32, A2dError> {
         .with_detail("physical_height_mm", height_mm.to_string()));
     }
     let height = (f64::from(V1_CORRECTED_WIDTH_PX) * height_mm / width_mm).round();
-    if !height.is_finite()
-        || !(1.0..=f64::from(MAX_CORRECTED_DIMENSION_PX)).contains(&height)
-    {
+    if !height.is_finite() || !(1.0..=f64::from(MAX_CORRECTED_DIMENSION_PX)).contains(&height) {
         return Err(resolution_error(
             "SCAN_LAYOUT_CORRECTED_SIZE_UNSUPPORTED",
             ErrorCategory::UnsupportedFormat,

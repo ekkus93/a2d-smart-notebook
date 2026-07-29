@@ -97,7 +97,10 @@ fn discover_orphaned_final_assets(
             recovery_error(
                 "STORAGE_ORPHAN_DISCOVERY_DIRECTORY_MISSING",
                 ErrorCategory::Integrity,
-                format!("required asset directory {} is unavailable: {error}", directory.display()),
+                format!(
+                    "required asset directory {} is unavailable: {error}",
+                    directory.display()
+                ),
                 false,
             )
             .with_detail("asset_kind", format!("{kind:?}"))
@@ -242,15 +245,18 @@ fn canonical_relative_path(root: &Path, path: &Path) -> Result<String, A2dError>
 }
 
 fn asset_id_from_path(path: &Path) -> Result<AssetId, A2dError> {
-    let file_name = path.file_name().and_then(|value| value.to_str()).ok_or_else(|| {
-        recovery_error(
-            "STORAGE_ORPHAN_DISCOVERY_ASSET_ID_MISSING",
-            ErrorCategory::Integrity,
-            "final asset path does not have a valid UTF-8 asset ID filename",
-            false,
-        )
-        .with_detail("path", path.to_string_lossy())
-    })?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| {
+            recovery_error(
+                "STORAGE_ORPHAN_DISCOVERY_ASSET_ID_MISSING",
+                ErrorCategory::Integrity,
+                "final asset path does not have a valid UTF-8 asset ID filename",
+                false,
+            )
+            .with_detail("path", path.to_string_lossy())
+        })?;
     AssetId::parse(file_name).map_err(|error| {
         recovery_error(
             "STORAGE_ORPHAN_DISCOVERY_ASSET_ID_INVALID",
@@ -351,10 +357,7 @@ mod tests {
     use crate::{AssetRepository, AssetStore};
 
     fn temp_root(label: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "a2d-orphan-final-{label}-{}",
-            PageId::generate()
-        ))
+        std::env::temp_dir().join(format!("a2d-orphan-final-{label}-{}", PageId::generate()))
     }
 
     #[test]
@@ -409,9 +412,7 @@ mod tests {
         let invalid_path = root.join("assets").join("exports").join("not-an-asset-id");
         std::fs::write(&invalid_path, b"unknown bytes").unwrap();
 
-        let error = storage
-            .discover_orphaned_final_assets(&root)
-            .unwrap_err();
+        let error = storage.discover_orphaned_final_assets(&root).unwrap_err();
         assert_eq!(
             error.code.to_string(),
             "STORAGE_ORPHAN_DISCOVERY_ASSET_ID_INVALID"

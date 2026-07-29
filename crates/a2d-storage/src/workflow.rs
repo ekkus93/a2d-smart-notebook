@@ -7,8 +7,8 @@
 use std::collections::BTreeMap;
 
 use a2d_domain::{
-    A2dError, AssetKind, AuditEvent, AuditEventId, ErrorCategory, ErrorCode, ErrorSeverity, Notebook,
-    NotebookDesignId, NotebookId, Page, PageId, ScanId, SmartPageId,
+    A2dError, AssetKind, AuditEvent, AuditEventId, ErrorCategory, ErrorCode, ErrorSeverity,
+    Notebook, NotebookDesignId, NotebookId, Page, PageId, ScanId, SmartPageId,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 

@@ -150,7 +150,9 @@ fn migration_sql_and_tracking_row_are_atomic() {
     assert!(apply_one(&mut conn, &broken).is_err());
     assert!(!table_named(&conn, "should_roll_back"));
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
         .unwrap();
     assert_eq!(count, 0);
 }

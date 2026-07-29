@@ -363,10 +363,7 @@ fn migration_sha256(migration: &Migration) -> String {
         .collect()
 }
 
-fn migration_integrity_error(
-    code: &'static str,
-    message: impl Into<String>,
-) -> A2dError {
+fn migration_integrity_error(code: &'static str, message: impl Into<String>) -> A2dError {
     A2dError::new(
         ErrorCode::new(code),
         ErrorCategory::Integrity,

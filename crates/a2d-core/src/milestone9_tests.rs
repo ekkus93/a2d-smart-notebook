@@ -95,9 +95,9 @@ fn test_core() -> (std::sync::Arc<A2dCore>, PathBuf, PageId, NotebookId, String)
 fn rendered_layout_page(layout: &PageLayout) -> Vec<u8> {
     const PAGE_WIDTH: u32 = 1_216;
     const BORDER: u32 = 64;
-    let page_height =
-        (f64::from(PAGE_WIDTH) * layout.physical_size.height_mm / layout.physical_size.width_mm)
-            .round() as u32;
+    let page_height = (f64::from(PAGE_WIDTH) * layout.physical_size.height_mm
+        / layout.physical_size.width_mm)
+        .round() as u32;
     let source_width = PAGE_WIDTH + 2 * BORDER;
     let source_height = page_height + 2 * BORDER;
     let mut image = RgbImage::from_pixel(source_width, source_height, Rgb([45, 48, 56]));
@@ -123,9 +123,8 @@ fn rendered_layout_page(layout: &PageLayout) -> Vec<u8> {
             + (placement.rect.left() / layout.physical_size.width_mm * f64::from(PAGE_WIDTH - 1))
                 .round() as u32;
         let top = BORDER
-            + (placement.rect.top() / layout.physical_size.height_mm
-                * f64::from(page_height - 1))
-            .round() as u32;
+            + (placement.rect.top() / layout.physical_size.height_mm * f64::from(page_height - 1))
+                .round() as u32;
         let target_width = (placement.rect.size.width_mm / layout.physical_size.width_mm
             * f64::from(PAGE_WIDTH - 1))
         .round() as u32;

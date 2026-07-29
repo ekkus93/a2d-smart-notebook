@@ -461,15 +461,11 @@ mod tests {
             Some("Export")
         );
         assert_eq!(
-            err.details
-                .get("final_file_created")
-                .map(String::as_str),
+            err.details.get("final_file_created").map(String::as_str),
             Some("true")
         );
         assert_eq!(
-            err.details
-                .get("file_sync_completed")
-                .map(String::as_str),
+            err.details.get("file_sync_completed").map(String::as_str),
             Some("true")
         );
         assert_eq!(

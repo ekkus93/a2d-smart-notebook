@@ -135,10 +135,9 @@ fn validate_marker_roles(marker_role_ids: &[String]) -> Result<(), A2dError> {
 
     for role in marker_role_ids {
         validate_trimmed_string(role, "marker_role_ids", MAX_MARKER_ROLE_BYTES)?;
-        if !role
-            .bytes()
-            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-'))
-        {
+        if !role.bytes().all(|byte| {
+            byte.is_ascii_uppercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        }) {
             return Err(manifest_error(
                 "MANIFEST_MARKER_ROLE_INVALID",
                 "marker roles must use uppercase ASCII letters, digits, underscore, or hyphen",
@@ -161,10 +160,7 @@ fn validate_marker_roles(marker_role_ids: &[String]) -> Result<(), A2dError> {
             "v0.1 Notebook Designs must declare exactly TL, TR, BL, and BR marker roles",
         )
         .with_detail("required_marker_roles", REQUIRED_MARKER_ROLES.join(","))
-        .with_detail(
-            "actual_marker_roles",
-            marker_role_ids.join(","),
-        ));
+        .with_detail("actual_marker_roles", marker_role_ids.join(",")));
     }
     Ok(())
 }
@@ -195,13 +191,9 @@ fn validate_layout_trim(
         .with_detail("field", field)
         .with_detail("layout_id", layout_id.to_string())
     })?;
-    let width_difference =
-        (layout.physical_size.width_mm - f64::from(trim_width_mm)).abs();
-    let height_difference =
-        (layout.physical_size.height_mm - f64::from(trim_height_mm)).abs();
-    if width_difference > TRIM_MATCH_TOLERANCE_MM
-        || height_difference > TRIM_MATCH_TOLERANCE_MM
-    {
+    let width_difference = (layout.physical_size.width_mm - f64::from(trim_width_mm)).abs();
+    let height_difference = (layout.physical_size.height_mm - f64::from(trim_height_mm)).abs();
+    if width_difference > TRIM_MATCH_TOLERANCE_MM || height_difference > TRIM_MATCH_TOLERANCE_MM {
         return Err(manifest_error(
             "MANIFEST_LAYOUT_TRIM_MISMATCH",
             "manifest trim dimensions do not agree with the referenced bundled layout",
@@ -257,11 +249,7 @@ pub fn parse_manifest(json: &str, trust_state: TrustState) -> Result<NotebookDes
         ));
     }
     validate_trimmed_string(&raw.name, "name", MAX_DESIGN_NAME_BYTES)?;
-    validate_trimmed_string(
-        &raw.marker_family,
-        "marker_family",
-        MAX_MARKER_FAMILY_BYTES,
-    )?;
+    validate_trimmed_string(&raw.marker_family, "marker_family", MAX_MARKER_FAMILY_BYTES)?;
     if !SUPPORTED_MARKER_FAMILIES.contains(&raw.marker_family.as_str()) {
         return Err(manifest_error(
             "MANIFEST_MARKER_FAMILY_UNSUPPORTED",
@@ -284,15 +272,10 @@ pub fn parse_manifest(json: &str, trust_state: TrustState) -> Result<NotebookDes
     if raw.logical_page_count == 0 || raw.logical_page_count > MAX_LOGICAL_PAGE_COUNT {
         return Err(manifest_error(
             "MANIFEST_LOGICAL_PAGE_COUNT_INVALID",
-            format!(
-                "logical_page_count must be within 1..={MAX_LOGICAL_PAGE_COUNT}"
-            ),
+            format!("logical_page_count must be within 1..={MAX_LOGICAL_PAGE_COUNT}"),
         )
         .with_detail("logical_page_count", raw.logical_page_count.to_string())
-        .with_detail(
-            "max_logical_page_count",
-            MAX_LOGICAL_PAGE_COUNT.to_string(),
-        ));
+        .with_detail("max_logical_page_count", MAX_LOGICAL_PAGE_COUNT.to_string()));
     }
     validate_marker_roles(&raw.marker_role_ids)?;
 
@@ -434,19 +417,15 @@ mod tests {
         let json = manifest_json(&id.to_string(), 1);
         let same = parse_manifest(&json, TrustState::Trusted).unwrap();
         let same_again = parse_manifest(&json, TrustState::Trusted).unwrap();
-        let whitespace_changed =
-            parse_manifest(&format!("\n{json}"), TrustState::Trusted).unwrap();
+        let whitespace_changed = parse_manifest(&format!("\n{json}"), TrustState::Trusted).unwrap();
         assert_eq!(same.manifest_hash, same_again.manifest_hash);
         assert_ne!(same.manifest_hash, whitespace_changed.manifest_hash);
     }
 
     #[test]
     fn rejects_oversized_source_before_json_parsing() {
-        let error = parse_manifest(
-            &" ".repeat(MAX_MANIFEST_BYTES + 1),
-            TrustState::Trusted,
-        )
-        .unwrap_err();
+        let error =
+            parse_manifest(&" ".repeat(MAX_MANIFEST_BYTES + 1), TrustState::Trusted).unwrap_err();
         assert_eq!(error.code.to_string(), "MANIFEST_TOO_LARGE");
     }
 
@@ -557,11 +536,7 @@ mod tests {
 
     #[test]
     fn rejects_an_invalid_design_id() {
-        let error = parse_manifest(
-            &manifest_json("TOOSHORT", 1),
-            TrustState::Trusted,
-        )
-        .unwrap_err();
+        let error = parse_manifest(&manifest_json("TOOSHORT", 1), TrustState::Trusted).unwrap_err();
         assert!(error.code.to_string().contains("INVALID_LENGTH"));
     }
 
@@ -576,7 +551,10 @@ mod tests {
 
         let mut registry = ManifestRegistry::empty();
         registry.insert(first).unwrap();
-        assert_eq!(registry.resolve(&id).map(|design| design.id().clone()), Some(id));
+        assert_eq!(
+            registry.resolve(&id).map(|design| design.id().clone()),
+            Some(id)
+        );
         assert!(registry.resolve(&NotebookDesignId::generate()).is_none());
         assert_eq!(
             registry.insert(second).unwrap_err().code.to_string(),

@@ -77,9 +77,7 @@ pub struct MarkerIdLayout {
 }
 
 impl MarkerIdLayout {
-    pub fn new(
-        assignments: impl IntoIterator<Item = (u32, MarkerRole)>,
-    ) -> Result<Self, A2dError> {
+    pub fn new(assignments: impl IntoIterator<Item = (u32, MarkerRole)>) -> Result<Self, A2dError> {
         let mut by_id = BTreeMap::new();
         let mut roles = BTreeSet::new();
         for (id, role) in assignments {

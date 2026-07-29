@@ -74,9 +74,7 @@ fn policy_error(
 
 #[cfg(test)]
 mod tests {
-    use a2d_domain::{
-        Notebook, NotebookId, Page, PageKind, PageState, SmartPageId, system_now_ms,
-    };
+    use a2d_domain::{Notebook, NotebookId, Page, PageKind, PageState, SmartPageId, system_now_ms};
     use a2d_layout::{PaperSize, SmartPageStyle, bundled_placeholder_registry, smart_page_layout};
     use a2d_storage::{NotebookDesignRepository, NotebookRepository, PageRepository};
 
@@ -84,10 +82,8 @@ mod tests {
     use crate::OpenLibraryRequest;
 
     fn open_test_core(label: &str) -> (std::sync::Arc<A2dCore>, std::path::PathBuf) {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-scan-policy-{label}-{}",
-            PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-scan-policy-{label}-{}", PageId::generate()));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })

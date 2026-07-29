@@ -29,7 +29,9 @@ fn reopening_an_existing_database_does_not_reapply_migrations() {
     let second = Storage::open(&db_path).expect("reopen must succeed");
     let applied: i64 = second
         .conn
-        .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
         .unwrap();
     assert_eq!(applied, MIGRATIONS.len() as i64);
     std::fs::remove_dir_all(&dir).ok();

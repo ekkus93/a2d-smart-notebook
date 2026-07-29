@@ -237,7 +237,10 @@ impl AssetStore {
         if let Err(error) = file.write_all(data) {
             drop(file);
             return Err(with_persistence_details(
-                with_cleanup_result(map_io_error("writing the asset temp file", error), &tmp_path),
+                with_cleanup_result(
+                    map_io_error("writing the asset temp file", error),
+                    &tmp_path,
+                ),
                 AssetPersistenceFailureStage::BeforeFinalization,
                 &id,
                 kind,
@@ -251,7 +254,10 @@ impl AssetStore {
         if let Err(error) = file.flush() {
             drop(file);
             return Err(with_persistence_details(
-                with_cleanup_result(map_io_error("flushing the asset temp file", error), &tmp_path),
+                with_cleanup_result(
+                    map_io_error("flushing the asset temp file", error),
+                    &tmp_path,
+                ),
                 AssetPersistenceFailureStage::BeforeFinalization,
                 &id,
                 kind,
@@ -327,7 +333,10 @@ impl AssetStore {
         let on_disk = std::fs::read(&tmp_path).map_err(|error| {
             with_persistence_details(
                 with_cleanup_result(
-                    map_io_error("re-reading the asset temp file to verify its contents", error),
+                    map_io_error(
+                        "re-reading the asset temp file to verify its contents",
+                        error,
+                    ),
                     &tmp_path,
                 ),
                 AssetPersistenceFailureStage::BeforeFinalization,
@@ -510,8 +519,8 @@ impl AssetStore {
                 .with_detail("asset_id", asset.id().to_string())
                 .with_detail("relative_path", &asset.relative_path)
         })?;
-        let on_disk = std::fs::read(&path)
-            .map_err(|error| map_io_error("reading asset to verify", error))?;
+        let on_disk =
+            std::fs::read(&path).map_err(|error| map_io_error("reading asset to verify", error))?;
         let actual_byte_length = u64::try_from(on_disk.len()).map_err(|_| {
             integrity_error(
                 "STORAGE_ASSET_LENGTH_UNSUPPORTED",

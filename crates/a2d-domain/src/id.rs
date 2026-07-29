@@ -126,7 +126,9 @@ fn id_generation_error(
         ErrorCategory::PlatformAdapter,
         ErrorSeverity::Critical,
         "error.id.randomness_unavailable",
-        format!("OS cryptographic randomness is unavailable while generating {type_name}: {source}"),
+        format!(
+            "OS cryptographic randomness is unavailable while generating {type_name}: {source}"
+        ),
         false,
     )
     .with_detail("id_type", type_name)

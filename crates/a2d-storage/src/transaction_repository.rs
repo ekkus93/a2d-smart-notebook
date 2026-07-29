@@ -5,14 +5,10 @@
 //! implemented for the transaction type itself. These adapters preserve the active transaction and
 //! delegate every operation to the underlying connection.
 
-use a2d_domain::{
-    A2dError, Asset, AssetId, AuditEvent, AuditEventId, Page, PageId, Scan, ScanId,
-};
+use a2d_domain::{A2dError, Asset, AssetId, AuditEvent, AuditEventId, Page, PageId, Scan, ScanId};
 use rusqlite::Transaction;
 
-use crate::repository::{
-    AssetRepository, AuditEventRepository, PageRepository, ScanRepository,
-};
+use crate::repository::{AssetRepository, AuditEventRepository, PageRepository, ScanRepository};
 
 impl PageRepository for Transaction<'_> {
     fn insert_page(&self, value: &Page) -> Result<(), A2dError> {

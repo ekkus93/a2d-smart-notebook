@@ -93,7 +93,10 @@ fn configure_busy_timeout(conn: &rusqlite::Connection) -> Result<(), A2dError> {
 impl Storage {
     /// Opens or creates a library database and validates/applies every migration before returning.
     pub fn open(path: &Path) -> Result<Self, A2dError> {
-        if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        if let Some(parent) = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
             std::fs::create_dir_all(parent)
                 .map_err(|error| map_io_error("creating database parent directory", error))?;
         }
@@ -182,10 +185,7 @@ macro_rules! impl_design_delegate {
 macro_rules! impl_notebook_delegate {
     () => {
         impl NotebookRepository for Storage {
-            fn insert_notebook(
-                &self,
-                value: &a2d_domain::Notebook,
-            ) -> Result<(), A2dError> {
+            fn insert_notebook(&self, value: &a2d_domain::Notebook) -> Result<(), A2dError> {
                 NotebookRepository::insert_notebook(&self.conn, value)
             }
 
@@ -303,10 +303,7 @@ macro_rules! impl_ocr_delegate {
 macro_rules! impl_audit_delegate {
     () => {
         impl AuditEventRepository for Storage {
-            fn insert_audit_event(
-                &self,
-                value: &a2d_domain::AuditEvent,
-            ) -> Result<(), A2dError> {
+            fn insert_audit_event(&self, value: &a2d_domain::AuditEvent) -> Result<(), A2dError> {
                 AuditEventRepository::insert_audit_event(&self.conn, value)
             }
 

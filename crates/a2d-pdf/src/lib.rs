@@ -11,4 +11,3 @@ pub use generate::{
     render_notebook_proof_interior_pdf_bytes, render_page_set_pdf_bytes,
     render_smart_page_pdf_bytes,
 };
-pub use render::render_page_ops;

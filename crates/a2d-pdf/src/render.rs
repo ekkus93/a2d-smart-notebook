@@ -350,18 +350,13 @@ pub(crate) fn render_page_ops(
 ) -> Result<Vec<Op>, A2dError> {
     layout.validate()?;
     let mut detector = AprilTagDetector::new(DetectorConfig::default())?;
-    let mut ops = vec![
-        Op::SetFillColor { col: white() },
-        Op::DrawPolygon {
-            polygon: PhysicalRect::new(
-                0.0,
-                0.0,
-                layout.physical_size.width_mm,
-                layout.physical_size.height_mm,
-            )
-            .to_polygon(),
-        },
-    ];
+    let page_rect = PhysicalRect::new(
+        0.0,
+        0.0,
+        layout.physical_size.width_mm,
+        layout.physical_size.height_mm,
+    );
+    let mut ops = filled_rect_ops(layout.physical_size.height_mm, &page_rect, white());
 
     for placement in &layout.markers {
         let marker_id = marker_id_for_role(placement.role);
@@ -388,13 +383,11 @@ pub(crate) fn render_page_ops(
         &layout.content_rect,
         layout.content_style,
     )?);
-    for calibration in &layout.calibration_marks {
-        ops.extend(calibration_ops(
-            layout.physical_size.height_mm,
-            calibration,
-        ));
-    }
-    if let (Some(rect), Some(number)) = (&layout.page_number_rect, visible_page_number) {
+    ops.extend(calibration_ops(
+        layout.physical_size.height_mm,
+        &layout.calibration,
+    ));
+    if let (Some(rect), Some(number)) = (&layout.visible_page_number_rect, visible_page_number) {
         ops.extend(page_number_ops(
             layout.physical_size.height_mm,
             rect,

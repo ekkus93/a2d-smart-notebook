@@ -15,11 +15,7 @@ const MAX_ENCODED_BYTES: usize = 24 * 1024 * 1024;
 const MAX_DECODED_PIXELS: u64 = 32_000_000;
 const MAX_DECODED_BYTES: u64 = 96_000_000;
 const CALIBRATION_INPUT_HEADER: &str = "pair_id\texpected_relation\tbaseline_fixture_id\tbaseline_normalized_ocr_path\tbaseline_pipeline_version\tcandidate_fixture_id\tcandidate_normalized_ocr_path\tcandidate_pipeline_version";
-const EXPECTED_RELATIONS: &[&str] = &[
-    "near_duplicate",
-    "revision",
-    "substantially_different",
-];
+const EXPECTED_RELATIONS: &[&str] = &["near_duplicate", "revision", "substantially_different"];
 
 type DynError = Box<dyn Error>;
 
@@ -249,16 +245,11 @@ fn decode_normalized_fingerprint(path: &Path) -> Result<PerceptualFingerprintV1,
         &bytes,
         EncodedImageFormat::Png,
         ImageRotation::Degrees0,
-        EncodedImageLimits::new(
-            MAX_ENCODED_BYTES,
-            MAX_DECODED_PIXELS,
-            MAX_DECODED_BYTES,
-        )?,
+        EncodedImageLimits::new(MAX_ENCODED_BYTES, MAX_DECODED_PIXELS, MAX_DECODED_BYTES)?,
     )?
     .decode_rgb8()?
     .into_gray8(ImageLimits::new(MAX_DECODED_PIXELS)?)?;
-    PerceptualFingerprintV1::from_gray_image(&image)
-        .map_err(|error| Box::new(error) as DynError)
+    PerceptualFingerprintV1::from_gray_image(&image).map_err(|error| Box::new(error) as DynError)
 }
 
 fn nearest_rank_percentile(sorted_values: &[u8], percentile: usize) -> u8 {
@@ -324,12 +315,14 @@ fn write_report(
                 pair.id, pair.baseline_fixture_id
             ))
         })?;
-        let candidate = fingerprints.get(&pair.candidate_fixture_id).ok_or_else(|| {
-            invalid(format!(
-                "comparison pair {} references unknown candidate fingerprint {}",
-                pair.id, pair.candidate_fixture_id
-            ))
-        })?;
+        let candidate = fingerprints
+            .get(&pair.candidate_fixture_id)
+            .ok_or_else(|| {
+                invalid(format!(
+                    "comparison pair {} references unknown candidate fingerprint {}",
+                    pair.id, pair.candidate_fixture_id
+                ))
+            })?;
         let baseline_source = fixture_sources
             .get(&pair.baseline_fixture_id)
             .ok_or_else(|| {
@@ -338,14 +331,15 @@ fn write_report(
                     pair.id, pair.baseline_fixture_id
                 ))
             })?;
-        let candidate_source = fixture_sources
-            .get(&pair.candidate_fixture_id)
-            .ok_or_else(|| {
-                invalid(format!(
-                    "comparison pair {} references unknown candidate fixture {}",
-                    pair.id, pair.candidate_fixture_id
-                ))
-            })?;
+        let candidate_source =
+            fixture_sources
+                .get(&pair.candidate_fixture_id)
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "comparison pair {} references unknown candidate fixture {}",
+                        pair.id, pair.candidate_fixture_id
+                    ))
+                })?;
         let difference = baseline.difference(candidate);
         if difference.cell_absolute_differences.len() != PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT {
             return Err(invalid(format!(

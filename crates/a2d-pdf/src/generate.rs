@@ -123,9 +123,7 @@ fn validate_output_target(output_path: &Path) -> Result<(), A2dError> {
     }
 }
 
-fn create_unique_temp(
-    output_path: &Path,
-) -> Result<(std::fs::File, PathBuf), A2dError> {
+fn create_unique_temp(output_path: &Path) -> Result<(std::fs::File, PathBuf), A2dError> {
     let parent = parent_directory(output_path);
     let file_name = output_path
         .file_name()
@@ -198,7 +196,10 @@ fn preserve_unverified_temp(error: A2dError, temp_path: &Path) -> A2dError {
 }
 
 fn warning_strings<T: Debug>(warnings: &[T]) -> Vec<String> {
-    warnings.iter().map(|warning| format!("{warning:?}")).collect()
+    warnings
+        .iter()
+        .map(|warning| format!("{warning:?}"))
+        .collect()
 }
 
 fn reject_warnings(context: &'static str, warnings: Vec<String>) -> Result<(), A2dError> {
@@ -433,7 +434,7 @@ pub fn render_smart_page_pdf_bytes(
     let ops = render_page_ops(&layout, &qr_payload, None)?;
     Ok(GeneratedSmartPageBytes {
         smart_page_id,
-        layout_id: layout.id,
+        layout_id: layout.id.clone(),
         pdf_bytes: save_document("A2D Smart Page", vec![pdf_page_for(&layout, ops)])?,
     })
 }
@@ -684,10 +685,7 @@ mod tests {
         assert_eq!(error.code.to_string(), "PDF_VERIFY_FAILED");
         assert!(!output.exists());
         assert_eq!(
-            error
-                .details
-                .get("temp_file_preserved")
-                .map(String::as_str),
+            error.details.get("temp_file_preserved").map(String::as_str),
             Some("true"),
         );
         let temp = PathBuf::from(error.details.get("temp_path").unwrap());
@@ -699,8 +697,8 @@ mod tests {
     fn existing_destination_is_not_replaced() {
         let output = temp_path("no-replace");
         std::fs::write(&output, b"existing").unwrap();
-        let error = generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &output)
-            .unwrap_err();
+        let error =
+            generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &output).unwrap_err();
         assert_eq!(error.code.to_string(), "PDF_OUTPUT_ALREADY_EXISTS");
         assert_eq!(std::fs::read(&output).unwrap(), b"existing");
         remove_if_present(&output);
@@ -778,8 +776,7 @@ mod tests {
     fn generated_smart_pages_always_have_fresh_ids() {
         let path_a = temp_path("id-a");
         let path_b = temp_path("id-b");
-        let first =
-            generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &path_a).unwrap();
+        let first = generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &path_a).unwrap();
         let second =
             generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &path_b).unwrap();
         assert_ne!(first, second);
@@ -887,11 +884,8 @@ mod tests {
 
     #[test]
     fn notebook_proof_rejects_zero_and_alternates_recto_verso() {
-        let empty_error = render_notebook_proof_interior_pdf_bytes(
-            &NotebookDesignId::generate(),
-            0,
-        )
-        .unwrap_err();
+        let empty_error =
+            render_notebook_proof_interior_pdf_bytes(&NotebookDesignId::generate(), 0).unwrap_err();
         assert_eq!(
             empty_error.code.to_string(),
             "PDF_NOTEBOOK_INTERIOR_PAGE_COUNT_INVALID"
