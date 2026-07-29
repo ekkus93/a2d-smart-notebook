@@ -1,11 +1,4 @@
-//! Assembles rendered pages into complete PDF documents and commits them to disk (TODO 5.4/5.5):
-//! single Smart Pages, multi-page Page Sets, and the bound-notebook proof interior.
-//!
-//! Every generator writes to a temporary path first, re-parses the bytes it just wrote to
-//! confirm they're a well-formed PDF, and only then renames into place at `output_path` (TODO
-//! 5.4 "write to a temp path and verify before returning success" — the same
-//! write-then-verify-then-commit discipline spec §16.3 requires for asset commits, applied here
-//! to generated PDFs).
+//! Renders Smart Pages, Page Sets, and the development bound-notebook proof interior.
 
 use std::io::Write;
 use std::path::Path;
@@ -26,12 +19,10 @@ use crate::error::{io_error, verify_error};
 use crate::render::render_page_ops;
 
 /// Portable resource-safety ceiling for one generated Page Set. Android uses the same value for
-/// immediate form feedback, but Rust enforces it for every caller, including direct FFI and future
-/// Swift clients.
+/// immediate form feedback, but Rust enforces it for all direct, FFI, and future Swift callers.
 pub const MAX_PAGE_SET_PAGE_COUNT: u32 = 500;
 
-/// QR v1 numeric fields are bounded to 0..=999999. Kept explicit here so visible-page arithmetic
-/// is checked before allocation or identity generation rather than failing partway through a set.
+/// QR v1 numeric fields are bounded to 0..=999999.
 const MAX_QR_V1_VISIBLE_PAGE_NUMBER: u32 = 999_999;
 
 fn pdf_page_for(layout: &PageLayout, ops: Vec<Op>) -> PdfPage {
@@ -57,9 +48,7 @@ fn validation_error(code: &'static str, message: impl Into<String>) -> A2dError 
     )
 }
 
-/// Writes `bytes` to a temp path beside `output_path`, re-parses them to confirm the file is a
-/// well-formed PDF, then atomically renames into place. Never leaves `output_path` pointing at
-/// content that wasn't verified.
+/// Development/standalone output helper. The library-owned asset path uses `AssetStore` instead.
 fn write_and_verify(bytes: &[u8], output_path: &Path) -> Result<(), A2dError> {
     let tmp_path = output_path.with_extension("pdf.tmp");
     {
@@ -74,10 +63,14 @@ fn write_and_verify(bytes: &[u8], output_path: &Path) -> Result<(), A2dError> {
     let reread = std::fs::read(&tmp_path)
         .map_err(|e| io_error(format!("re-reading temp file {}: {e}", tmp_path.display())))?;
     let mut warnings = Vec::new();
-    let parse_opts = PdfParseOptions {
-        fail_on_error: true,
-    };
-    PdfDocument::parse(&reread, &parse_opts, &mut warnings).map_err(|e| {
+    PdfDocument::parse(
+        &reread,
+        &PdfParseOptions {
+            fail_on_error: true,
+        },
+        &mut warnings,
+    )
+    .map_err(|e| {
         verify_error(format!(
             "generated PDF at {} failed to re-parse: {e}",
             tmp_path.display()
@@ -95,25 +88,19 @@ fn write_and_verify(bytes: &[u8], output_path: &Path) -> Result<(), A2dError> {
 }
 
 fn save_document(title: &str, pages: Vec<PdfPage>) -> Vec<u8> {
-    let mut doc = PdfDocument::new(title);
-    doc.with_pages(pages);
+    let mut document = PdfDocument::new(title);
+    document.with_pages(pages);
     let mut warnings = Vec::new();
-    doc.save(&PdfSaveOptions::default(), &mut warnings)
+    document.save(&PdfSaveOptions::default(), &mut warnings)
 }
 
-/// A generated Smart Page's PDF bytes plus the identities generating it minted. Kept separate
-/// from disk I/O so a caller that owns its own asset-commit protocol (TODO 5.5, `a2d-core`'s
-/// `AssetStore`) can commit these bytes itself rather than going through [`write_and_verify`]'s
-/// arbitrary-output-path flow, which is for standalone/CLI-style generation instead.
+#[derive(Debug)]
 pub struct GeneratedSmartPageBytes {
     pub smart_page_id: SmartPageId,
     pub layout_id: LayoutId,
     pub pdf_bytes: Vec<u8>,
 }
 
-/// Renders a single unique A2D Smart Page PDF (spec §7.5) to bytes, without writing anything to
-/// disk. Returns the freshly generated, globally unique `SmartPageId` -- generated entirely
-/// offline, no server allocation.
 pub fn render_smart_page_pdf_bytes(
     paper: PaperSize,
     style: SmartPageStyle,
@@ -128,16 +115,13 @@ pub fn render_smart_page_pdf_bytes(
     }
     .encode()?;
     let ops = render_page_ops(&layout, &qr_payload, None)?;
-    let pdf_bytes = save_document("A2D Smart Page", vec![pdf_page_for(&layout, ops)]);
     Ok(GeneratedSmartPageBytes {
         smart_page_id,
         layout_id: layout.id,
-        pdf_bytes,
+        pdf_bytes: save_document("A2D Smart Page", vec![pdf_page_for(&layout, ops)]),
     })
 }
 
-/// Generates a single unique A2D Smart Page PDF (spec §7.5), writing it to `output_path`.
-/// Returns the freshly generated, globally unique `SmartPageId`.
 pub fn generate_smart_page_pdf(
     paper: PaperSize,
     style: SmartPageStyle,
@@ -148,7 +132,7 @@ pub fn generate_smart_page_pdf(
     Ok(generated.smart_page_id)
 }
 
-/// Mirrors TODO 5.4's suggested request shape.
+#[derive(Debug)]
 pub struct GeneratePageSetRequest {
     pub paper_size: PaperSize,
     pub style: SmartPageStyle,
@@ -181,10 +165,10 @@ impl GeneratePageSetRequest {
                 "starting_visible_page must be at least 1",
             ));
         }
-        let last_offset = self.page_count - 1;
+
         let last_visible_page = self
             .starting_visible_page
-            .checked_add(last_offset)
+            .checked_add(self.page_count - 1)
             .ok_or_else(|| {
                 validation_error(
                     "PDF_PAGE_SET_VISIBLE_PAGE_OVERFLOW",
@@ -206,6 +190,7 @@ impl GeneratePageSetRequest {
                 MAX_QR_V1_VISIBLE_PAGE_NUMBER.to_string(),
             ));
         }
+
         let capacity = usize::try_from(self.page_count).map_err(|_| {
             validation_error(
                 "PDF_PAGE_SET_PAGE_COUNT_UNSUPPORTED",
@@ -223,6 +208,7 @@ pub struct GeneratedPageSet {
     pub smart_page_ids: Vec<SmartPageId>,
 }
 
+#[derive(Debug)]
 pub struct GeneratedPageSetBytes {
     pub page_set_id: PageSetId,
     pub layout_id: LayoutId,
@@ -230,9 +216,6 @@ pub struct GeneratedPageSetBytes {
     pub pdf_bytes: Vec<u8>,
 }
 
-/// Renders a multipage Page Set PDF (spec §7.6) to bytes, without writing anything to disk: one
-/// `PageSetId`, one unique `SmartPageId` per page, ascending visible page numbers starting at
-/// `starting_visible_page`.
 pub fn render_page_set_pdf_bytes(
     request: GeneratePageSetRequest,
 ) -> Result<GeneratedPageSetBytes, A2dError> {
@@ -266,16 +249,14 @@ pub fn render_page_set_pdf_bytes(
         smart_page_ids.push(smart_page_id);
     }
 
-    let pdf_bytes = save_document("A2D Smart Page Set", pdf_pages);
     Ok(GeneratedPageSetBytes {
         page_set_id,
         layout_id: layout.id,
         smart_page_ids,
-        pdf_bytes,
+        pdf_bytes: save_document("A2D Smart Page Set", pdf_pages),
     })
 }
 
-/// Generates a multipage Page Set PDF (spec §7.6), writing it to `output_path`.
 pub fn generate_page_set_pdf(
     request: GeneratePageSetRequest,
     output_path: &Path,
@@ -289,11 +270,6 @@ pub fn generate_page_set_pdf(
     })
 }
 
-/// Renders the bound-notebook proof interior PDF (TODO 5.3/5.4) to bytes, without writing
-/// anything to disk: the Setup Page, then `logical_page_count` writable pages, each followed by
-/// a blank verso (spec §11.2's alternating recto/verso interior). Uses `a2d_layout::notebook`'s
-/// fixed development-placeholder layouts (Milestone 5.3) -- there is no real official Notebook
-/// Design to generate from yet.
 pub fn render_notebook_proof_interior_pdf_bytes(
     design_id: &NotebookDesignId,
     logical_page_count: u32,
@@ -307,7 +283,6 @@ pub fn render_notebook_proof_interior_pdf_bytes(
 
     let setup_layout = setup_page_layout();
     let writable_layout = writable_page_layout();
-
     let mut pdf_pages = Vec::new();
 
     let setup_payload = PageCode::NotebookSetup {
@@ -319,14 +294,10 @@ pub fn render_notebook_proof_interior_pdf_bytes(
     pdf_pages.push(blank_verso_page(&setup_layout));
 
     for logical_page_number in 1..=logical_page_count {
-        // Ties this construction loop to Milestone 5.3's independently defined page-number
-        // mapping: if the two ever drift apart, this catches it immediately rather than only
-        // showing up as a subtle numbering bug once Milestone 6 wires up real scanning.
         debug_assert_eq!(
             pdf_pages.len() as u32 + 1,
             pdf_page_number_for_logical_page(logical_page_number)
         );
-
         let payload = PageCode::NotebookPage {
             design_id: design_id.clone(),
             logical_page_number,
@@ -344,7 +315,6 @@ pub fn render_notebook_proof_interior_pdf_bytes(
     ))
 }
 
-/// Generates the bound-notebook proof interior PDF (TODO 5.3/5.4), writing it to `output_path`.
 pub fn generate_notebook_proof_interior_pdf(
     design_id: &NotebookDesignId,
     logical_page_count: u32,
@@ -370,65 +340,52 @@ mod tests {
     fn write_and_verify_rejects_truncated_bytes_and_never_creates_the_output_path() {
         let generated = render_smart_page_pdf_bytes(PaperSize::A4, SmartPageStyle::Blank).unwrap();
         let truncated = &generated.pdf_bytes[..generated.pdf_bytes.len() / 2];
-
         let path = temp_path("truncated");
-        let err = write_and_verify(truncated, &path).unwrap_err();
-        assert!(err.code.to_string().contains("VERIFY_FAILED"));
-        assert!(
-            !path.exists(),
-            "a failed verify must never leave a file at output_path"
-        );
-
+        let error = write_and_verify(truncated, &path).unwrap_err();
+        assert!(error.code.to_string().contains("VERIFY_FAILED"));
+        assert!(!path.exists());
         let tmp_path = path.with_extension("pdf.tmp");
         assert!(tmp_path.exists());
-        std::fs::remove_file(&tmp_path).ok();
+        std::fs::remove_file(tmp_path).ok();
     }
 
     #[test]
-    fn generate_smart_page_pdf_writes_a_single_page_pdf_that_re_parses() {
+    fn generated_smart_page_re_parses_and_leaves_no_temp_file() {
         let path = temp_path("single");
         generate_smart_page_pdf(PaperSize::UsLetter, SmartPageStyle::Blank, &path).unwrap();
-
         let bytes = std::fs::read(&path).unwrap();
-        assert!(!bytes.is_empty());
         let mut warnings = Vec::new();
-        let doc = PdfDocument::parse(&bytes, &PdfParseOptions::default(), &mut warnings).unwrap();
-        assert_eq!(doc.page_count(), 1);
-
-        std::fs::remove_file(&path).ok();
-    }
-
-    #[test]
-    fn generate_smart_page_pdf_never_leaves_a_temp_file_behind_on_success() {
-        let path = temp_path("no-leftover-tmp");
-        generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Lined, &path).unwrap();
+        let document =
+            PdfDocument::parse(&bytes, &PdfParseOptions::default(), &mut warnings).unwrap();
+        assert_eq!(document.page_count(), 1);
         assert!(!path.with_extension("pdf.tmp").exists());
-        std::fs::remove_file(&path).ok();
+        std::fs::remove_file(path).ok();
     }
 
     #[test]
-    fn generate_smart_page_pdf_produces_a_fresh_id_every_call() {
-        let a = generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &temp_path("id-a"))
-            .unwrap();
-        let b = generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &temp_path("id-b"))
-            .unwrap();
-        assert_ne!(a, b);
+    fn generated_smart_pages_always_have_fresh_ids() {
+        let path_a = temp_path("id-a");
+        let path_b = temp_path("id-b");
+        let first =
+            generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &path_a).unwrap();
+        let second =
+            generate_smart_page_pdf(PaperSize::A4, SmartPageStyle::Blank, &path_b).unwrap();
+        assert_ne!(first, second);
+        std::fs::remove_file(path_a).ok();
+        std::fs::remove_file(path_b).ok();
     }
 
     #[test]
-    fn generate_page_set_pdf_rejects_zero_pages() {
-        let request = GeneratePageSetRequest {
+    fn page_set_limits_fail_before_generation() {
+        let empty = render_page_set_pdf_bytes(GeneratePageSetRequest {
             paper_size: PaperSize::A4,
             style: SmartPageStyle::Blank,
             page_count: 0,
             starting_visible_page: 1,
-        };
-        let err = generate_page_set_pdf(request, &temp_path("empty")).unwrap_err();
-        assert!(err.code.to_string().contains("PAGE_SET_EMPTY"));
-    }
+        })
+        .unwrap_err();
+        assert_eq!(empty.code.to_string(), "PDF_PAGE_SET_EMPTY");
 
-    #[test]
-    fn page_set_limits_are_enforced_before_allocation_or_identity_generation() {
         let too_many = render_page_set_pdf_bytes(GeneratePageSetRequest {
             paper_size: PaperSize::A4,
             style: SmartPageStyle::Blank,
@@ -479,45 +436,39 @@ mod tests {
     }
 
     #[test]
-    fn generate_page_set_pdf_produces_one_pdf_page_and_one_unique_smart_page_id_per_page() {
+    fn generated_page_set_has_one_unique_identity_per_pdf_page() {
         let path = temp_path("set");
-        let request = GeneratePageSetRequest {
-            paper_size: PaperSize::UsLetter,
-            style: SmartPageStyle::Graph,
-            page_count: 5,
-            starting_visible_page: 10,
-        };
-        let generated = generate_page_set_pdf(request, &path).unwrap();
-
+        let generated = generate_page_set_pdf(
+            GeneratePageSetRequest {
+                paper_size: PaperSize::UsLetter,
+                style: SmartPageStyle::Graph,
+                page_count: 5,
+                starting_visible_page: 10,
+            },
+            &path,
+        )
+        .unwrap();
         assert_eq!(generated.smart_page_ids.len(), 5);
         let unique: std::collections::HashSet<_> = generated.smart_page_ids.iter().collect();
-        assert_eq!(
-            unique.len(),
-            5,
-            "every page must get a distinct SmartPageId"
-        );
-
+        assert_eq!(unique.len(), 5);
         let bytes = std::fs::read(&path).unwrap();
         let mut warnings = Vec::new();
-        let doc = PdfDocument::parse(&bytes, &PdfParseOptions::default(), &mut warnings).unwrap();
-        assert_eq!(doc.page_count(), 5);
-
-        std::fs::remove_file(&path).ok();
+        let document =
+            PdfDocument::parse(&bytes, &PdfParseOptions::default(), &mut warnings).unwrap();
+        assert_eq!(document.page_count(), 5);
+        std::fs::remove_file(path).ok();
     }
 
     #[test]
-    fn generate_notebook_proof_interior_pdf_rejects_zero_logical_pages() {
-        let err = generate_notebook_proof_interior_pdf(
+    fn notebook_proof_rejects_zero_and_alternates_recto_verso() {
+        let empty_error = generate_notebook_proof_interior_pdf(
             &NotebookDesignId::generate(),
             0,
             &temp_path("notebook-empty"),
         )
         .unwrap_err();
-        assert!(err.code.to_string().contains("NOTEBOOK_INTERIOR_EMPTY"));
-    }
+        assert!(empty_error.code.to_string().contains("NOTEBOOK_INTERIOR_EMPTY"));
 
-    #[test]
-    fn generate_notebook_proof_interior_pdf_alternates_recto_and_blank_verso() {
         let path = temp_path("notebook");
         let logical_page_count = 3;
         generate_notebook_proof_interior_pdf(
@@ -526,28 +477,14 @@ mod tests {
             &path,
         )
         .unwrap();
-
         let bytes = std::fs::read(&path).unwrap();
         let mut warnings = Vec::new();
-        let doc = PdfDocument::parse(&bytes, &PdfParseOptions::default(), &mut warnings).unwrap();
-
-        assert_eq!(doc.page_count(), 2 + 2 * logical_page_count as usize);
-        for (index, page) in doc.pages.iter().enumerate() {
-            let is_verso = index % 2 == 1;
-            if is_verso {
-                assert!(
-                    page.ops.is_empty(),
-                    "page {index} should be a blank verso but has {} ops",
-                    page.ops.len()
-                );
-            } else {
-                assert!(
-                    !page.ops.is_empty(),
-                    "page {index} should be a non-blank recto page"
-                );
-            }
+        let document =
+            PdfDocument::parse(&bytes, &PdfParseOptions::default(), &mut warnings).unwrap();
+        assert_eq!(document.page_count(), 2 + 2 * logical_page_count as usize);
+        for (index, page) in document.pages.iter().enumerate() {
+            assert_eq!(page.ops.is_empty(), index % 2 == 1);
         }
-
-        std::fs::remove_file(&path).ok();
+        std::fs::remove_file(path).ok();
     }
 }
