@@ -349,7 +349,7 @@ pub(crate) fn render_page_ops(
     visible_page_number: Option<u32>,
 ) -> Result<Vec<Op>, A2dError> {
     layout.validate()?;
-    let mut detector = AprilTagDetector::new(DetectorConfig::default())?;
+    let detector = AprilTagDetector::new(DetectorConfig::default())?;
     let page_rect = PhysicalRect::new(
         0.0,
         0.0,

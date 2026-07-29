@@ -311,7 +311,7 @@ mod tests {
             (12, MarkerRole::BottomRight),
             (13, MarkerRole::BottomLeft),
         ];
-        let layout = MarkerIdLayout::new(assignments.into_iter()).unwrap();
+        let layout = MarkerIdLayout::new(assignments).unwrap();
         assert_eq!(layout.role_for(12), Some(MarkerRole::BottomRight));
     }
 

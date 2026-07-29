@@ -685,8 +685,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_parse_page_id(
     ): Int
-    external fun uniffi_a2d_ffi_checksum_method_a2dclient_trigger_panic_for_testing(
-    ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_archive_notebook(
     ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_create_notebook(
@@ -710,6 +708,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_analyze_encoded_page(
     ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_register_scan(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_compare_stored_scans(
     ): Int
     external fun uniffi_a2d_ffi_checksum_constructor_a2dclient_open(
     ): Int
@@ -749,8 +749,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_a2d_ffi_fn_method_a2dclient_parse_page_id(`ptr`: Long,`candidate`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_a2d_ffi_fn_method_a2dclient_trigger_panic_for_testing(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
     external fun uniffi_a2d_ffi_fn_method_a2dclient_archive_notebook(`ptr`: Long,`notebookId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_a2d_ffi_fn_method_a2dclient_create_notebook(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -774,6 +772,8 @@ internal object UniffiLib {
     external fun uniffi_a2d_ffi_fn_method_a2dclient_analyze_encoded_page(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_a2d_ffi_fn_method_a2dclient_register_scan(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_compare_stored_scans(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_a2d_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -912,9 +912,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_parse_page_id() != 905) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_trigger_panic_for_testing() != 60667) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_archive_notebook() != 33436) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -949,6 +946,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_register_scan() != 14263) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_compare_stored_scans() != 44061) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_constructor_a2dclient_open() != 8661) {
@@ -1416,16 +1416,6 @@ public interface A2dClientInterface {
     
     fun `parsePageId`(`candidate`: kotlin.String): kotlin.String
     
-    /**
-     * Exists only so a test can demonstrate a Rust panic doesn't silently look like a
-     * successful FFI call (spec §27: "Panics MUST be treated as defects and MUST NOT cross FFI
-     * as success"). UniFFI's generated scaffolding catches unwinds at the `extern "C"`
-     * boundary; fully proving that requires calling through real generated Kotlin/Swift
-     * bindings, which don't exist yet (no Android/iOS project — Milestone 1.2/15). The test
-     * here only proves the Rust-level behavior this relies on.
-     */
-    fun `triggerPanicForTesting`()
-    
     fun `archiveNotebook`(`notebookId`: kotlin.String): NotebookSummary
     
     fun `createNotebook`(`request`: CreateNotebookRequest): CreatedNotebook
@@ -1449,6 +1439,8 @@ public interface A2dClientInterface {
     fun `analyzeEncodedPage`(`request`: AnalyzeEncodedPageRequest): AnalyzeEncodedPageResult
     
     fun `registerScan`(`request`: RegisterScanRequest): RegisteredScan
+    
+    fun `compareStoredScans`(`request`: CompareStoredScansRequest): StoredScanComparisonEvidence
     
     companion object
 }
@@ -1642,26 +1634,6 @@ open class A2dClient: Disposable, AutoCloseable, A2dClientInterface
     
 
     
-    /**
-     * Exists only so a test can demonstrate a Rust panic doesn't silently look like a
-     * successful FFI call (spec §27: "Panics MUST be treated as defects and MUST NOT cross FFI
-     * as success"). UniFFI's generated scaffolding catches unwinds at the `extern "C"`
-     * boundary; fully proving that requires calling through real generated Kotlin/Swift
-     * bindings, which don't exist yet (no Android/iOS project — Milestone 1.2/15). The test
-     * here only proves the Rust-level behavior this relies on.
-     */override fun `triggerPanicForTesting`()
-        = 
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_trigger_panic_for_testing(
-        it,
-        _status)
-}
-    }
-    
-    
-
-    
     @Throws(A2dFfiException::class)override fun `archiveNotebook`(`notebookId`: kotlin.String): NotebookSummary {
             return FfiConverterTypeNotebookSummary.lift(
     callWithHandle {
@@ -1843,6 +1815,21 @@ open class A2dClient: Disposable, AutoCloseable, A2dClientInterface
     
 
     
+    @Throws(A2dFfiException::class)override fun `compareStoredScans`(`request`: CompareStoredScansRequest): StoredScanComparisonEvidence {
+            return FfiConverterTypeStoredScanComparisonEvidence.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_compare_stored_scans(
+        it,
+        
+        FfiConverterTypeCompareStoredScansRequest.lower(`request`),_status)
+}
+    }
+    )
+    }
+    
+
+    
 
     
 
@@ -1894,6 +1881,52 @@ public object FfiConverterTypeA2dClient: FfiConverter<A2dClient, Long> {
 
 
 /**
+ * One nonsecret structured diagnostic detail attached by the Rust producer of an [`A2dError`].
+ *
+ * A vector is used at the foreign boundary because UniFFI map support would not preserve the
+ * deterministic `BTreeMap` order relied on by tests, logs, and stable presentation. Producers
+ * remain responsible for the domain rule that detail values never contain secrets or raw note
+ * content.
+ */
+data class A2dFfiErrorDetail (
+    var `key`: kotlin.String
+    , 
+    var `value`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeA2dFfiErrorDetail: FfiConverterRustBuffer<A2dFfiErrorDetail> {
+    override fun read(buf: ByteBuffer): A2dFfiErrorDetail {
+        return A2dFfiErrorDetail(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: A2dFfiErrorDetail) = (
+            FfiConverterString.allocationSize(value.`key`) +
+            FfiConverterString.allocationSize(value.`value`)
+    )
+
+    override fun write(value: A2dFfiErrorDetail, buf: ByteBuffer) {
+            FfiConverterString.write(value.`key`, buf)
+            FfiConverterString.write(value.`value`, buf)
+    }
+}
+
+
+
+/**
  * The FFI-safe projection of [`A2dError`]'s fields. Boxed inside [`A2dFfiError`] for the same
  * reason `A2dError` itself boxes its fields (clippy's `result_large_err`) — kept as a separate
  * `Record` rather than flattening it into the enum variant so the reason is visible at the
@@ -1918,6 +1951,8 @@ data class A2dFfiErrorDetails (
     var `retryable`: kotlin.Boolean
     , 
     var `correlationId`: kotlin.String
+    , 
+    var `details`: List<A2dFfiErrorDetail>
     
 ){
     
@@ -1941,6 +1976,7 @@ public object FfiConverterTypeA2dFfiErrorDetails: FfiConverterRustBuffer<A2dFfiE
             FfiConverterString.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterSequenceTypeA2dFfiErrorDetail.read(buf),
         )
     }
 
@@ -1951,7 +1987,8 @@ public object FfiConverterTypeA2dFfiErrorDetails: FfiConverterRustBuffer<A2dFfiE
             FfiConverterString.allocationSize(value.`userMessageKey`) +
             FfiConverterString.allocationSize(value.`developerMessage`) +
             FfiConverterBoolean.allocationSize(value.`retryable`) +
-            FfiConverterString.allocationSize(value.`correlationId`)
+            FfiConverterString.allocationSize(value.`correlationId`) +
+            FfiConverterSequenceTypeA2dFfiErrorDetail.allocationSize(value.`details`)
     )
 
     override fun write(value: A2dFfiErrorDetails, buf: ByteBuffer) {
@@ -1962,6 +1999,7 @@ public object FfiConverterTypeA2dFfiErrorDetails: FfiConverterRustBuffer<A2dFfiE
             FfiConverterString.write(value.`developerMessage`, buf)
             FfiConverterBoolean.write(value.`retryable`, buf)
             FfiConverterString.write(value.`correlationId`, buf)
+            FfiConverterSequenceTypeA2dFfiErrorDetail.write(value.`details`, buf)
     }
 }
 
@@ -2254,6 +2292,52 @@ public object FfiConverterTypeAnalyzedMarker: FfiConverterRustBuffer<AnalyzedMar
             FfiConverterDouble.write(value.`decisionMargin`, buf)
             FfiConverterTypeAnalyzedImagePoint.write(value.`center`, buf)
             FfiConverterSequenceTypeAnalyzedImagePoint.write(value.`corners`, buf)
+    }
+}
+
+
+
+data class CompareStoredScansRequest (
+    var `baselineScanId`: kotlin.String
+    , 
+    var `candidateScanId`: kotlin.String
+    , 
+    /**
+     * Explicit aligned-cell segmentation threshold. Valid values are 1 through 255.
+     */
+    var `minimumCellAbsoluteDifference`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCompareStoredScansRequest: FfiConverterRustBuffer<CompareStoredScansRequest> {
+    override fun read(buf: ByteBuffer): CompareStoredScansRequest {
+        return CompareStoredScansRequest(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CompareStoredScansRequest) = (
+            FfiConverterString.allocationSize(value.`baselineScanId`) +
+            FfiConverterString.allocationSize(value.`candidateScanId`) +
+            FfiConverterUInt.allocationSize(value.`minimumCellAbsoluteDifference`)
+    )
+
+    override fun write(value: CompareStoredScansRequest, buf: ByteBuffer) {
+            FfiConverterString.write(value.`baselineScanId`, buf)
+            FfiConverterString.write(value.`candidateScanId`, buf)
+            FfiConverterUInt.write(value.`minimumCellAbsoluteDifference`, buf)
     }
 }
 
@@ -2882,6 +2966,258 @@ public object FfiConverterTypeSmartPageGenerationRequest: FfiConverterRustBuffer
 
 
 
+data class StoredScanChangeRegion (
+    var `leftColumn`: kotlin.UInt
+    , 
+    var `topRow`: kotlin.UInt
+    , 
+    var `rightColumnExclusive`: kotlin.UInt
+    , 
+    var `bottomRowExclusive`: kotlin.UInt
+    , 
+    var `changedCellCount`: kotlin.UInt
+    , 
+    var `meanAbsoluteDifference`: kotlin.Double
+    , 
+    var `maximumAbsoluteDifference`: kotlin.UInt
+    , 
+    var `cells`: List<StoredScanChangedCell>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoredScanChangeRegion: FfiConverterRustBuffer<StoredScanChangeRegion> {
+    override fun read(buf: ByteBuffer): StoredScanChangeRegion {
+        return StoredScanChangeRegion(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeStoredScanChangedCell.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoredScanChangeRegion) = (
+            FfiConverterUInt.allocationSize(value.`leftColumn`) +
+            FfiConverterUInt.allocationSize(value.`topRow`) +
+            FfiConverterUInt.allocationSize(value.`rightColumnExclusive`) +
+            FfiConverterUInt.allocationSize(value.`bottomRowExclusive`) +
+            FfiConverterUInt.allocationSize(value.`changedCellCount`) +
+            FfiConverterDouble.allocationSize(value.`meanAbsoluteDifference`) +
+            FfiConverterUInt.allocationSize(value.`maximumAbsoluteDifference`) +
+            FfiConverterSequenceTypeStoredScanChangedCell.allocationSize(value.`cells`)
+    )
+
+    override fun write(value: StoredScanChangeRegion, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`leftColumn`, buf)
+            FfiConverterUInt.write(value.`topRow`, buf)
+            FfiConverterUInt.write(value.`rightColumnExclusive`, buf)
+            FfiConverterUInt.write(value.`bottomRowExclusive`, buf)
+            FfiConverterUInt.write(value.`changedCellCount`, buf)
+            FfiConverterDouble.write(value.`meanAbsoluteDifference`, buf)
+            FfiConverterUInt.write(value.`maximumAbsoluteDifference`, buf)
+            FfiConverterSequenceTypeStoredScanChangedCell.write(value.`cells`, buf)
+    }
+}
+
+
+
+data class StoredScanChangedCell (
+    var `column`: kotlin.UInt
+    , 
+    var `row`: kotlin.UInt
+    , 
+    var `absoluteDifference`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoredScanChangedCell: FfiConverterRustBuffer<StoredScanChangedCell> {
+    override fun read(buf: ByteBuffer): StoredScanChangedCell {
+        return StoredScanChangedCell(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoredScanChangedCell) = (
+            FfiConverterUInt.allocationSize(value.`column`) +
+            FfiConverterUInt.allocationSize(value.`row`) +
+            FfiConverterUInt.allocationSize(value.`absoluteDifference`)
+    )
+
+    override fun write(value: StoredScanChangedCell, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`column`, buf)
+            FfiConverterUInt.write(value.`row`, buf)
+            FfiConverterUInt.write(value.`absoluteDifference`, buf)
+    }
+}
+
+
+
+data class StoredScanComparisonEvidence (
+    var `baselineScanId`: kotlin.String
+    , 
+    var `candidateScanId`: kotlin.String
+    , 
+    var `pageId`: kotlin.String
+    , 
+    var `baselinePipelineVersion`: kotlin.String
+    , 
+    var `candidatePipelineVersion`: kotlin.String
+    , 
+    var `pipelineVersionsMatch`: kotlin.Boolean
+    , 
+    var `baselineQualityStatus`: StoredScanQualityStatus
+    , 
+    var `candidateQualityStatus`: StoredScanQualityStatus
+    , 
+    var `baselinePreferred`: kotlin.Boolean
+    , 
+    var `candidatePreferred`: kotlin.Boolean
+    , 
+    var `baselinePhysicalCopyId`: kotlin.String?
+    , 
+    var `candidatePhysicalCopyId`: kotlin.String?
+    , 
+    /**
+     * `None` means at least one scan has no known physical-copy assignment.
+     */
+    var `samePhysicalCopy`: kotlin.Boolean?
+    , 
+    var `minimumCellAbsoluteDifference`: kotlin.UInt
+    , 
+    var `correctedAssetHashMatch`: kotlin.Boolean
+    , 
+    var `exactContentMatch`: kotlin.Boolean
+    , 
+    var `confidence`: StoredScanComparisonConfidence
+    , 
+    var `reasons`: List<StoredScanComparisonReason>
+    , 
+    var `meanAbsoluteDifference`: kotlin.Double
+    , 
+    var `maximumAbsoluteDifference`: kotlin.UInt
+    , 
+    var `changedCellCount`: kotlin.UInt
+    , 
+    var `changeRegions`: List<StoredScanChangeRegion>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoredScanComparisonEvidence: FfiConverterRustBuffer<StoredScanComparisonEvidence> {
+    override fun read(buf: ByteBuffer): StoredScanComparisonEvidence {
+        return StoredScanComparisonEvidence(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeStoredScanQualityStatus.read(buf),
+            FfiConverterTypeStoredScanQualityStatus.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeStoredScanComparisonConfidence.read(buf),
+            FfiConverterSequenceTypeStoredScanComparisonReason.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeStoredScanChangeRegion.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoredScanComparisonEvidence) = (
+            FfiConverterString.allocationSize(value.`baselineScanId`) +
+            FfiConverterString.allocationSize(value.`candidateScanId`) +
+            FfiConverterString.allocationSize(value.`pageId`) +
+            FfiConverterString.allocationSize(value.`baselinePipelineVersion`) +
+            FfiConverterString.allocationSize(value.`candidatePipelineVersion`) +
+            FfiConverterBoolean.allocationSize(value.`pipelineVersionsMatch`) +
+            FfiConverterTypeStoredScanQualityStatus.allocationSize(value.`baselineQualityStatus`) +
+            FfiConverterTypeStoredScanQualityStatus.allocationSize(value.`candidateQualityStatus`) +
+            FfiConverterBoolean.allocationSize(value.`baselinePreferred`) +
+            FfiConverterBoolean.allocationSize(value.`candidatePreferred`) +
+            FfiConverterOptionalString.allocationSize(value.`baselinePhysicalCopyId`) +
+            FfiConverterOptionalString.allocationSize(value.`candidatePhysicalCopyId`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`samePhysicalCopy`) +
+            FfiConverterUInt.allocationSize(value.`minimumCellAbsoluteDifference`) +
+            FfiConverterBoolean.allocationSize(value.`correctedAssetHashMatch`) +
+            FfiConverterBoolean.allocationSize(value.`exactContentMatch`) +
+            FfiConverterTypeStoredScanComparisonConfidence.allocationSize(value.`confidence`) +
+            FfiConverterSequenceTypeStoredScanComparisonReason.allocationSize(value.`reasons`) +
+            FfiConverterDouble.allocationSize(value.`meanAbsoluteDifference`) +
+            FfiConverterUInt.allocationSize(value.`maximumAbsoluteDifference`) +
+            FfiConverterUInt.allocationSize(value.`changedCellCount`) +
+            FfiConverterSequenceTypeStoredScanChangeRegion.allocationSize(value.`changeRegions`)
+    )
+
+    override fun write(value: StoredScanComparisonEvidence, buf: ByteBuffer) {
+            FfiConverterString.write(value.`baselineScanId`, buf)
+            FfiConverterString.write(value.`candidateScanId`, buf)
+            FfiConverterString.write(value.`pageId`, buf)
+            FfiConverterString.write(value.`baselinePipelineVersion`, buf)
+            FfiConverterString.write(value.`candidatePipelineVersion`, buf)
+            FfiConverterBoolean.write(value.`pipelineVersionsMatch`, buf)
+            FfiConverterTypeStoredScanQualityStatus.write(value.`baselineQualityStatus`, buf)
+            FfiConverterTypeStoredScanQualityStatus.write(value.`candidateQualityStatus`, buf)
+            FfiConverterBoolean.write(value.`baselinePreferred`, buf)
+            FfiConverterBoolean.write(value.`candidatePreferred`, buf)
+            FfiConverterOptionalString.write(value.`baselinePhysicalCopyId`, buf)
+            FfiConverterOptionalString.write(value.`candidatePhysicalCopyId`, buf)
+            FfiConverterOptionalBoolean.write(value.`samePhysicalCopy`, buf)
+            FfiConverterUInt.write(value.`minimumCellAbsoluteDifference`, buf)
+            FfiConverterBoolean.write(value.`correctedAssetHashMatch`, buf)
+            FfiConverterBoolean.write(value.`exactContentMatch`, buf)
+            FfiConverterTypeStoredScanComparisonConfidence.write(value.`confidence`, buf)
+            FfiConverterSequenceTypeStoredScanComparisonReason.write(value.`reasons`, buf)
+            FfiConverterDouble.write(value.`meanAbsoluteDifference`, buf)
+            FfiConverterUInt.write(value.`maximumAbsoluteDifference`, buf)
+            FfiConverterUInt.write(value.`changedCellCount`, buf)
+            FfiConverterSequenceTypeStoredScanChangeRegion.write(value.`changeRegions`, buf)
+    }
+}
+
+
+
 
 
 sealed class A2dFfiException: kotlin.Exception() {
@@ -3501,6 +3837,114 @@ public object FfiConverterTypeSmartPagePaperSize: FfiConverterRustBuffer<SmartPa
 
 
 
+enum class StoredScanComparisonConfidence {
+    
+    CONCLUSIVE_EXACT_MATCH,
+    UNAVAILABLE_UNTIL_FIXTURE_CALIBRATION;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoredScanComparisonConfidence: FfiConverterRustBuffer<StoredScanComparisonConfidence> {
+    override fun read(buf: ByteBuffer) = try {
+        StoredScanComparisonConfidence.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: StoredScanComparisonConfidence) = 4UL
+
+    override fun write(value: StoredScanComparisonConfidence, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class StoredScanComparisonReason {
+    
+    CORRECTED_ASSET_HASH_MATCH,
+    CORRECTED_ASSET_HASH_DIFFERS,
+    PERCEPTUAL_FINGERPRINT_MATCH,
+    PERCEPTUAL_DIFFERENCES_BELOW_CONFIGURED_THRESHOLD,
+    PERCEPTUAL_CHANGE_REGIONS_DETECTED,
+    FIXTURE_CALIBRATION_REQUIRED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoredScanComparisonReason: FfiConverterRustBuffer<StoredScanComparisonReason> {
+    override fun read(buf: ByteBuffer) = try {
+        StoredScanComparisonReason.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: StoredScanComparisonReason) = 4UL
+
+    override fun write(value: StoredScanComparisonReason, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class StoredScanQualityStatus {
+    
+    ACCEPTED,
+    ACCEPTED_WITH_WARNINGS,
+    NEEDS_REVIEW,
+    REJECTED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoredScanQualityStatus: FfiConverterRustBuffer<StoredScanQualityStatus> {
+    override fun read(buf: ByteBuffer) = try {
+        StoredScanQualityStatus.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: StoredScanQualityStatus) = 4UL
+
+    override fun write(value: StoredScanQualityStatus, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 /**
  * @suppress
  */
@@ -3590,6 +4034,38 @@ public object FfiConverterOptionalDouble: FfiConverterRustBuffer<kotlin.Double?>
         } else {
             buf.put(1)
             FfiConverterDouble.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalBoolean: FfiConverterRustBuffer<kotlin.Boolean?> {
+    override fun read(buf: ByteBuffer): kotlin.Boolean? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterBoolean.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Boolean?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterBoolean.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Boolean?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterBoolean.write(value, buf)
         }
     }
 }
@@ -3720,6 +4196,34 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeA2dFfiErrorDetail: FfiConverterRustBuffer<List<A2dFfiErrorDetail>> {
+    override fun read(buf: ByteBuffer): List<A2dFfiErrorDetail> {
+        val len = buf.getInt()
+        return List<A2dFfiErrorDetail>(len) {
+            FfiConverterTypeA2dFfiErrorDetail.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<A2dFfiErrorDetail>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeA2dFfiErrorDetail.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<A2dFfiErrorDetail>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeA2dFfiErrorDetail.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeAnalyzedImagePoint: FfiConverterRustBuffer<List<AnalyzedImagePoint>> {
     override fun read(buf: ByteBuffer): List<AnalyzedImagePoint> {
         val len = buf.getInt()
@@ -3832,6 +4336,62 @@ public object FfiConverterSequenceTypeRegistrationMarker: FfiConverterRustBuffer
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeStoredScanChangeRegion: FfiConverterRustBuffer<List<StoredScanChangeRegion>> {
+    override fun read(buf: ByteBuffer): List<StoredScanChangeRegion> {
+        val len = buf.getInt()
+        return List<StoredScanChangeRegion>(len) {
+            FfiConverterTypeStoredScanChangeRegion.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<StoredScanChangeRegion>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeStoredScanChangeRegion.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<StoredScanChangeRegion>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeStoredScanChangeRegion.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeStoredScanChangedCell: FfiConverterRustBuffer<List<StoredScanChangedCell>> {
+    override fun read(buf: ByteBuffer): List<StoredScanChangedCell> {
+        val len = buf.getInt()
+        return List<StoredScanChangedCell>(len) {
+            FfiConverterTypeStoredScanChangedCell.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<StoredScanChangedCell>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeStoredScanChangedCell.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<StoredScanChangedCell>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeStoredScanChangedCell.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeRegisteredScanRequiredAction: FfiConverterRustBuffer<List<RegisteredScanRequiredAction>> {
     override fun read(buf: ByteBuffer): List<RegisteredScanRequiredAction> {
         val len = buf.getInt()
@@ -3878,6 +4438,34 @@ public object FfiConverterSequenceTypeRegisteredScanWarning: FfiConverterRustBuf
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeRegisteredScanWarning.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeStoredScanComparisonReason: FfiConverterRustBuffer<List<StoredScanComparisonReason>> {
+    override fun read(buf: ByteBuffer): List<StoredScanComparisonReason> {
+        val len = buf.getInt()
+        return List<StoredScanComparisonReason>(len) {
+            FfiConverterTypeStoredScanComparisonReason.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<StoredScanComparisonReason>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeStoredScanComparisonReason.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<StoredScanComparisonReason>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeStoredScanComparisonReason.write(it, buf)
         }
     }
 }
