@@ -81,7 +81,7 @@ fn temp_out_dir(label: &str) -> PathBuf {
     dir
 }
 
-const EXPECTED_API_SYMBOLS: [&str; 11] = [
+const EXPECTED_API_SYMBOLS: [&str; 19] = [
     "A2dClient",
     "OpenLibraryRequest",
     "generatePageId",
@@ -93,6 +93,14 @@ const EXPECTED_API_SYMBOLS: [&str; 11] = [
     "RegistrationMarker",
     "RegisteredScanWarning",
     "RegisteredScanRequiredAction",
+    "compareStoredScans",
+    "CompareStoredScansRequest",
+    "StoredScanComparisonEvidence",
+    "StoredScanComparisonConfidence",
+    "StoredScanComparisonReason",
+    "StoredScanQualityStatus",
+    "StoredScanChangeRegion",
+    "StoredScanChangedCell",
 ];
 
 #[test]
