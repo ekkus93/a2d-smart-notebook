@@ -10,6 +10,7 @@ use std::path::Path;
 
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
+mod asset_recovery;
 mod assets;
 mod json_columns;
 mod migration_history;
@@ -17,6 +18,7 @@ mod migrations;
 mod repository;
 mod workflow;
 
+pub use asset_recovery::OrphanedFinalAsset;
 pub use assets::AssetStore;
 pub use migrations::{MIGRATIONS, Migration};
 pub use repository::{
