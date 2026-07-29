@@ -16,6 +16,7 @@ mod json_columns;
 mod migration_history;
 mod migrations;
 mod repository;
+mod transaction_repository;
 mod workflow;
 
 pub use asset_recovery::{AssetPersistenceFailureStage, OrphanedFinalAsset};
