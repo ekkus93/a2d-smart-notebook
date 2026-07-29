@@ -10,12 +10,11 @@ use a2d_image::{
     EncodedImage, EncodedImageFormat, EncodedImageLimits, ImageLimits, ImageRotation,
     PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT, PerceptualFingerprintV1,
 };
-use serde_json::{Map, Value};
-use sha2::{Digest, Sha256};
 
 const MAX_ENCODED_BYTES: usize = 24 * 1024 * 1024;
 const MAX_DECODED_PIXELS: u64 = 32_000_000;
 const MAX_DECODED_BYTES: u64 = 96_000_000;
+const CALIBRATION_INPUT_HEADER: &str = "pair_id\texpected_relation\tbaseline_fixture_id\tbaseline_normalized_ocr_path\tbaseline_pipeline_version\tcandidate_fixture_id\tcandidate_normalized_ocr_path\tcandidate_pipeline_version";
 const EXPECTED_RELATIONS: &[&str] = &[
     "near_duplicate",
     "revision",
@@ -24,11 +23,13 @@ const EXPECTED_RELATIONS: &[&str] = &[
 
 type DynError = Box<dyn Error>;
 
-struct FixtureEvidence {
+#[derive(Debug, Eq, PartialEq)]
+struct FixtureSource {
+    path: PathBuf,
     pipeline_version: u64,
-    fingerprint: PerceptualFingerprintV1,
 }
 
+#[derive(Debug, Eq, PartialEq)]
 struct ComparisonPair {
     id: String,
     baseline_fixture_id: String,
@@ -38,7 +39,7 @@ struct ComparisonPair {
 
 fn usage() -> ! {
     eprintln!(
-        "usage: a2d-fingerprint-calibration <photographed-manifest.json> <output.tsv>"
+        "usage: a2d-fingerprint-calibration <photographed-root> <validated-input.tsv> <output.tsv>"
     );
     std::process::exit(2)
 }
@@ -47,81 +48,34 @@ fn invalid(message: impl Into<String>) -> DynError {
     Box::new(IoError::new(ErrorKind::InvalidData, message.into()))
 }
 
-fn required_object<'a>(value: &'a Value, context: &str) -> Result<&'a Map<String, Value>, DynError> {
-    value
-        .as_object()
-        .ok_or_else(|| invalid(format!("{context}: expected an object")))
-}
-
-fn required_array<'a>(
-    object: &'a Map<String, Value>,
-    field: &str,
-    context: &str,
-) -> Result<&'a [Value], DynError> {
-    object
-        .get(field)
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .ok_or_else(|| invalid(format!("{context}: {field} must be an array")))
-}
-
-fn required_text<'a>(
-    object: &'a Map<String, Value>,
-    field: &str,
-    context: &str,
-) -> Result<&'a str, DynError> {
-    let value = object
-        .get(field)
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| invalid(format!("{context}: missing non-empty {field}")))?;
-    if value.contains(['\t', '\r', '\n']) {
+fn validate_field(value: &str, context: &str) -> Result<(), DynError> {
+    if value.is_empty() {
+        return Err(invalid(format!("{context}: value must not be empty")));
+    }
+    if value.bytes().any(|byte| matches!(byte, b'\t' | b'\r' | b'\n')) {
         return Err(invalid(format!(
-            "{context}: {field} contains control whitespace"
+            "{context}: value contains control whitespace"
         )));
     }
-    Ok(value)
-}
-
-fn required_u64(
-    object: &Map<String, Value>,
-    field: &str,
-    context: &str,
-) -> Result<u64, DynError> {
-    object
-        .get(field)
-        .and_then(Value::as_u64)
-        .filter(|value| *value > 0)
-        .ok_or_else(|| invalid(format!("{context}: {field} must be a positive integer")))
-}
-
-fn required_true(
-    object: &Map<String, Value>,
-    field: &str,
-    context: &str,
-) -> Result<(), DynError> {
-    if object.get(field).and_then(Value::as_bool) == Some(true) {
-        Ok(())
-    } else {
-        Err(invalid(format!("{context}: {field} must be true")))
-    }
+    Ok(())
 }
 
 fn resolve_confined_file(root: &Path, relative_path: &str, context: &str) -> Result<PathBuf, DynError> {
     let relative = Path::new(relative_path);
     if relative.is_absolute()
-        || relative.components().any(|component| {
-            !matches!(component, Component::Normal(_))
-        })
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
     {
         return Err(invalid(format!(
             "{context}: path must contain only relative normal components"
         )));
     }
-    let resolved = root.join(relative).canonicalize().map_err(|error| {
+    let unresolved = root.join(relative);
+    let resolved = unresolved.canonicalize().map_err(|error| {
         invalid(format!(
             "{context}: failed to resolve {}: {error}",
-            root.join(relative).display()
+            unresolved.display()
         ))
     })?;
     if !resolved.starts_with(root) || !resolved.is_file() {
@@ -133,113 +87,168 @@ fn resolve_confined_file(root: &Path, relative_path: &str, context: &str) -> Res
     Ok(resolved)
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+fn insert_fixture_source(
+    fixtures: &mut BTreeMap<String, FixtureSource>,
+    fixture_id: &str,
+    relative_path: &str,
+    pipeline_version: u64,
+    root: &Path,
+    context: &str,
+) -> Result<(), DynError> {
+    validate_field(fixture_id, context)?;
+    validate_field(relative_path, context)?;
+    if pipeline_version == 0 {
+        return Err(invalid(format!(
+            "{context}: pipeline version must be positive"
+        )));
+    }
+    let source = FixtureSource {
+        path: resolve_confined_file(root, relative_path, context)?,
+        pipeline_version,
+    };
+    if let Some(existing) = fixtures.get(fixture_id) {
+        if existing != &source {
+            return Err(invalid(format!(
+                "{context}: fixture {fixture_id} maps to inconsistent evidence"
+            )));
+        }
+    } else {
+        fixtures.insert(fixture_id.to_string(), source);
+    }
+    Ok(())
 }
 
-fn decode_normalized_fingerprint(path: &Path, bytes: &[u8]) -> Result<PerceptualFingerprintV1, DynError> {
-    let limits = EncodedImageLimits::new(
-        MAX_ENCODED_BYTES,
-        MAX_DECODED_PIXELS,
-        MAX_DECODED_BYTES,
-    )?;
+fn parse_pipeline_version(value: &str, context: &str) -> Result<u64, DynError> {
+    let parsed = value.parse::<u64>().map_err(|error| {
+        invalid(format!(
+            "{context}: invalid pipeline version {value:?}: {error}"
+        ))
+    })?;
+    if parsed == 0 {
+        return Err(invalid(format!(
+            "{context}: pipeline version must be positive"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn parse_calibration_input(
+    root: &Path,
+    input_path: &Path,
+) -> Result<(BTreeMap<String, FixtureSource>, Vec<ComparisonPair>), DynError> {
+    let input = fs::read_to_string(input_path)?;
+    let mut lines = input.lines();
+    let header = lines
+        .next()
+        .ok_or_else(|| invalid("calibration input is empty"))?;
+    if header != CALIBRATION_INPUT_HEADER {
+        return Err(invalid("unsupported calibration input header or schema"));
+    }
+
+    let mut fixtures = BTreeMap::new();
+    let mut pairs = Vec::new();
+    let mut pair_ids = BTreeSet::new();
+    let mut unordered_pairs = BTreeSet::new();
+    for (offset, line) in lines.enumerate() {
+        let line_number = offset + 2;
+        if line.is_empty() {
+            return Err(invalid(format!(
+                "calibration input line {line_number} is empty"
+            )));
+        }
+        let fields = line.split('\t').collect::<Vec<_>>();
+        if fields.len() != 8 {
+            return Err(invalid(format!(
+                "calibration input line {line_number} must contain exactly 8 fields"
+            )));
+        }
+        let pair_id = fields[0];
+        let expected_relation = fields[1];
+        let baseline_fixture_id = fields[2];
+        let baseline_path = fields[3];
+        let baseline_pipeline_version =
+            parse_pipeline_version(fields[4], &format!("line {line_number} baseline"))?;
+        let candidate_fixture_id = fields[5];
+        let candidate_path = fields[6];
+        let candidate_pipeline_version =
+            parse_pipeline_version(fields[7], &format!("line {line_number} candidate"))?;
+
+        validate_field(pair_id, &format!("line {line_number} pair id"))?;
+        validate_field(
+            expected_relation,
+            &format!("line {line_number} expected relation"),
+        )?;
+        if !EXPECTED_RELATIONS.contains(&expected_relation) {
+            return Err(invalid(format!(
+                "line {line_number}: unsupported expected relation {expected_relation:?}"
+            )));
+        }
+        if baseline_fixture_id == candidate_fixture_id {
+            return Err(invalid(format!(
+                "line {line_number}: a fixture cannot be compared with itself"
+            )));
+        }
+        if !pair_ids.insert(pair_id.to_string()) {
+            return Err(invalid(format!("duplicate comparison pair id: {pair_id}")));
+        }
+        let mut unordered_key = [
+            baseline_fixture_id.to_string(),
+            candidate_fixture_id.to_string(),
+        ];
+        unordered_key.sort();
+        if !unordered_pairs.insert(unordered_key) {
+            return Err(invalid(format!(
+                "duplicate unordered comparison pair: {baseline_fixture_id} / {candidate_fixture_id}"
+            )));
+        }
+
+        insert_fixture_source(
+            &mut fixtures,
+            baseline_fixture_id,
+            baseline_path,
+            baseline_pipeline_version,
+            root,
+            &format!("line {line_number} baseline"),
+        )?;
+        insert_fixture_source(
+            &mut fixtures,
+            candidate_fixture_id,
+            candidate_path,
+            candidate_pipeline_version,
+            root,
+            &format!("line {line_number} candidate"),
+        )?;
+        pairs.push(ComparisonPair {
+            id: pair_id.to_string(),
+            baseline_fixture_id: baseline_fixture_id.to_string(),
+            candidate_fixture_id: candidate_fixture_id.to_string(),
+            expected_relation: expected_relation.to_string(),
+        });
+    }
+
+    if pairs.is_empty() {
+        return Err(invalid(
+            "photographed calibration requires at least one labeled pair",
+        ));
+    }
+    Ok((fixtures, pairs))
+}
+
+fn decode_normalized_fingerprint(path: &Path) -> Result<PerceptualFingerprintV1, DynError> {
+    let bytes = fs::read(path)?;
     let image = EncodedImage::new(
-        bytes,
+        &bytes,
         EncodedImageFormat::Png,
         ImageRotation::Degrees0,
-        limits,
+        EncodedImageLimits::new(
+            MAX_ENCODED_BYTES,
+            MAX_DECODED_PIXELS,
+            MAX_DECODED_BYTES,
+        )?,
     )?
     .decode_rgb8()?
     .into_gray8(ImageLimits::new(MAX_DECODED_PIXELS)?)?;
-    PerceptualFingerprintV1::from_gray_image(&image).map_err(|error| {
-        invalid(format!(
-            "failed to fingerprint normalized OCR image {}: {error}",
-            path.display()
-        ))
-    })
-}
-
-fn load_fixture(
-    root: &Path,
-    value: &Value,
-) -> Result<(String, FixtureEvidence), DynError> {
-    let fixture = required_object(value, "fixture")?;
-    let fixture_id = required_text(fixture, "id", "fixture")?.to_string();
-    let context = format!("fixture {fixture_id}");
-    required_true(fixture, "photographed", &context)?;
-    if required_text(fixture, "normalized_ocr_format", &context)? != "png" {
-        return Err(invalid(format!(
-            "{context}: normalized_ocr_format must be png"
-        )));
-    }
-    if fixture
-        .get("normalized_rotation_degrees")
-        .and_then(Value::as_u64)
-        != Some(0)
-    {
-        return Err(invalid(format!(
-            "{context}: normalized OCR evidence must be upright"
-        )));
-    }
-    let pipeline_version = required_u64(fixture, "pipeline_version", &context)?;
-    let relative_path = required_text(fixture, "normalized_ocr_path", &context)?;
-    let expected_byte_length = required_u64(fixture, "normalized_ocr_byte_length", &context)?;
-    let expected_sha256 = required_text(fixture, "normalized_ocr_sha256", &context)?;
-    if expected_sha256.len() != 64
-        || !expected_sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(invalid(format!(
-            "{context}: normalized_ocr_sha256 must be 64 lowercase hexadecimal characters"
-        )));
-    }
-
-    let path = resolve_confined_file(root, relative_path, &context)?;
-    let bytes = fs::read(&path)?;
-    if u64::try_from(bytes.len())? != expected_byte_length {
-        return Err(invalid(format!(
-            "{context}: normalized OCR byte length drifted"
-        )));
-    }
-    if sha256_hex(&bytes) != expected_sha256 {
-        return Err(invalid(format!(
-            "{context}: normalized OCR SHA-256 drifted"
-        )));
-    }
-    let fingerprint = decode_normalized_fingerprint(&path, &bytes)?;
-    Ok((
-        fixture_id,
-        FixtureEvidence {
-            pipeline_version,
-            fingerprint,
-        },
-    ))
-}
-
-fn load_pair(value: &Value) -> Result<ComparisonPair, DynError> {
-    let pair = required_object(value, "comparison pair")?;
-    let id = required_text(pair, "id", "comparison pair")?.to_string();
-    let context = format!("comparison pair {id}");
-    let baseline_fixture_id = required_text(pair, "baseline_fixture_id", &context)?.to_string();
-    let candidate_fixture_id = required_text(pair, "candidate_fixture_id", &context)?.to_string();
-    if baseline_fixture_id == candidate_fixture_id {
-        return Err(invalid(format!(
-            "{context}: a fixture cannot be compared with itself"
-        )));
-    }
-    let expected_relation = required_text(pair, "expected_relation", &context)?.to_string();
-    if !EXPECTED_RELATIONS.contains(&expected_relation.as_str()) {
-        return Err(invalid(format!(
-            "{context}: unsupported expected_relation"
-        )));
-    }
-    Ok(ComparisonPair {
-        id,
-        baseline_fixture_id,
-        candidate_fixture_id,
-        expected_relation,
-    })
+    PerceptualFingerprintV1::from_gray_image(&image).map_err(Into::into)
 }
 
 fn nearest_rank_percentile(sorted_values: &[u8], percentile: usize) -> u8 {
@@ -253,7 +262,11 @@ fn histogram_string(values: &[u8]) -> String {
         counts[usize::from(*value)] += 1;
     }
     let mut encoded = String::new();
-    for (value, count) in counts.into_iter().enumerate().filter(|(_, count)| *count > 0) {
+    for (value, count) in counts
+        .into_iter()
+        .enumerate()
+        .filter(|(_, count)| *count > 0)
+    {
         if !encoded.is_empty() {
             encoded.push(',');
         }
@@ -274,36 +287,39 @@ fn cell_differences_hex(values: &[u8]) -> String {
 
 fn write_report(
     output_path: &Path,
-    fixtures: &BTreeMap<String, FixtureEvidence>,
+    fixture_sources: &BTreeMap<String, FixtureSource>,
     pairs: &[ComparisonPair],
 ) -> Result<(), DynError> {
-    if output_path.exists() {
-        return Err(invalid(format!(
-            "refusing to overwrite existing calibration report {}",
-            output_path.display()
-        )));
-    }
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
+    }
+    let mut fingerprints = BTreeMap::new();
+    for (fixture_id, source) in fixture_sources {
+        fingerprints.insert(
+            fixture_id.clone(),
+            decode_normalized_fingerprint(&source.path)?,
+        );
     }
 
     let mut report = String::from(
         "pair_id\texpected_relation\tbaseline_fixture_id\tcandidate_fixture_id\tbaseline_pipeline_version\tcandidate_pipeline_version\tmean_absolute_difference\tmaximum_absolute_difference\tnonzero_cell_count\tp50_absolute_difference\tp90_absolute_difference\tp95_absolute_difference\tp99_absolute_difference\tdifference_histogram\tcell_absolute_differences_hex\n",
     );
     for pair in pairs {
-        let baseline = fixtures.get(&pair.baseline_fixture_id).ok_or_else(|| {
+        let baseline = fingerprints.get(&pair.baseline_fixture_id).ok_or_else(|| {
             invalid(format!(
                 "comparison pair {} references unknown baseline fixture {}",
                 pair.id, pair.baseline_fixture_id
             ))
         })?;
-        let candidate = fixtures.get(&pair.candidate_fixture_id).ok_or_else(|| {
+        let candidate = fingerprints.get(&pair.candidate_fixture_id).ok_or_else(|| {
             invalid(format!(
                 "comparison pair {} references unknown candidate fixture {}",
                 pair.id, pair.candidate_fixture_id
             ))
         })?;
-        let difference = baseline.fingerprint.difference(&candidate.fingerprint);
+        let baseline_source = &fixture_sources[&pair.baseline_fixture_id];
+        let candidate_source = &fixture_sources[&pair.candidate_fixture_id];
+        let difference = baseline.difference(candidate);
         if difference.cell_absolute_differences.len() != PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT {
             return Err(invalid(format!(
                 "comparison pair {} produced an invalid difference grid",
@@ -324,8 +340,8 @@ fn write_report(
             pair.expected_relation,
             pair.baseline_fixture_id,
             pair.candidate_fixture_id,
-            baseline.pipeline_version,
-            candidate.pipeline_version,
+            baseline_source.pipeline_version,
+            candidate_source.pipeline_version,
             difference.mean_absolute_difference,
             difference.maximum_absolute_difference,
             nonzero_cell_count,
@@ -338,16 +354,13 @@ fn write_report(
         )?;
     }
 
-    let partial_path = output_path.with_extension("partial");
     let mut output = OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&partial_path)?;
+        .open(output_path)?;
     output.write_all(report.as_bytes())?;
     output.flush()?;
     output.sync_all()?;
-    drop(output);
-    fs::rename(&partial_path, output_path)?;
     println!(
         "wrote {} photographed fingerprint comparisons to {}",
         pairs.len(),
@@ -356,73 +369,28 @@ fn write_report(
     Ok(())
 }
 
-fn run(manifest_path: &Path, output_path: &Path) -> Result<(), DynError> {
-    let manifest_path = manifest_path.canonicalize()?;
-    let root = manifest_path
-        .parent()
-        .ok_or_else(|| invalid("manifest path has no parent directory"))?
-        .canonicalize()?;
-    let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
-    let manifest = required_object(&manifest, "manifest")?;
-    if manifest.get("schema_version").and_then(Value::as_u64) != Some(1) {
-        return Err(invalid("unsupported photographed fixture manifest schema"));
+fn run(root: &Path, input_path: &Path, output_path: &Path) -> Result<(), DynError> {
+    let root = root.canonicalize()?;
+    if !root.is_dir() {
+        return Err(invalid(format!(
+            "photographed root is not a directory: {}",
+            root.display()
+        )));
     }
-    required_true(manifest, "photographed", "manifest")?;
-
-    let fixture_values = required_array(manifest, "fixtures", "manifest")?;
-    let pair_values = required_array(manifest, "comparison_pairs", "manifest")?;
-    if fixture_values.is_empty() || pair_values.is_empty() {
-        return Err(invalid(
-            "photographed calibration requires at least one fixture and one labeled pair",
-        ));
-    }
-
-    let mut fixtures = BTreeMap::new();
-    for value in fixture_values {
-        let (fixture_id, evidence) = load_fixture(&root, value)?;
-        if fixtures.insert(fixture_id.clone(), evidence).is_some() {
-            return Err(invalid(format!(
-                "duplicate photographed fixture id: {fixture_id}"
-            )));
-        }
-    }
-
-    let mut pair_ids = BTreeSet::new();
-    let mut unordered_pairs = BTreeSet::new();
-    let mut pairs = Vec::with_capacity(pair_values.len());
-    for value in pair_values {
-        let pair = load_pair(value)?;
-        if !pair_ids.insert(pair.id.clone()) {
-            return Err(invalid(format!(
-                "duplicate comparison pair id: {}",
-                pair.id
-            )));
-        }
-        let mut key = [
-            pair.baseline_fixture_id.clone(),
-            pair.candidate_fixture_id.clone(),
-        ];
-        key.sort();
-        if !unordered_pairs.insert(key) {
-            return Err(invalid(format!(
-                "duplicate unordered comparison pair: {} / {}",
-                pair.baseline_fixture_id, pair.candidate_fixture_id
-            )));
-        }
-        pairs.push(pair);
-    }
-
+    let input_path = input_path.canonicalize()?;
+    let (fixtures, pairs) = parse_calibration_input(&root, &input_path)?;
     write_report(output_path, &fixtures, &pairs)
 }
 
 fn main() -> Result<(), DynError> {
     let mut args = env::args_os().skip(1);
-    let manifest_path = PathBuf::from(args.next().unwrap_or_else(|| usage()));
+    let root = PathBuf::from(args.next().unwrap_or_else(|| usage()));
+    let input_path = PathBuf::from(args.next().unwrap_or_else(|| usage()));
     let output_path = PathBuf::from(args.next().unwrap_or_else(|| usage()));
     if args.next().is_some() {
         usage();
     }
-    run(&manifest_path, &output_path)
+    run(&root, &input_path, &output_path)
 }
 
 #[cfg(test)]
@@ -445,13 +413,8 @@ mod tests {
     }
 
     #[test]
-    fn unknown_relation_is_rejected() {
-        let pair = serde_json::json!({
-            "id": "pair-1",
-            "baseline_fixture_id": "a",
-            "candidate_fixture_id": "b",
-            "expected_relation": "probably_same"
-        });
-        assert!(load_pair(&pair).is_err());
+    fn invalid_pipeline_versions_are_rejected() {
+        assert!(parse_pipeline_version("0", "test").is_err());
+        assert!(parse_pipeline_version("not-a-number", "test").is_err());
     }
 }
