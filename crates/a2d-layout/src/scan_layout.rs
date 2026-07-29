@@ -1,12 +1,13 @@
-//! Rust-owned resolution of the physical layout and portable processing parameters used by scan
-//! preview and durable registration.
+//! Rust-owned resolution of physical page layouts and portable scan-processing parameters.
 //!
 //! The printable v1 compatibility surface uses official `tagStandard41h12` markers with stable
 //! IDs 0..=3 assigned to semantic corners. Notebook Design manifests currently describe semantic
-//! roles but do not yet carry numeric marker IDs or a concrete detector-family token, so this
-//! module maps the reviewed v1 printable contract explicitly and keeps the manifest declaration as
+//! roles but do not carry numeric marker IDs or a concrete detector-family token, so this module
+//! maps the reviewed v1 printable contract explicitly and retains the manifest declaration only as
 //! provenance. Unknown layouts and contradictory stored records fail closed; no development layout
 //! is selected as a fallback.
+
+use std::collections::BTreeSet;
 
 use a2d_domain::{
     A2dError, ErrorCategory, ErrorCode, ErrorSeverity, LayoutId, NotebookDesign, Page, PageKind,
@@ -23,6 +24,14 @@ pub const SCAN_PROCESSING_POLICY_VERSION: u32 = 1;
 pub const V1_MARKER_FAMILY: &str = "tagStandard41h12";
 /// Portrait corrected images use a stable width and derive height from physical page geometry.
 pub const V1_CORRECTED_WIDTH_PX: u32 = 900;
+/// Stable marker IDs assigned by the v1 PDF renderer.
+pub const V1_MARKER_ID_LAYOUT: [(u32, MarkerRole); 4] = [
+    (0, MarkerRole::TopLeft),
+    (1, MarkerRole::TopRight),
+    (2, MarkerRole::BottomRight),
+    (3, MarkerRole::BottomLeft),
+];
+
 const MAX_CORRECTED_DIMENSION_PX: u32 = 4_096;
 const PHYSICAL_DIMENSION_TOLERANCE_MM: f64 = 0.001;
 
@@ -50,28 +59,8 @@ pub struct ResolvedScanLayout {
     pub page_layout: PageLayout,
 }
 
-impl ResolvedScanLayout {
-    pub fn marker_id_layout(&self) -> [(u32, MarkerRole); 4] {
-        [
-            (marker_id_for_role(MarkerRole::TopLeft), MarkerRole::TopLeft),
-            (
-                marker_id_for_role(MarkerRole::TopRight),
-                MarkerRole::TopRight,
-            ),
-            (
-                marker_id_for_role(MarkerRole::BottomRight),
-                MarkerRole::BottomRight,
-            ),
-            (
-                marker_id_for_role(MarkerRole::BottomLeft),
-                MarkerRole::BottomLeft,
-            ),
-        ]
-    }
-}
-
-/// Stable marker IDs assigned by the v1 PDF renderer. This function is deliberately public so
-/// preview, registration, and future platform projections can consume one Rust-owned mapping.
+/// Stable marker ID assigned by the v1 PDF renderer. Preview, registration, and platform
+/// projections should consume this Rust-owned mapping rather than duplicate it.
 pub const fn marker_id_for_role(role: MarkerRole) -> u32 {
     match role {
         MarkerRole::TopLeft => 0,
@@ -126,7 +115,9 @@ pub fn resolve_scan_layout_for_page(
                 Some(design.marker_family.clone()),
                 format!(
                     "notebook-design:{}:v{}:{}",
-                    design.id(), design.design_version, design.manifest_hash
+                    design.id(),
+                    design.design_version,
+                    design.manifest_hash
                 ),
             )
         }
@@ -149,31 +140,35 @@ pub fn resolve_scan_layout_for_page(
 /// Resolves any bundled canonical scan layout by ID. This does not use a development Notebook Page
 /// as a fallback: unknown IDs return a typed unsupported-format error.
 pub fn resolve_bundled_scan_layout(layout_id: &LayoutId) -> Result<ResolvedScanLayout, A2dError> {
-    if let Ok(layout) = resolve_notebook_page_layout(layout_id) {
-        return resolved(layout, None, format!("bundled:{layout_id}"));
-    }
-    let layout = resolve_smart_page_layout(layout_id)?;
+    let layout = bundled_notebook_page_layout(layout_id)
+        .or_else(|| bundled_smart_page_layout(layout_id))
+        .ok_or_else(|| unavailable_layout_error(layout_id))?;
     resolved(layout, None, format!("bundled:{layout_id}"))
 }
 
 fn resolve_notebook_page_layout(layout_id: &LayoutId) -> Result<PageLayout, A2dError> {
-    let layout = writable_page_layout();
-    if layout.id == *layout_id {
-        return Ok(layout);
-    }
-    Err(unavailable_layout_error(layout_id))
+    bundled_notebook_page_layout(layout_id).ok_or_else(|| unavailable_layout_error(layout_id))
 }
 
 fn resolve_smart_page_layout(layout_id: &LayoutId) -> Result<PageLayout, A2dError> {
+    bundled_smart_page_layout(layout_id).ok_or_else(|| unavailable_layout_error(layout_id))
+}
+
+fn bundled_notebook_page_layout(layout_id: &LayoutId) -> Option<PageLayout> {
+    let layout = writable_page_layout();
+    (layout.id == *layout_id).then_some(layout)
+}
+
+fn bundled_smart_page_layout(layout_id: &LayoutId) -> Option<PageLayout> {
     for paper in ALL_PAPER_SIZES {
         for style in ALL_STYLES {
             let layout = smart_page_layout(paper, style);
             if layout.id == *layout_id {
-                return Ok(layout);
+                return Some(layout);
             }
         }
     }
-    Err(unavailable_layout_error(layout_id))
+    None
 }
 
 fn resolved(
@@ -191,12 +186,9 @@ fn resolved(
         .with_detail("cause_code", error.code.to_string())
     })?;
     let corrected_height = corrected_height_for(&layout)?;
-    let marker_roles = MarkerRole::ALL
+    let marker_roles = V1_MARKER_ID_LAYOUT
         .into_iter()
-        .map(|role| ResolvedMarkerRole {
-            role,
-            marker_id: marker_id_for_role(role),
-        })
+        .map(|(marker_id, role)| ResolvedMarkerRole { role, marker_id })
         .collect();
     Ok(ResolvedScanLayout {
         layout_id: layout.id.clone(),
@@ -227,7 +219,9 @@ fn corrected_height_for(layout: &PageLayout) -> Result<u32, A2dError> {
         .with_detail("physical_height_mm", height_mm.to_string()));
     }
     let height = (f64::from(V1_CORRECTED_WIDTH_PX) * height_mm / width_mm).round();
-    if !height.is_finite() || height < 1.0 || height > f64::from(MAX_CORRECTED_DIMENSION_PX) {
+    if !height.is_finite()
+        || !(1.0..=f64::from(MAX_CORRECTED_DIMENSION_PX)).contains(&height)
+    {
         return Err(resolution_error(
             "SCAN_LAYOUT_CORRECTED_SIZE_UNSUPPORTED",
             ErrorCategory::UnsupportedFormat,
@@ -244,18 +238,29 @@ fn corrected_height_for(layout: &PageLayout) -> Result<u32, A2dError> {
 }
 
 fn validate_manifest_marker_roles(design: &NotebookDesign) -> Result<(), A2dError> {
-    let mut actual = design.marker_role_ids.clone();
-    actual.sort();
-    let expected = ["BL", "BR", "TL", "TR"];
-    if actual.iter().map(String::as_str).ne(expected) {
+    let actual = design
+        .marker_role_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let expected = ["BL", "BR", "TL", "TR"]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    if actual != expected {
         return Err(resolution_error(
             "SCAN_LAYOUT_MARKER_ROLE_SET_UNSUPPORTED",
             ErrorCategory::Integrity,
             "the stored Notebook Design marker roles do not match the v1 printable contract",
         )
         .with_detail("design_id", design.id().to_string())
-        .with_detail("actual_marker_roles", actual.join(","))
-        .with_detail("expected_marker_roles", expected.join(",")));
+        .with_detail(
+            "actual_marker_roles",
+            actual.into_iter().collect::<Vec<_>>().join(","),
+        )
+        .with_detail(
+            "expected_marker_roles",
+            expected.into_iter().collect::<Vec<_>>().join(","),
+        ));
     }
     Ok(())
 }
@@ -391,12 +396,24 @@ mod tests {
             Some("apriltag-placeholder")
         );
         assert_eq!(
-            resolved.marker_id_layout(),
-            [
-                (0, MarkerRole::TopLeft),
-                (1, MarkerRole::TopRight),
-                (2, MarkerRole::BottomRight),
-                (3, MarkerRole::BottomLeft),
+            resolved.marker_roles,
+            vec![
+                ResolvedMarkerRole {
+                    role: MarkerRole::TopLeft,
+                    marker_id: 0,
+                },
+                ResolvedMarkerRole {
+                    role: MarkerRole::TopRight,
+                    marker_id: 1,
+                },
+                ResolvedMarkerRole {
+                    role: MarkerRole::BottomRight,
+                    marker_id: 2,
+                },
+                ResolvedMarkerRole {
+                    role: MarkerRole::BottomLeft,
+                    marker_id: 3,
+                },
             ]
         );
     }
@@ -453,9 +470,22 @@ mod tests {
 
     #[test]
     fn marker_ids_are_stable_and_unique() {
-        let ids = MarkerRole::ALL.map(marker_id_for_role);
-        assert_eq!(ids, [0, 1, 3, 2]);
-        let unique = ids.into_iter().collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            V1_MARKER_ID_LAYOUT,
+            [
+                (0, MarkerRole::TopLeft),
+                (1, MarkerRole::TopRight),
+                (2, MarkerRole::BottomRight),
+                (3, MarkerRole::BottomLeft),
+            ]
+        );
+        let unique = V1_MARKER_ID_LAYOUT
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect::<BTreeSet<_>>();
         assert_eq!(unique.len(), 4);
+        for (id, role) in V1_MARKER_ID_LAYOUT {
+            assert_eq!(marker_id_for_role(role), id);
+        }
     }
 }
