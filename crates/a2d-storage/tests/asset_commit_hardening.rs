@@ -27,6 +27,28 @@ fn resolve_returns_the_canonical_file_path() {
 }
 
 #[test]
+fn verify_rejects_a_recorded_byte_length_that_does_not_match_the_file() {
+    let root = temp_dir("length-mismatch");
+    let store = AssetStore::open(&root).unwrap();
+    let mut asset = store
+        .commit(b"length-checked bytes", AssetKind::Corrected, "image/png")
+        .unwrap();
+    asset.byte_length += 1;
+
+    let error = store.verify(&asset).unwrap_err();
+    assert_eq!(error.code.to_string(), "STORAGE_ASSET_LENGTH_MISMATCH");
+    assert_eq!(
+        error
+            .details
+            .get("expected_byte_length")
+            .map(String::as_str),
+        Some(asset.byte_length.to_string().as_str()),
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn resolve_reports_a_missing_asset_with_the_dedicated_code() {
     let root = temp_dir("missing");
     let store = AssetStore::open(&root).unwrap();
