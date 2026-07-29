@@ -1,0 +1,99 @@
+name: Apply FIX-001 PDF Source Repair
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Run guarded FIX-001 PDF source repair'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact source replacements
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, before, after):
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              if text.count(before) != 1:
+                  raise SystemExit(f"{path}: exact replacement guard failed for {before!r}")
+              file.write_text(text.replace(before, after), encoding="utf-8")
+
+          replace_once(
+              "crates/a2d-pdf/src/lib.rs",
+              "pub use render::render_page_ops;\n",
+              "",
+          )
+          replace_once(
+              "crates/a2d-pdf/src/render.rs",
+              """    let mut ops = vec![
+                  Op::SetFillColor { col: white() },
+                  Op::DrawPolygon {
+                      polygon: PhysicalRect::new(
+                          0.0,
+                          0.0,
+                          layout.physical_size.width_mm,
+                          layout.physical_size.height_mm,
+                      )
+                      .to_polygon(),
+                  },
+              ];
+          """,
+              """    let page_rect = PhysicalRect::new(
+                  0.0,
+                  0.0,
+                  layout.physical_size.width_mm,
+                  layout.physical_size.height_mm,
+              );
+              let mut ops = filled_rect_ops(layout.physical_size.height_mm, &page_rect, white());
+          """,
+          )
+          replace_once(
+              "crates/a2d-pdf/src/render.rs",
+              """    for calibration in &layout.calibration_marks {
+                  ops.extend(calibration_ops(
+                      layout.physical_size.height_mm,
+                      calibration,
+                  ));
+              }
+          """,
+              """    ops.extend(calibration_ops(
+                  layout.physical_size.height_mm,
+                  &layout.calibration,
+              ));
+          """,
+          )
+          replace_once(
+              "crates/a2d-pdf/src/render.rs",
+              "&layout.page_number_rect",
+              "&layout.visible_page_number_rect",
+          )
+          replace_once(
+              "crates/a2d-pdf/src/generate.rs",
+              "        layout_id: layout.id,\n",
+              "        layout_id: layout.id.clone(),\n",
+          )
+          Path(".github/workflows/apply-fix-001-pdf-source.yml").unlink()
+          PY
+      - name: Format Rust workspace
+        run: cargo fmt --all
+      - name: Commit source repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git diff --cached --check
+          git commit -m "Repair PDF layout integration and format Rust sources"
+          git push origin HEAD:master
