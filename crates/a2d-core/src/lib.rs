@@ -321,7 +321,164 @@ mod tests {
         assert!(page.starts_with("A2D:1:B:"));
 
         let smart = core.generate_example_smart_page_qr_payload().unwrap();
-        assert!(smart.starts_with("A2D:1:P:"));
+        assert!(smart.starts_with("A2D:1:M:"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn open_test_core() -> (Arc<A2dCore>, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("a2d-core-test-{}", PageId::generate()));
+        let core = A2dCore::open(OpenLibraryRequest {
+            library_path: dir.to_string_lossy().into_owned(),
+        })
+        .unwrap();
+        (core, dir)
+    }
+
+    fn sample_request() -> a2d_pdf::GeneratePageSetRequest {
+        a2d_pdf::GeneratePageSetRequest {
+            paper_size: a2d_layout::PaperSize::A4,
+            style: a2d_layout::SmartPageStyle::Blank,
+            page_count: 3,
+            starting_visible_page: 1,
+        }
+    }
+
+    #[test]
+    fn generate_and_register_page_set_persists_the_page_set_pages_and_asset() {
+        let (core, dir) = open_test_core();
+        let registered = core
+            .generate_and_register_page_set(sample_request())
+            .unwrap();
+        assert_eq!(registered.pages.len(), 3);
+
+        // Inspect the library directly through a second, independent Storage/AssetStore handle,
+        // the same way a real second process (or the next app launch) would.
+        let storage = Storage::open(&dir.join("library.sqlite")).unwrap();
+        let asset_store = AssetStore::open(&dir).unwrap();
+
+        let page_set = storage.get_page_set(&registered.page_set_id).unwrap();
+        assert!(page_set.is_some());
+
+        for registered_page in &registered.pages {
+            let page = storage.get_page(&registered_page.page_id).unwrap().unwrap();
+            assert_eq!(page.state, a2d_domain::PageState::GeneratedNotScanned);
+            assert_eq!(
+                page.generated_pdf_asset_id,
+                Some(registered.pdf_asset_id.clone())
+            );
+            match page.kind {
+                PageKind::SmartPage { smart_page_id, .. } => {
+                    assert_eq!(smart_page_id, registered_page.smart_page_id);
+                }
+                other => panic!("expected a SmartPage, got {other:?}"),
+            }
+        }
+
+        // The asset the pages reference actually exists on disk with a verifiable hash -- not
+        // just a database row with a dangling path.
+        let asset = storage
+            .get_asset(&registered.pdf_asset_id)
+            .unwrap()
+            .unwrap();
+        asset_store.verify(&asset).unwrap();
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn generate_and_register_page_set_rejects_zero_pages_before_touching_storage() {
+        let (core, dir) = open_test_core();
+        let mut request = sample_request();
+        request.page_count = 0;
+        let err = core.generate_and_register_page_set(request).unwrap_err();
+        assert!(err.code.to_string().contains("PAGE_SET_EMPTY"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn transaction_failure_after_asset_commit_reports_a_real_orphan_and_rolls_back_rows() {
+        let (core, dir) = open_test_core();
+
+        // Deterministic real-SQL fault injection: the trigger lets the asset commit complete, then
+        // aborts the first page_sets INSERT inside the registration transaction. This is reliable
+        // across CI/container privilege models, unlike changing file permissions on an already
+        // open WAL database, and it does not add a production-only mock seam.
+        {
+            let mut storage = core.lock_storage().unwrap();
+            storage
+                .transaction(|tx| {
+                    tx.execute_batch(
+                        "CREATE TRIGGER fail_page_set_registration_for_test \
+                         BEFORE INSERT ON page_sets \
+                         BEGIN \
+                           SELECT RAISE(ABORT, 'forced page-set registration failure'); \
+                         END;",
+                    )
+                    .expect("failure-injection trigger must be created");
+                    Ok(())
+                })
+                .unwrap();
+        }
+
+        let err = core
+            .generate_and_register_page_set(sample_request())
+            .unwrap_err();
+        let orphaned_asset_id = err
+            .details
+            .get("orphaned_asset_id")
+            .expect("transaction failure after asset commit must identify the orphan")
+            .clone();
+        assert!(err.details.contains_key("note"));
+
+        let orphaned_path = dir.join("assets").join("exports").join(&orphaned_asset_id);
+        assert!(
+            orphaned_path.is_file(),
+            "the diagnostic must refer to the PDF file that was durably committed before SQL failed"
+        );
+
+        // The database transaction must have rolled back all attempted rows, including the Asset
+        // row; only the deliberately orphaned filesystem object remains.
+        let mut storage = Storage::open(&dir.join("library.sqlite")).unwrap();
+        let (page_sets, pages, assets): (i64, i64, i64) = storage
+            .transaction(|tx| {
+                let page_sets = tx
+                    .query_row("SELECT COUNT(*) FROM page_sets", [], |row| row.get(0))
+                    .expect("page_sets count must be readable");
+                let pages = tx
+                    .query_row("SELECT COUNT(*) FROM pages", [], |row| row.get(0))
+                    .expect("pages count must be readable");
+                let assets = tx
+                    .query_row("SELECT COUNT(*) FROM assets", [], |row| row.get(0))
+                    .expect("assets count must be readable");
+                Ok((page_sets, pages, assets))
+            })
+            .unwrap();
+        assert_eq!((page_sets, pages, assets), (0, 0, 0));
+
+        drop(storage);
+        drop(core);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn repeated_generation_produces_fully_independent_page_sets() {
+        let (core, dir) = open_test_core();
+        let first = core
+            .generate_and_register_page_set(sample_request())
+            .unwrap();
+        let second = core
+            .generate_and_register_page_set(sample_request())
+            .unwrap();
+
+        assert_ne!(first.page_set_id, second.page_set_id);
+        assert_ne!(first.pdf_asset_id, second.pdf_asset_id);
+        let first_page_ids: std::collections::HashSet<_> =
+            first.pages.iter().map(|p| p.page_id.clone()).collect();
+        let second_page_ids: std::collections::HashSet<_> =
+            second.pages.iter().map(|p| p.page_id.clone()).collect();
+        assert!(first_page_ids.is_disjoint(&second_page_ids));
+
         std::fs::remove_dir_all(&dir).ok();
     }
 }
