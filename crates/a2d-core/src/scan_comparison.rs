@@ -87,20 +87,17 @@ impl A2dCore {
         &self,
         request: CompareExistingPageScansRequest,
     ) -> Result<ExistingPageScanComparison, A2dError> {
+        let CompareExistingPageScansRequest {
+            baseline_scan_id,
+            candidate_scan_id,
+            minimum_cell_absolute_difference,
+        } = request;
         let region_config =
-            AlignedChangeRegionConfig::new(request.minimum_cell_absolute_difference)?;
+            AlignedChangeRegionConfig::new(minimum_cell_absolute_difference)?;
         let (baseline, candidate) = {
             let storage = self.lock_storage()?;
-            let baseline = load_scan(
-                &storage,
-                &request.baseline_scan_id,
-                "baseline",
-            )?;
-            let candidate = load_scan(
-                &storage,
-                &request.candidate_scan_id,
-                "candidate",
-            )?;
+            let baseline = load_scan(&storage, &baseline_scan_id, "baseline")?;
+            let candidate = load_scan(&storage, &candidate_scan_id, "candidate")?;
             (baseline, candidate)
         };
 
@@ -128,49 +125,65 @@ impl A2dCore {
                     .with_detail("scan_role", "candidate")
                     .with_detail("scan_id", candidate.id().to_string())
             })?;
-        let difference = baseline_fingerprint
-            .perceptual()
-            .difference(candidate_fingerprint.perceptual());
-        let mean_absolute_difference = difference.mean_absolute_difference;
-        let maximum_absolute_difference = difference.maximum_absolute_difference;
-        let change_regions = difference.aligned_change_regions(region_config)?;
-        let corrected_asset_hash_match = baseline_fingerprint.corrected_sha256()
-            == candidate_fingerprint.corrected_sha256();
-        let perceptual_fingerprint_match = maximum_absolute_difference == 0;
-        let exact_content_match = corrected_asset_hash_match && perceptual_fingerprint_match;
 
-        let mut reasons = Vec::with_capacity(3);
-        reasons.push(if corrected_asset_hash_match {
-            ScanComparisonReason::CorrectedAssetHashMatch
-        } else {
-            ScanComparisonReason::CorrectedAssetHashDiffers
-        });
-        reasons.push(if perceptual_fingerprint_match {
-            ScanComparisonReason::PerceptualFingerprintMatch
-        } else if change_regions.is_empty() {
-            ScanComparisonReason::PerceptualDifferencesBelowConfiguredThreshold
-        } else {
-            ScanComparisonReason::PerceptualChangeRegionsDetected
-        });
-        let confidence = if exact_content_match {
-            ScanComparisonConfidence::ConclusiveExactMatch
-        } else {
-            reasons.push(ScanComparisonReason::FixtureCalibrationRequired);
-            ScanComparisonConfidence::UnavailableUntilFixtureCalibration
-        };
-
-        Ok(ExistingPageScanComparison {
-            baseline_scan_id: request.baseline_scan_id,
-            candidate_scan_id: request.candidate_scan_id,
-            page_id: baseline.page_id,
-            exact_content_match,
-            confidence,
-            reasons,
-            mean_absolute_difference,
-            maximum_absolute_difference,
-            change_regions,
-        })
+        compare_content_fingerprints(
+            baseline_scan_id,
+            candidate_scan_id,
+            baseline.page_id,
+            &baseline_fingerprint,
+            &candidate_fingerprint,
+            region_config,
+        )
     }
+}
+
+fn compare_content_fingerprints(
+    baseline_scan_id: ScanId,
+    candidate_scan_id: ScanId,
+    page_id: PageId,
+    baseline: &ScanContentFingerprintV1,
+    candidate: &ScanContentFingerprintV1,
+    region_config: AlignedChangeRegionConfig,
+) -> Result<ExistingPageScanComparison, A2dError> {
+    let difference = baseline.perceptual().difference(candidate.perceptual());
+    let mean_absolute_difference = difference.mean_absolute_difference;
+    let maximum_absolute_difference = difference.maximum_absolute_difference;
+    let change_regions = difference.aligned_change_regions(region_config)?;
+    let corrected_asset_hash_match = baseline.corrected_sha256() == candidate.corrected_sha256();
+    let perceptual_fingerprint_match = maximum_absolute_difference == 0;
+    let exact_content_match = corrected_asset_hash_match && perceptual_fingerprint_match;
+
+    let mut reasons = Vec::with_capacity(3);
+    reasons.push(if corrected_asset_hash_match {
+        ScanComparisonReason::CorrectedAssetHashMatch
+    } else {
+        ScanComparisonReason::CorrectedAssetHashDiffers
+    });
+    reasons.push(if perceptual_fingerprint_match {
+        ScanComparisonReason::PerceptualFingerprintMatch
+    } else if change_regions.is_empty() {
+        ScanComparisonReason::PerceptualDifferencesBelowConfiguredThreshold
+    } else {
+        ScanComparisonReason::PerceptualChangeRegionsDetected
+    });
+    let confidence = if exact_content_match {
+        ScanComparisonConfidence::ConclusiveExactMatch
+    } else {
+        reasons.push(ScanComparisonReason::FixtureCalibrationRequired);
+        ScanComparisonConfidence::UnavailableUntilFixtureCalibration
+    };
+
+    Ok(ExistingPageScanComparison {
+        baseline_scan_id,
+        candidate_scan_id,
+        page_id,
+        exact_content_match,
+        confidence,
+        reasons,
+        mean_absolute_difference,
+        maximum_absolute_difference,
+        change_regions,
+    })
 }
 
 fn load_scan(
@@ -181,7 +194,7 @@ fn load_scan(
     storage.get_scan(scan_id)?.ok_or_else(|| {
         comparison_error(
             "CORE_SCAN_COMPARISON_SCAN_NOT_FOUND",
-            ErrorCategory::NotFound,
+            ErrorCategory::Storage,
             "a requested scan does not exist in the local library",
         )
         .with_detail("scan_role", role)
@@ -305,51 +318,15 @@ mod tests {
         candidate: &str,
         minimum_cell_absolute_difference: u8,
     ) -> ExistingPageScanComparison {
-        let baseline_fingerprint = ScanContentFingerprintV1::parse(baseline).unwrap();
-        let candidate_fingerprint = ScanContentFingerprintV1::parse(candidate).unwrap();
-        let difference = baseline_fingerprint
-            .perceptual()
-            .difference(candidate_fingerprint.perceptual());
-        let mean_absolute_difference = difference.mean_absolute_difference;
-        let maximum_absolute_difference = difference.maximum_absolute_difference;
-        let change_regions = difference
-            .aligned_change_regions(
-                AlignedChangeRegionConfig::new(minimum_cell_absolute_difference).unwrap(),
-            )
-            .unwrap();
-        let corrected_asset_hash_match = baseline_fingerprint.corrected_sha256()
-            == candidate_fingerprint.corrected_sha256();
-        let perceptual_fingerprint_match = maximum_absolute_difference == 0;
-        let exact_content_match = corrected_asset_hash_match && perceptual_fingerprint_match;
-        let mut reasons = vec![if corrected_asset_hash_match {
-            ScanComparisonReason::CorrectedAssetHashMatch
-        } else {
-            ScanComparisonReason::CorrectedAssetHashDiffers
-        }];
-        reasons.push(if perceptual_fingerprint_match {
-            ScanComparisonReason::PerceptualFingerprintMatch
-        } else if change_regions.is_empty() {
-            ScanComparisonReason::PerceptualDifferencesBelowConfiguredThreshold
-        } else {
-            ScanComparisonReason::PerceptualChangeRegionsDetected
-        });
-        let confidence = if exact_content_match {
-            ScanComparisonConfidence::ConclusiveExactMatch
-        } else {
-            reasons.push(ScanComparisonReason::FixtureCalibrationRequired);
-            ScanComparisonConfidence::UnavailableUntilFixtureCalibration
-        };
-        ExistingPageScanComparison {
-            baseline_scan_id: ScanId::generate(),
-            candidate_scan_id: ScanId::generate(),
-            page_id: PageId::generate(),
-            exact_content_match,
-            confidence,
-            reasons,
-            mean_absolute_difference,
-            maximum_absolute_difference,
-            change_regions,
-        }
+        compare_content_fingerprints(
+            ScanId::generate(),
+            ScanId::generate(),
+            PageId::generate(),
+            &ScanContentFingerprintV1::parse(baseline).unwrap(),
+            &ScanContentFingerprintV1::parse(candidate).unwrap(),
+            AlignedChangeRegionConfig::new(minimum_cell_absolute_difference).unwrap(),
+        )
+        .unwrap()
     }
 
     #[test]
