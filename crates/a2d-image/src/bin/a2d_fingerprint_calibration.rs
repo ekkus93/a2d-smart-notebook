@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
@@ -118,16 +118,16 @@ fn insert_fixture_source(
         path: resolve_confined_file(root, relative_path, context)?,
         pipeline_version,
     };
-    if let Some(existing) = fixtures.get(fixture_id) {
-        if existing != &source {
-            return Err(invalid(format!(
-                "{context}: fixture {fixture_id} maps to inconsistent evidence"
-            )));
+    match fixtures.entry(fixture_id.to_string()) {
+        Entry::Vacant(entry) => {
+            entry.insert(source);
+            Ok(())
         }
-    } else {
-        fixtures.insert(fixture_id.to_string(), source);
+        Entry::Occupied(entry) if entry.get() == &source => Ok(()),
+        Entry::Occupied(_) => Err(invalid(format!(
+            "{context}: fixture {fixture_id} maps to inconsistent evidence"
+        ))),
     }
-    Ok(())
 }
 
 fn parse_pipeline_version(value: &str, context: &str) -> Result<u64, DynError> {
@@ -257,7 +257,8 @@ fn decode_normalized_fingerprint(path: &Path) -> Result<PerceptualFingerprintV1,
     )?
     .decode_rgb8()?
     .into_gray8(ImageLimits::new(MAX_DECODED_PIXELS)?)?;
-    Ok(PerceptualFingerprintV1::from_gray_image(&image)?)
+    PerceptualFingerprintV1::from_gray_image(&image)
+        .map_err(|error| Box::new(error) as DynError)
 }
 
 fn nearest_rank_percentile(sorted_values: &[u8], percentile: usize) -> u8 {
