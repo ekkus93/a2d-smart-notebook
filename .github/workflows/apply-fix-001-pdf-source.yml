@@ -1,5 +1,6 @@
 name: Apply FIX-001 PDF Source Repair
 
+# Retriggered after adding explicit workflow status publication.
 on:
   push:
     branches: [master]
