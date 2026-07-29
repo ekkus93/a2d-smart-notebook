@@ -38,7 +38,7 @@ fn load_notebook_design(
     let PageKind::NotebookPage { design_id, .. } = page_kind else {
         return Ok(None);
     };
-    storage.get_notebook_design(design_id)?.map(Some).ok_or_else(|| {
+    let design = storage.get_notebook_design(design_id)?.ok_or_else(|| {
         policy_error(
             "CORE_SCAN_LAYOUT_DESIGN_ROW_MISSING",
             ErrorCategory::Integrity,
@@ -46,7 +46,8 @@ fn load_notebook_design(
         )
         .with_detail("page_id", page_id.to_string())
         .with_detail("design_id", design_id.to_string())
-    })
+    })?;
+    Ok(Some(design))
 }
 
 fn policy_error(
@@ -71,10 +72,10 @@ fn policy_error(
 #[cfg(test)]
 mod tests {
     use a2d_domain::{
-        NotebookId, Page, PageKind, PageState, SmartPageId, system_now_ms,
+        Notebook, NotebookId, Page, PageKind, PageState, SmartPageId, system_now_ms,
     };
     use a2d_layout::{PaperSize, SmartPageStyle, bundled_placeholder_registry, smart_page_layout};
-    use a2d_storage::{NotebookDesignRepository, PageRepository};
+    use a2d_storage::{NotebookDesignRepository, NotebookRepository, PageRepository};
 
     use super::*;
     use crate::OpenLibraryRequest;
@@ -108,12 +109,25 @@ mod tests {
         let registry = bundled_placeholder_registry().unwrap();
         let design_id = a2d_domain::NotebookDesignId::parse("6DE28E53DBKPXCWWNHPC8T7QJX").unwrap();
         let design = registry.resolve(&design_id).unwrap().clone();
+        let notebook_id = NotebookId::generate();
         let page_id = PageId::generate();
         let now = system_now_ms().unwrap();
+        let notebook = Notebook::new(
+            notebook_id.clone(),
+            design.id().clone(),
+            "Scan policy test".to_string(),
+            now,
+            now,
+            None,
+            false,
+            None,
+            None,
+            None,
+        );
         let page = Page::new(
             page_id.clone(),
             PageKind::NotebookPage {
-                notebook_id: NotebookId::generate(),
+                notebook_id,
                 design_id: design.id().clone(),
                 logical_page_number: 1,
             },
@@ -125,6 +139,7 @@ mod tests {
         {
             let storage = core.lock_storage().unwrap();
             storage.insert_notebook_design(&design).unwrap();
+            storage.insert_notebook(&notebook).unwrap();
             storage.insert_page(&page).unwrap();
         }
 
