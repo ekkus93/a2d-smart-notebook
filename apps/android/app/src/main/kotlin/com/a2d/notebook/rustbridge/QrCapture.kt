@@ -47,13 +47,19 @@ private fun qrCaptureDirectory(context: Context): File {
 
 fun createQrCapture(context: Context, prefix: String): QrCapture {
     require(prefix.length >= 3) { "QR capture prefix must contain at least three characters" }
+    val token = UUID.randomUUID().toString()
     val directory = qrCaptureDirectory(context)
     val file = File.createTempFile(prefix, ".jpg", directory)
-    return QrCapture(
-        token = UUID.randomUUID().toString(),
-        file = file,
-        uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file),
-    )
+    return try {
+        QrCapture(
+            token = token,
+            file = file,
+            uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file),
+        )
+    } catch (failure: Exception) {
+        deleteCaptureFile(file)?.let(failure::addSuppressed)
+        throw failure
+    }
 }
 
 /**
@@ -81,22 +87,27 @@ fun resolvePendingQrCapture(context: Context, savedPath: String): File {
 }
 
 /** Returns abandoned regular files without deleting or modifying any of them. */
-fun listOrphanedQrCaptureFiles(context: Context, pendingPath: String?): List<File> {
+fun listOrphanedQrCaptureFiles(
+    context: Context,
+    pendingPath: String?,
+): Result<List<File>> = try {
     val directory = qrCaptureDirectory(context).canonicalFile
-    val pendingCanonical = pendingPath?.let { path ->
-        runCatching { File(path).canonicalFile }.getOrNull()
-    }
-    return directory.listFiles()
-        ?.asSequence()
-        ?.filter { file ->
+    val pendingCanonical = pendingPath?.let { path -> File(path).canonicalFile }
+    val entries = directory.listFiles()
+        ?: throw IOException("could not list the QR capture cache directory")
+    val orphans = entries
+        .asSequence()
+        .filter { file ->
             !Files.isSymbolicLink(file.toPath()) &&
                 Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
         }
-        ?.mapNotNull { file -> runCatching { file.canonicalFile }.getOrNull() }
-        ?.filter { file -> file != pendingCanonical }
-        ?.sortedBy(File::getName)
-        ?.toList()
-        .orEmpty()
+        .map(File::getCanonicalFile)
+        .filter { file -> file != pendingCanonical }
+        .sortedBy(File::getName)
+        .toList()
+    Result.success(orphans)
+} catch (failure: Exception) {
+    Result.failure(failure)
 }
 
 private fun deleteCaptureFile(file: File): IOException? {
