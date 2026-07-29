@@ -1,7 +1,7 @@
 //! UniFFI projection of the Rust-owned stored-page scan layout policy.
 
 use a2d_domain::PageId;
-use a2d_layout::MarkerRole;
+use a2d_layout::{MarkerRole, marker_id_for_role};
 
 use super::{A2dClient, A2dFfiError};
 
@@ -24,24 +24,16 @@ pub struct StoredScanLayoutPolicy {
 
 impl From<a2d_core::StoredScanLayout> for StoredScanLayoutPolicy {
     fn from(value: a2d_core::StoredScanLayout) -> Self {
-        let marker_id = |role| {
-            value
-                .marker_roles
-                .iter()
-                .find(|marker| marker.role == role)
-                .expect("resolved scan layout guarantees all four marker roles")
-                .marker_id
-        };
         Self {
             layout_id: value.layout_id.to_string(),
             physical_width_mm: value.physical_width_mm,
             physical_height_mm: value.physical_height_mm,
             marker_family: value.marker_family,
             declared_marker_family: value.declared_marker_family,
-            top_left_tag_id: marker_id(MarkerRole::TopLeft),
-            top_right_tag_id: marker_id(MarkerRole::TopRight),
-            bottom_right_tag_id: marker_id(MarkerRole::BottomRight),
-            bottom_left_tag_id: marker_id(MarkerRole::BottomLeft),
+            top_left_tag_id: marker_id_for_role(MarkerRole::TopLeft),
+            top_right_tag_id: marker_id_for_role(MarkerRole::TopRight),
+            bottom_right_tag_id: marker_id_for_role(MarkerRole::BottomRight),
+            bottom_left_tag_id: marker_id_for_role(MarkerRole::BottomLeft),
             corrected_width: value.corrected_width,
             corrected_height: value.corrected_height,
             layout_version: value.layout_version,
