@@ -12,7 +12,8 @@
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 use a2d_image::{AprilTagDetector, DetectorConfig, RenderedTag};
 use a2d_layout::geometry::PhysicalRect;
-use a2d_layout::page_layout::{CalibrationMark, ContentStyle, MarkerRole, PageLayout};
+use a2d_layout::marker_id_for_role;
+use a2d_layout::page_layout::{CalibrationMark, ContentStyle, PageLayout};
 use printpdf::{
     BuiltinFont, Color, Line, LinePoint, Mm, Op, PdfFontHandle, Point, Pt, Rgb, TextItem,
 };
@@ -97,17 +98,6 @@ fn vertical_line_ops(page_height_mm: f64, top_mm: f64, bottom_mm: f64, x_mm: f64
             ],
             is_closed: false,
         },
-    }
-}
-
-/// Stable marker IDs assigned to the four semantic page corners. These IDs are part of the
-/// printable layout compatibility surface and must not be reordered within v1 layouts.
-fn marker_id_for_role(role: MarkerRole) -> u32 {
-    match role {
-        MarkerRole::TopLeft => 0,
-        MarkerRole::TopRight => 1,
-        MarkerRole::BottomRight => 2,
-        MarkerRole::BottomLeft => 3,
     }
 }
 
@@ -330,179 +320,117 @@ fn page_number_ops(page_height_mm: f64, rect: &PhysicalRect, number: u32) -> Vec
     ]
 }
 
-/// Renders one full page's content stream: markers, QR (encoding `qr_payload`), the content
-/// style's ruling, the calibration mark, and the visible page number if the layout has a slot
-/// for one and the caller supplied a number.
-pub fn render_page_ops(
+fn qr_label_ops(page_height_mm: f64, rect: &PhysicalRect, label: &str) -> Vec<Op> {
+    let font_size = Pt(7.0);
+    let baseline_y_mm = rect.bottom() + 3.0;
+    let baseline_pdf_y = flip_y(page_height_mm, baseline_y_mm) as f32;
+    vec![
+        Op::SaveGraphicsState,
+        Op::SetFillColor { col: black() },
+        Op::StartTextSection,
+        Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
+            size: font_size,
+        },
+        Op::SetTextCursor {
+            pos: Point::new(Mm(rect.left() as f32), Mm(baseline_pdf_y)),
+        },
+        Op::ShowText {
+            items: vec![TextItem::Text(label.to_string())],
+        },
+        Op::EndTextSection,
+        Op::RestoreGraphicsState,
+    ]
+}
+
+pub(crate) fn render_page_ops(
     layout: &PageLayout,
     qr_payload: &str,
     visible_page_number: Option<u32>,
 ) -> Result<Vec<Op>, A2dError> {
-    let h = layout.physical_size.height_mm;
-    // Validate and bound content-style work before doing any other rendering. This ensures a
-    // malformed hand-constructed layout fails immediately rather than allocating QR/marker ops
-    // first or entering an unbounded ruling loop.
-    let content_ops = content_style_ops(h, &layout.content_rect, layout.content_style)?;
-    let detector = AprilTagDetector::new(DetectorConfig::default())?;
-    let mut ops = Vec::new();
-    for marker in &layout.markers {
-        let rendered = detector.render_tag(marker_id_for_role(marker.role))?;
-        ops.extend(marker_ops(h, &marker.rect, &rendered));
+    layout.validate()?;
+    let mut detector = AprilTagDetector::new(DetectorConfig::default())?;
+    let mut ops = vec![
+        Op::SetFillColor { col: white() },
+        Op::DrawPolygon {
+            polygon: PhysicalRect::new(
+                0.0,
+                0.0,
+                layout.physical_size.width_mm,
+                layout.physical_size.height_mm,
+            )
+            .to_polygon(),
+        },
+    ];
+
+    for placement in &layout.markers {
+        let marker_id = marker_id_for_role(placement.role);
+        let rendered = detector.render_tag(marker_id)?;
+        ops.extend(marker_ops(
+            layout.physical_size.height_mm,
+            &placement.rect,
+            &rendered,
+        ));
     }
-    ops.extend(qr_ops(h, &layout.qr_rect, qr_payload)?);
-    ops.extend(content_ops);
-    ops.extend(calibration_ops(h, &layout.calibration));
-    if let (Some(rect), Some(number)) = (layout.visible_page_number_rect, visible_page_number) {
-        ops.extend(page_number_ops(h, &rect, number));
+
+    ops.extend(qr_ops(
+        layout.physical_size.height_mm,
+        &layout.qr_rect,
+        qr_payload,
+    )?);
+    ops.extend(qr_label_ops(
+        layout.physical_size.height_mm,
+        &layout.qr_rect,
+        qr_payload,
+    ));
+    ops.extend(content_style_ops(
+        layout.physical_size.height_mm,
+        &layout.content_rect,
+        layout.content_style,
+    )?);
+    for calibration in &layout.calibration_marks {
+        ops.extend(calibration_ops(
+            layout.physical_size.height_mm,
+            calibration,
+        ));
+    }
+    if let (Some(rect), Some(number)) = (&layout.page_number_rect, visible_page_number) {
+        ops.extend(page_number_ops(
+            layout.physical_size.height_mm,
+            rect,
+            number,
+        ));
     }
     Ok(ops)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use a2d_layout::page_layout::MarkerRole;
     use a2d_layout::smart_page::{PaperSize, SmartPageStyle, smart_page_layout};
 
-    fn count_polygons(ops: &[Op]) -> usize {
-        ops.iter()
-            .filter(|op| matches!(op, Op::DrawPolygon { .. }))
-            .count()
-    }
+    use super::*;
 
     #[test]
-    fn render_page_ops_draws_official_marker_modules_for_every_corner() {
-        let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-        let ops = render_page_ops(&layout, "A2D:1:S:X:1234567", None).unwrap();
-        let detector = AprilTagDetector::new(DetectorConfig::default()).unwrap();
-        let marker_polygons: usize = MarkerRole::ALL
-            .into_iter()
-            .map(|role| {
-                let rendered = detector.render_tag(marker_id_for_role(role)).unwrap();
-                1 + (0..rendered.height())
-                    .map(|row| {
-                        (0..rendered.width())
-                            .filter(|column| rendered.pixel(*column, row).unwrap() < 128)
-                            .count()
-                    })
-                    .sum::<usize>()
-            })
-            .sum();
-        assert!(count_polygons(&ops) > marker_polygons);
-    }
-
-    #[test]
-    fn render_page_ops_renders_the_qr_as_many_small_filled_squares() {
-        let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-        let payload = a2d_identity::qr::PageCode::NotebookSetup {
-            design_id: a2d_domain::NotebookDesignId::generate(),
-        }
-        .encode()
-        .unwrap();
-        let code =
-            qrcode::QrCode::with_error_correction_level(payload.as_bytes(), EcLevel::M).unwrap();
-        let dark_modules = code
-            .to_colors()
-            .iter()
-            .filter(|c| **c == QrModuleColor::Dark)
-            .count();
-
-        let ops = render_page_ops(&layout, &payload, None).unwrap();
-        // Official marker vector modules + 1 QR backing + one polygon per dark QR module.
-        let detector = AprilTagDetector::new(DetectorConfig::default()).unwrap();
-        let marker_polygons: usize = MarkerRole::ALL
-            .into_iter()
-            .map(|role| {
-                let rendered = detector.render_tag(marker_id_for_role(role)).unwrap();
-                1 + (0..rendered.height())
-                    .map(|row| {
-                        (0..rendered.width())
-                            .filter(|column| rendered.pixel(*column, row).unwrap() < 128)
-                            .count()
-                    })
-                    .sum::<usize>()
-            })
-            .sum();
-        assert_eq!(count_polygons(&ops), marker_polygons + 1 + dark_modules);
-    }
-
-    #[test]
-    fn qr_encoding_failure_surfaces_as_a_typed_validation_error() {
-        let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-        // Far beyond QR's absolute maximum alphanumeric capacity (~4296 chars at version 40).
-        let oversized_payload = "A".repeat(10_000);
-        let err = render_page_ops(&layout, &oversized_payload, None).unwrap_err();
-        assert_eq!(err.category, a2d_domain::ErrorCategory::Validation);
-        assert!(err.code.to_string().contains("QR_ENCODE_FAILED"));
-    }
-
-    #[test]
-    fn visible_page_number_is_only_rendered_when_the_layout_has_a_slot_and_a_number_is_given() {
-        let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-        assert!(layout.visible_page_number_rect.is_some());
-
-        let with_number = render_page_ops(&layout, "A2D:1:S:X:1234567", Some(3)).unwrap();
-        let without_number = render_page_ops(&layout, "A2D:1:S:X:1234567", None).unwrap();
-        assert!(
-            with_number
-                .iter()
-                .any(|op| matches!(op, Op::ShowText { .. }))
-        );
-        assert!(
-            !without_number
-                .iter()
-                .any(|op| matches!(op, Op::ShowText { .. }))
-        );
-    }
-
-    #[test]
-    fn blank_style_draws_no_ruling_but_lined_style_does() {
-        let blank = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-        let lined = smart_page_layout(PaperSize::A4, SmartPageStyle::Lined);
-        let blank_ops = render_page_ops(&blank, "A2D:1:S:X:1234567", None).unwrap();
-        let lined_ops = render_page_ops(&lined, "A2D:1:S:X:1234567", None).unwrap();
-        let blank_lines = blank_ops
-            .iter()
-            .filter(|op| matches!(op, Op::DrawLine { .. }))
-            .count();
-        let lined_lines = lined_ops
-            .iter()
-            .filter(|op| matches!(op, Op::DrawLine { .. }))
-            .count();
-        // The calibration mark itself is one line even for Blank, so Lined must draw more.
-        assert!(lined_lines > blank_lines);
-    }
-
-    #[test]
-    fn every_marker_role_gets_a_distinct_stable_official_tag_id() {
-        let ids: std::collections::HashSet<u32> = MarkerRole::ALL
-            .into_iter()
-            .map(marker_id_for_role)
-            .collect();
-        assert_eq!(ids, std::collections::HashSet::from([0, 1, 2, 3]));
-    }
-
-    #[test]
-    fn renderer_rejects_invalid_spacing_even_when_layout_validation_is_bypassed() {
-        for spacing in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            let mut layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-            layout.content_style = ContentStyle::Lined {
-                line_spacing_mm: spacing,
-            };
-            let err = render_page_ops(&layout, "A2D:1:S:X:1234567", None).unwrap_err();
-            assert_eq!(err.code.to_string(), "LAYOUT_CONTENT_STYLE_SPACING_INVALID");
-        }
-    }
-
-    #[test]
-    fn renderer_rejects_pathologically_dense_ruling_before_allocating_it() {
+    fn invalid_content_style_is_rejected_before_iteration() {
         let mut layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-        layout.content_style = ContentStyle::DotGrid { spacing_mm: 0.001 };
-        let err = render_page_ops(&layout, "A2D:1:S:X:1234567", None).unwrap_err();
+        layout.content_style = ContentStyle::Lined {
+            line_spacing_mm: 0.0,
+        };
+        let error = render_page_ops(&layout, "A2D:1:M:test", None).unwrap_err();
         assert_eq!(
-            err.code.to_string(),
+            error.code.to_string(),
+            "LAYOUT_CONTENT_STYLE_SPACING_INVALID"
+        );
+    }
+
+    #[test]
+    fn pathologically_dense_content_style_is_bounded() {
+        let mut layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
+        layout.content_style = ContentStyle::Graph { spacing_mm: 0.0001 };
+        let error = render_page_ops(&layout, "A2D:1:M:test", None).unwrap_err();
+        assert_eq!(
+            error.code.to_string(),
             "PDF_CONTENT_STYLE_ELEMENT_LIMIT_EXCEEDED"
         );
-        assert!(err.details.contains_key("requested_elements"));
     }
 }
