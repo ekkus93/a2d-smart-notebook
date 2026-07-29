@@ -22,6 +22,11 @@ import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
+data class CameraCleanupWarning(
+    val message: String,
+    val cause: Exception,
+)
+
 sealed interface CameraAdapterState {
     data object Idle : CameraAdapterState
     data object Initializing : CameraAdapterState
@@ -38,7 +43,9 @@ sealed interface CameraAdapterState {
         val cause: Exception,
     ) : CameraAdapterState
 
-    data object Closed : CameraAdapterState
+    data class Closed(
+        val cleanupWarning: CameraCleanupWarning? = null,
+    ) : CameraAdapterState
 }
 
 sealed interface CameraCaptureResult {
@@ -56,6 +63,16 @@ sealed interface CameraCaptureResult {
 private fun cameraThreadFactory(name: String): ThreadFactory = ThreadFactory { runnable ->
     Thread(runnable, name).apply { isDaemon = true }
 }
+
+internal fun cameraClosedState(cleanupFailure: Exception?): CameraAdapterState.Closed =
+    CameraAdapterState.Closed(
+        cleanupWarning = cleanupFailure?.let { failure ->
+            CameraCleanupWarning(
+                message = failure.message ?: "CameraX cleanup failed",
+                cause = failure,
+            )
+        },
+    )
 
 /**
  * Owns CameraX Preview, ImageAnalysis, and ImageCapture as one lifecycle-bound adapter.
@@ -352,9 +369,7 @@ class CameraXAdapter(
             provider = null
             clearBoundReferences()
             analysisExecutor.shutdownNow()
-
-            cleanupFailure?.let(::publishFailure)
-            publish(CameraAdapterState.Closed)
+            publish(cameraClosedState(cleanupFailure))
         }
     }
 
