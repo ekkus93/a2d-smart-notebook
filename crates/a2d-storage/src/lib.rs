@@ -15,6 +15,7 @@ mod assets;
 mod json_columns;
 mod migration_history;
 mod migrations;
+mod preferred_scan;
 mod repository;
 mod transaction_repository;
 mod workflow;
@@ -22,6 +23,7 @@ mod workflow;
 pub use asset_recovery::{AssetPersistenceFailureStage, OrphanedFinalAsset};
 pub use assets::AssetStore;
 pub use migrations::{MIGRATIONS, Migration};
+pub use preferred_scan::{ChangePreferredScanRequest, ChangePreferredScanResult};
 pub use repository::{
     AssetRepository, AuditEventRepository, NotebookDesignRepository, NotebookRepository,
     OcrRunRepository, PageRepository, PageSetRepository, ScanRepository,
