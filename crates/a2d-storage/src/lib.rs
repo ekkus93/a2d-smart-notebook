@@ -1,9 +1,16 @@
 //! Owns the canonical SQLite database. All SQL is private to this crate; no other crate issues SQL.
 //!
 //! `rusqlite` uses bundled SQLite for reproducible Android cross-compilation. Connections enable
-//! foreign keys, WAL mode, synchronous NORMAL, and a bounded busy timeout. Numbered migrations are
-//! applied transactionally and their exact SQL SHA-256 digests are recorded and revalidated on
-//! every open; edited history, version gaps, and databases newer than the app fail closed.
+//! foreign keys, WAL mode, `synchronous=NORMAL`, and a bounded busy timeout. WAL/NORMAL preserves
+//! database consistency and application-crash durability, but the latest committed transaction may
+//! be rolled back after an operating-system crash or power loss; this crate does not call such a
+//! commit fully power-loss durable. Asset files complete their separate file and directory
+//! synchronization contract before database registration is attempted. See
+//! `docs/decisions/V01_STORAGE_DURABILITY_CONTRACT.md`.
+//!
+//! Numbered migrations are applied transactionally and their exact SQL SHA-256 digests are recorded
+//! and revalidated on every open; edited history, version gaps, and databases newer than the app
+//! fail closed.
 
 use std::fmt;
 use std::path::Path;

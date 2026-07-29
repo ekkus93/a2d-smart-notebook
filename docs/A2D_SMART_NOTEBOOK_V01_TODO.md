@@ -505,16 +505,23 @@ library/
 - [x] Validate paths remain inside library root. (`AssetStore::resolve`, tested against a real
       traversal-shaped path.)
 - [x] Write temporary files first. (`tmp/<AssetId>.tmp`.)
-- [x] Flush/close, compute SHA-256, then atomically rename. (Also re-reads the temp file after
-      flush and re-hashes it to *verify* against the in-memory hash, not just compute once and
-      trust it.)
+- [x] Distinguish userspace flush from persistence. `Write::flush()` is required but is never
+      described as durable by itself.
+- [x] Apply original read-only metadata, call `File::sync_all()`, close, then re-read and verify
+      byte length and SHA-256 against the supplied bytes.
+- [x] Finalize without replacement using a same-filesystem hard link, verify finalized metadata,
+      synchronize the destination directory, remove the temporary link, and synchronize `tmp/`.
+      The complete terminology and platform scope are normative in
+      `docs/decisions/V01_STORAGE_DURABILITY_CONTRACT.md`.
 - [x] Mark originals immutable. (Read-only file permission bit + `Asset.immutable = true`;
       tested.)
 - [x] Detect orphan temporary files without deleting unknown files silently.
       (`AssetStore::list_orphaned_temp_files`; tested that it reports without deleting.)
-- [x] Commit references only after durable file creation. (`commit` only returns an `Asset` value
-      after the atomic rename succeeds; there is no code path that could construct one, and
-      therefore no path that could insert its DB row, before the rename happens.)
+- [x] Commit references only after the asset filesystem commit. `commit` returns an `Asset`
+      only after file `sync_all()`, no-replace finalization, finalized-metadata verification,
+      destination-directory synchronization, temporary-link removal, and temporary-directory
+      synchronization all succeed. SQLite registration occurs afterward and has its own documented
+      WAL/`synchronous=NORMAL` durability semantics.
 
 ## 3.4 Integrity and interruption tests
 
@@ -544,9 +551,10 @@ library/
 
 Acceptance:
 
-- [x] A committed scan can never reference an original file that was never durably written.
-      (`asset_row_is_only_insertable_after_the_file_is_durably_renamed_into_place` — proven
-      structurally, not just asserted, per that test's own comment.)
+- [x] A committed scan can never reference an original file that did not complete the v0.1
+      asset filesystem commit contract. The guarantee is stated separately from SQLite
+      power-loss durability; WAL/`synchronous=NORMAL` may lose the latest transaction after an OS
+      crash while preserving database consistency.
 - [x] Recovery never deletes user data silently. (True by omission: no code in this crate deletes
       anything automatically — `list_orphaned_temp_files` only reports, migrations only add.)
 

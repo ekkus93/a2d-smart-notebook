@@ -1,7 +1,11 @@
-//! The asset commit protocol (TODO 3.3, spec §16.3): create-new temp write → flush and sync →
-//! compute and verify SHA-256 → atomic no-replace finalization → sync directories → caller commits
-//! the DB row. This module owns only the filesystem half; the DB half is
-//! `AssetRepository::insert_asset` (repository.rs).
+//! The asset filesystem commit protocol (TODO 3.3, spec §16.3): create-new temp write →
+//! userspace flush → file-content and metadata `sync_all` → close and verify → atomic no-replace
+//! finalization → destination-directory sync → temp-link removal → temp-directory sync. A
+//! successful `flush()` alone is never treated as durable. Only after this function returns an
+//! `Asset` may the caller attempt the separate SQLite transaction.
+//!
+//! Normative terminology, WAL/`synchronous=NORMAL` interaction, supported filesystem scope, and
+//! platform limitations are defined in `docs/decisions/V01_STORAGE_DURABILITY_CONTRACT.md`.
 //!
 //! ```text
 //! library/

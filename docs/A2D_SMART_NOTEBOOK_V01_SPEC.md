@@ -661,18 +661,30 @@ The Rust core owns the SQLite database, migrations, transactions, and integrity 
 
 The implementation MUST enable and verify foreign keys, use a reviewed mobile journaling mode, use explicit transactions, version schemas, identify migrations, support backup-safe snapshots, and run appropriate integrity checks.
 
-### 16.3 Asset commit protocol
+### 16.3 Asset commit and durability contract
 
-A scan registration that writes files and database rows MUST use a recoverable protocol:
+The normative v0.1 durability contract is `docs/decisions/V01_STORAGE_DURABILITY_CONTRACT.md`. Documentation, diagnostics, and tests MUST distinguish these layers:
 
-1. Write asset to a temporary file.
-2. Flush and close.
-3. Compute and verify hash.
-4. Atomically rename into the asset repository.
-5. Commit database references in one transaction.
-6. Record incomplete/orphan cleanup work if interrupted.
+- **Userspace flush:** `Write::flush()` passes writer-buffered bytes onward; it is not a persistence guarantee.
+- **File-content and metadata synchronization:** `File::sync_all()` requests synchronization of file bytes and required metadata.
+- **Directory-entry synchronization:** the affected directory is opened and synchronized after creation or removal of a filename.
+- **SQLite transaction durability:** guarantees are determined separately by the selected journal and synchronous modes.
 
-The system MUST NOT commit a database row pointing to an asset that was never durably written.
+A scan registration that writes files and database rows MUST use this recoverable ordering:
+
+1. Create-new and write the temporary asset file.
+2. Call `flush()` without claiming durability.
+3. Apply required metadata, including read-only permissions for originals.
+4. Call `sync_all()` on the temporary file, close it, then re-read and verify byte length and SHA-256.
+5. Create the final path atomically without replacement on the same filesystem.
+6. Verify finalized metadata and synchronize the destination directory.
+7. Remove the temporary directory entry and synchronize the temporary directory.
+8. Only after the asset filesystem commit succeeds, insert asset and dependent rows in one SQLite transaction.
+9. Report interrupted temporary or finalized-unregistered assets non-destructively.
+
+SQLite v0.1 uses WAL mode with `synchronous=NORMAL`. This preserves database consistency and survives application-process crashes, but the latest committed transaction may be lost after an operating-system crash or power loss. Therefore A2D MUST NOT claim that a successful SQLite commit, a successful `flush()`, or the combined scan registration is fully power-loss durable.
+
+The system MUST NOT commit a database row pointing to an asset whose required filesystem synchronization and directory-entry synchronization did not complete. The selected filesystem-first ordering may leave a synchronized unreferenced asset after interruption; recovery MUST report and preserve that file rather than silently deleting it.
 
 ### 16.4 Corruption handling
 

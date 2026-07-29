@@ -262,29 +262,33 @@ WHERE preferred = 1;
 ## FIX-020 — Define and document the actual durability contract
 
 **Priority:** P0  
+**Status:** Complete; normative contract in `docs/decisions/V01_STORAGE_DURABILITY_CONTRACT.md`  
 **Primary paths:**
 
 - `crates/a2d-storage/src/assets.rs`
 - `crates/a2d-storage/src/lib.rs`
 - `docs/A2D_SMART_NOTEBOOK_V01_SPEC.md`
 - `docs/A2D_SMART_NOTEBOOK_V01_TODO.md`
+- `docs/decisions/V01_STORAGE_DURABILITY_CONTRACT.md`
+- `crates/a2d-storage/tests/durability_documentation.rs`
 
 ### Tasks
 
-- [ ] Define what “durable” means for v0.1 on Android/Linux filesystems.
-- [ ] Distinguish:
-  - [ ] userspace flush
-  - [ ] file-content synchronization
-  - [ ] metadata synchronization
-  - [ ] directory-entry synchronization
-  - [ ] SQLite transaction durability
-- [ ] Document the selected relationship between SQLite `synchronous` mode and asset-file synchronization.
-- [ ] Do not claim a file is power-loss durable if only `Write::flush()` has succeeded.
-- [ ] Record any platform limitations explicitly.
+- [x] Define what “durable” means for v0.1 on Android/Linux filesystems.
+- [x] Distinguish:
+  - [x] userspace flush
+  - [x] file-content synchronization
+  - [x] metadata synchronization
+  - [x] directory-entry synchronization
+  - [x] SQLite transaction durability
+- [x] Document the selected relationship between SQLite `synchronous` mode and asset-file synchronization.
+- [x] Do not claim a file is power-loss durable if only `Write::flush()` has succeeded.
+- [x] Record Android/Linux, non-Unix, provider-filesystem, cross-filesystem, future Apple, and hardware limitations explicitly.
+- [x] Add a source-level drift test tying the terminology to the filesystem ordering and SQLite pragmas.
 
 ### Acceptance criteria
 
-- [ ] Documentation and implementation use the same durability terminology.
+- [x] Documentation and implementation use the same durability terminology.
 
 ---
 
