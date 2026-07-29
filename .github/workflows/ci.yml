@@ -86,7 +86,7 @@ jobs:
       - name: Gradle lint, unit tests, and debug APK
         working-directory: apps/android
         run: ./gradlew lint test assembleDebug --no-daemon
-      - name: Verify APK native libraries, detector linkage, and notices
+      - name: Verify APK native libraries, detector linkage, production symbols, and notices
         run: >-
           python tools/verify-android-apk.py
           apps/android/app/build/outputs/apk/debug/app-debug.apk
@@ -98,7 +98,7 @@ jobs:
           if-no-files-found: error
 
   android-shared-analysis:
-    name: Android emulator (shared analysis and scanner presentation)
+    name: Android emulator (shared analysis, scanner presentation, FFI panic containment)
     needs: android
     runs-on: ubuntu-latest
     env:
@@ -131,9 +131,9 @@ jobs:
             echo "ANDROID_NDK_ROOT=$ndk_home"
           } >> "$GITHUB_ENV"
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
-      - name: Build the packaged x86_64 Rust library
-        run: bash ./tools/build-android-native-libs.sh "x86_64"
-      - name: Run shared-analysis and scanner-presentation instrumentation tests
+      - name: Prepare CI-only feature-enabled FFI panic test build
+        run: bash ./tools/prepare-android-ffi-panic-test.sh
+      - name: Run shared-analysis, scanner-presentation, and panic-containment tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -147,7 +147,7 @@ jobs:
           script: >-
             cd apps/android &&
             ./gradlew connectedDebugAndroidTest --no-daemon
-            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.PanicPropagationTest
       - name: Upload Android instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
