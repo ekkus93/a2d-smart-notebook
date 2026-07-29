@@ -6,7 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.a2d.notebook.rustbridge.A2dBridge
+import com.a2d.notebook.rustbridge.catchingOperationFailure
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.GeneratedSmartPages
@@ -28,15 +31,20 @@ class SmartPagesViewModel(application: Application) : AndroidViewModel(applicati
         if (mutableState.value.busy) return
         mutableState.value = SmartPagesUiState(busy = true)
         viewModelScope.launch {
-            runCatching {
+            val result = catchingOperationFailure {
                 withContext(Dispatchers.IO) { client.generateSmartPages(request) }
-            }.onSuccess { generated ->
-                mutableState.value = SmartPagesUiState(generated = generated)
-            }.onFailure { failure ->
-                mutableState.value = SmartPagesUiState(
-                    error = failure.message ?: failure.toString(),
-                )
             }
+            currentCoroutineContext().ensureActive()
+            result.fold(
+                onSuccess = { generated ->
+                    mutableState.value = SmartPagesUiState(generated = generated)
+                },
+                onFailure = { failure ->
+                    mutableState.value = SmartPagesUiState(
+                        error = failure.message ?: failure.toString(),
+                    )
+                },
+            )
         }
     }
 }
