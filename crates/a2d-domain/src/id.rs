@@ -2,35 +2,29 @@
 //!
 //! Every independently persisted, referenceable, or FFI-crossing domain entity gets its own
 //! newtype here rather than a raw `String`. All of them share one canonical wire form: 26
-//! uppercase Crockford Base32 characters, MSB-first, zero-padded on the most-significant end —
-//! the same scheme `docs/decisions/0001-qr-v1-encoding-and-integrity.md` specifies for the
-//! subset of IDs that additionally appear in QR payloads. Using one format everywhere (rather
-//! than a QR-specific format plus a separate general-purpose one) was an open decision; see
-//! `memory.md` for the reasoning.
+//! uppercase Crockford Base32 characters, MSB-first, zero-padded on the most-significant end.
 
 use std::fmt;
 
 use crate::error::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
 const ALPHABET: [u8; 32] = *b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/// Used only when the OS randomness source fails while an error envelope is already being built.
+/// It is intentionally not 26 characters and never claims uniqueness or entity-ID validity.
+pub(crate) const EMERGENCY_CORRELATION_ID: &str = "correlation-rng-unavailable";
 
 fn decode_digit(byte: u8) -> Option<u8> {
     match byte {
         b'0'..=b'9' => Some(byte - b'0'),
         b'A'..=b'H' => Some(byte - b'A' + 10),
-        // 'I' skipped: not in the canonical alphabet.
         b'J' | b'K' => Some(byte - b'A' + 9),
-        // 'L' skipped.
         b'M' | b'N' => Some(byte - b'A' + 8),
-        // 'O' skipped.
         b'P'..=b'T' => Some(byte - b'A' + 7),
-        // 'U' skipped.
         b'V'..=b'Z' => Some(byte - b'A' + 6),
         _ => None,
     }
 }
 
-/// Encodes 16 bytes (128 bits) as 26 canonical, uppercase Crockford Base32 characters.
 fn encode_128(bytes: [u8; 16]) -> String {
     let value = u128::from_be_bytes(bytes);
     let mut out = String::with_capacity(26);
@@ -51,25 +45,24 @@ enum IdDecodeError {
     NonCanonical,
 }
 
-/// Strictly decodes a canonical 26-character Crockford Base32 string back to 16 bytes. No alias
-/// normalization: `I`, `L`, `O`, `U`, and any lowercase input are rejected outright, never mapped
-/// to a look-alike digit.
-fn decode_128(s: &str) -> Result<[u8; 16], IdDecodeError> {
-    if s.len() != 26 {
-        return Err(IdDecodeError::InvalidLength { actual: s.len() });
+fn decode_128(value: &str) -> Result<[u8; 16], IdDecodeError> {
+    if value.len() != 26 {
+        return Err(IdDecodeError::InvalidLength {
+            actual: value.len(),
+        });
     }
     let mut digits = [0u8; 26];
-    for (i, &b) in s.as_bytes().iter().enumerate() {
-        digits[i] = decode_digit(b).ok_or(IdDecodeError::InvalidAlphabet)?;
+    for (index, &byte) in value.as_bytes().iter().enumerate() {
+        digits[index] = decode_digit(byte).ok_or(IdDecodeError::InvalidAlphabet)?;
     }
     if digits[0] > 0b111 {
         return Err(IdDecodeError::NonCanonical);
     }
-    let mut value: u128 = digits[0] as u128;
-    for &d in &digits[1..] {
-        value = (value << 5) | d as u128;
+    let mut decoded: u128 = digits[0] as u128;
+    for &digit in &digits[1..] {
+        decoded = (decoded << 5) | digit as u128;
     }
-    Ok(value.to_be_bytes())
+    Ok(decoded.to_be_bytes())
 }
 
 fn id_decode_error(
@@ -86,8 +79,7 @@ fn id_decode_error(
         IdDecodeError::InvalidAlphabet => (
             "INVALID_ALPHABET",
             format!(
-                "{type_name} contains a character outside the canonical Crockford Base32 \
-                 alphabet (uppercase 0-9, A-Z excluding I/L/O/U)"
+                "{type_name} contains a character outside the canonical Crockford Base32 alphabet (uppercase 0-9, A-Z excluding I/L/O/U)"
             ),
         ),
         IdDecodeError::NonCanonical => (
@@ -108,14 +100,36 @@ fn id_decode_error(
     .with_detail("input", input)
 }
 
-fn random_128() -> [u8; 16] {
-    let mut buf = [0u8; 16];
-    getrandom::getrandom(&mut buf).expect("OS cryptographic randomness source must be available");
-    buf
+fn random_128() -> Result<[u8; 16], getrandom::Error> {
+    let mut buffer = [0u8; 16];
+    getrandom::getrandom(&mut buffer)?;
+    Ok(buffer)
+}
+
+fn correlation_id_from_random_bytes(bytes: Option<[u8; 16]>) -> String {
+    bytes
+        .map(encode_128)
+        .unwrap_or_else(|| EMERGENCY_CORRELATION_ID.to_string())
 }
 
 pub(crate) fn generate_correlation_id() -> String {
-    encode_128(random_128())
+    correlation_id_from_random_bytes(random_128().ok())
+}
+
+fn id_generation_error(
+    type_name: &'static str,
+    code_prefix: &'static str,
+    source: getrandom::Error,
+) -> A2dError {
+    A2dError::new(
+        ErrorCode::new(format!("{code_prefix}_RANDOMNESS_UNAVAILABLE")),
+        ErrorCategory::PlatformAdapter,
+        ErrorSeverity::Critical,
+        "error.id.randomness_unavailable",
+        format!("OS cryptographic randomness is unavailable while generating {type_name}: {source}"),
+        false,
+    )
+    .with_detail("id_type", type_name)
 }
 
 macro_rules! define_id {
@@ -125,18 +139,34 @@ macro_rules! define_id {
         pub struct $name(String);
 
         impl $name {
-            /// Generates a new, random, canonically encoded identifier using OS cryptographic
-            /// randomness. Production code MUST use this rather than any deterministic source.
-            pub fn generate() -> Self {
-                Self(encode_128(random_128()))
+            /// Fallible production ID generation. Callers must propagate failure before performing
+            /// any canonical database or filesystem mutation.
+            pub fn try_generate() -> Result<Self, A2dError> {
+                random_128()
+                    .map(|bytes| Self(encode_128(bytes)))
+                    .map_err(|source| {
+                        id_generation_error(stringify!($name), $code_prefix, source)
+                    })
             }
 
-            /// Parses a canonical identifier. Rejects wrong length, invalid alphabet (including
-            /// lowercase and I/L/O/U), and non-canonical padding.
-            pub fn parse(s: &str) -> Result<Self, A2dError> {
-                match decode_128(s) {
-                    Ok(_) => Ok(Self(s.to_string())),
-                    Err(cause) => Err(id_decode_error(stringify!($name), $code_prefix, s, cause)),
+            /// Compatibility constructor retained while production call sites migrate to
+            /// [`Self::try_generate`]. New production code must not use this method.
+            #[deprecated(note = "production code must use try_generate and propagate RNG failure")]
+            pub fn generate() -> Self {
+                Self::try_generate().unwrap_or_else(|error| {
+                    panic!("cryptographic ID generation failed: {error}")
+                })
+            }
+
+            pub fn parse(value: &str) -> Result<Self, A2dError> {
+                match decode_128(value) {
+                    Ok(_) => Ok(Self(value.to_string())),
+                    Err(cause) => Err(id_decode_error(
+                        stringify!($name),
+                        $code_prefix,
+                        value,
+                        cause,
+                    )),
                 }
             }
 
@@ -144,9 +174,6 @@ macro_rules! define_id {
                 &self.0
             }
 
-            /// Builds an identifier from caller-supplied bytes rather than OS randomness. Only
-            /// available to tests (TODO 2.1: "a deterministic RNG is available only through
-            /// test interfaces"), including other crates' tests via the `test-util` feature.
             #[cfg(feature = "test-util")]
             pub fn from_raw_for_test(bytes: [u8; 16]) -> Self {
                 Self(encode_128(bytes))
@@ -154,14 +181,14 @@ macro_rules! define_id {
         }
 
         impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(&self.0)
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str(&self.0)
             }
         }
 
         impl fmt::Debug for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, concat!(stringify!($name), "({})"), self.0)
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(formatter, concat!(stringify!($name), "({})"), self.0)
             }
         }
     };
@@ -189,8 +216,9 @@ define_id!(BackupId, "BACKUP_ID");
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::collections::HashSet;
+
+    use super::*;
 
     #[test]
     fn round_trips_through_encode_and_decode() {
@@ -203,78 +231,83 @@ mod tests {
             assert!(
                 encoded
                     .bytes()
-                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+                    .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
             );
-            let decoded = decode_128(&encoded).expect("round trip must decode");
-            assert_eq!(decoded, bytes);
+            assert_eq!(decode_128(&encoded).unwrap(), bytes);
         }
     }
 
     #[test]
     fn known_encoding_vector() {
-        // All-zero 128 bits must encode as 26 '0' characters.
         assert_eq!(encode_128([0u8; 16]), "0".repeat(26));
-
-        // All-ones 128 bits: first char carries only 3 set bits (value 7 -> '7'), rest are 'Z' (31).
-        let expected = format!("7{}", "Z".repeat(25));
-        assert_eq!(encode_128([0xFFu8; 16]), expected);
+        assert_eq!(encode_128([0xFFu8; 16]), format!("7{}", "Z".repeat(25)));
     }
 
     #[test]
-    fn rejects_wrong_length() {
-        let err = PageId::parse("SHORT").unwrap_err();
-        assert!(err.code.to_string().contains("PAGE_ID_INVALID_LENGTH"));
+    fn rejects_wrong_length_alphabet_case_and_padding() {
+        assert!(
+            PageId::parse("SHORT")
+                .unwrap_err()
+                .code
+                .to_string()
+                .contains("PAGE_ID_INVALID_LENGTH")
+        );
+        let ambiguous = format!("I{}", "0".repeat(25));
+        assert!(
+            PageId::parse(&ambiguous)
+                .unwrap_err()
+                .code
+                .to_string()
+                .contains("PAGE_ID_INVALID_ALPHABET")
+        );
+        let lowercase = encode_128([1u8; 16]).to_lowercase();
+        assert!(
+            PageId::parse(&lowercase)
+                .unwrap_err()
+                .code
+                .to_string()
+                .contains("PAGE_ID_INVALID_ALPHABET")
+        );
+        let noncanonical = format!("8{}", "0".repeat(25));
+        assert!(
+            PageId::parse(&noncanonical)
+                .unwrap_err()
+                .code
+                .to_string()
+                .contains("PAGE_ID_NON_CANONICAL")
+        );
     }
 
-    #[test]
-    fn rejects_invalid_alphabet_including_ambiguous_letters() {
-        // 26 chars, but contains 'I' which is deliberately excluded from the alphabet.
-        let candidate = format!("I{}", "0".repeat(25));
-        let err = PageId::parse(&candidate).unwrap_err();
-        assert!(err.code.to_string().contains("PAGE_ID_INVALID_ALPHABET"));
-    }
-
-    #[test]
-    fn rejects_lowercase() {
-        let valid = PageId::generate().to_string();
-        let lowered = valid.to_lowercase();
-        let err = PageId::parse(&lowered).unwrap_err();
-        assert!(err.code.to_string().contains("PAGE_ID_INVALID_ALPHABET"));
-    }
-
-    #[test]
-    fn rejects_non_canonical_padding() {
-        // First char '8' has value 8 (0b01000), which sets a padding bit that must be zero.
-        let candidate = format!("8{}", "0".repeat(25));
-        let err = PageId::parse(&candidate).unwrap_err();
-        assert!(err.code.to_string().contains("PAGE_ID_NON_CANONICAL"));
-    }
-
+    #[allow(deprecated)]
     #[test]
     fn generate_then_parse_round_trips() {
         let id = ScanId::generate();
-        let parsed = ScanId::parse(&id.to_string()).expect("generated id must parse");
-        assert_eq!(id, parsed);
+        assert_eq!(ScanId::parse(&id.to_string()).unwrap(), id);
     }
 
     #[test]
-    fn large_sample_is_unique() {
+    fn fallible_generation_round_trips_and_large_sample_is_unique() {
         let mut seen = HashSet::new();
         for _ in 0..10_000 {
-            let id = AssetId::generate();
-            assert!(
-                seen.insert(id.to_string()),
-                "collision after {} ids",
-                seen.len()
-            );
+            let id = AssetId::try_generate().unwrap();
+            assert!(seen.insert(id.to_string()), "duplicate ID generated");
+            assert_eq!(AssetId::parse(id.as_str()).unwrap(), id);
         }
     }
 
     #[test]
+    fn emergency_correlation_marker_is_stable_and_noncanonical() {
+        let first = correlation_id_from_random_bytes(None);
+        let second = correlation_id_from_random_bytes(None);
+        assert_eq!(first, EMERGENCY_CORRELATION_ID);
+        assert_eq!(first, second);
+        assert_ne!(first.len(), 26);
+        assert!(PageId::parse(&first).is_err());
+    }
+
+    #[allow(deprecated)]
+    #[test]
     fn distinct_types_are_not_interchangeable_at_compile_time() {
-        // This test exists to document intent: PageId and ScanId are distinct types even
-        // though both wrap a String, so passing one where the other is expected is a compile
-        // error, not a runtime bug. No runtime assertion needed beyond type-checking below.
         let page = PageId::generate();
         let scan = ScanId::generate();
         assert_ne!(page.as_str(), scan.as_str());
