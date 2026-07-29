@@ -94,11 +94,9 @@ fn migration_rejects_contradictory_legacy_state_without_recording_version_five()
 
     let conn = Connection::open(&path).unwrap();
     let version: i64 = conn
-        .query_row(
-            "SELECT MAX(version) FROM schema_migrations",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
         .unwrap();
     assert_eq!(version, 4);
     let page_pointer: Option<String> = conn
