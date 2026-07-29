@@ -55,6 +55,19 @@ Rust formatting was applied after those handwritten-source changes.
 - Clippy source cleanup/format: passed
 - Commit/push: passed
 
+## First permanent validation after import
+
+- Workflow run: `30489359526`
+- Validation commit: `36b087f8586276c78526a2ab21d40e54b511fe69`
+- Kotlin UniFFI binding regeneration and drift comparison: passed
+- Android native ABI builds: passed
+- Android lint, JVM tests, and debug APK assembly: passed
+- APK native-library, detector-linkage, symbol, and notices verification: passed
+- Rust formatting drift: passed
+- Full-workspace clippy: failed while compiling `a2d-pdf` integration test `printable_compatibility`
+
+The remaining Rust failure showed that `render_page_ops` is an intentionally tested public compatibility API. The implementation was made public and the crate-root re-export restored in commit `ba46eb1322909ddd87d2eb8c4544bcec737345bc`.
+
 ## Remaining acceptance gates
 
 FIX-001 remains pending until permanent CI passes on the exact final validation head, including:
