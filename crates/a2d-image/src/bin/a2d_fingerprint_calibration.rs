@@ -37,6 +37,11 @@ struct ComparisonPair {
     expected_relation: String,
 }
 
+struct CalibrationInput {
+    fixtures: BTreeMap<String, FixtureSource>,
+    pairs: Vec<ComparisonPair>,
+}
+
 fn usage() -> ! {
     eprintln!(
         "usage: a2d-fingerprint-calibration <photographed-root> <validated-input.tsv> <output.tsv>"
@@ -52,7 +57,10 @@ fn validate_field(value: &str, context: &str) -> Result<(), DynError> {
     if value.is_empty() {
         return Err(invalid(format!("{context}: value must not be empty")));
     }
-    if value.bytes().any(|byte| matches!(byte, b'\t' | b'\r' | b'\n')) {
+    if value
+        .bytes()
+        .any(|byte| matches!(byte, b'\t' | b'\r' | b'\n'))
+    {
         return Err(invalid(format!(
             "{context}: value contains control whitespace"
         )));
@@ -60,7 +68,11 @@ fn validate_field(value: &str, context: &str) -> Result<(), DynError> {
     Ok(())
 }
 
-fn resolve_confined_file(root: &Path, relative_path: &str, context: &str) -> Result<PathBuf, DynError> {
+fn resolve_confined_file(
+    root: &Path,
+    relative_path: &str,
+    context: &str,
+) -> Result<PathBuf, DynError> {
     let relative = Path::new(relative_path);
     if relative.is_absolute()
         || relative
@@ -132,10 +144,7 @@ fn parse_pipeline_version(value: &str, context: &str) -> Result<u64, DynError> {
     Ok(parsed)
 }
 
-fn parse_calibration_input(
-    root: &Path,
-    input_path: &Path,
-) -> Result<(BTreeMap<String, FixtureSource>, Vec<ComparisonPair>), DynError> {
+fn parse_calibration_input(root: &Path, input_path: &Path) -> Result<CalibrationInput, DynError> {
     let input = fs::read_to_string(input_path)?;
     let mut lines = input.lines();
     let header = lines
@@ -231,7 +240,7 @@ fn parse_calibration_input(
             "photographed calibration requires at least one labeled pair",
         ));
     }
-    Ok((fixtures, pairs))
+    Ok(CalibrationInput { fixtures, pairs })
 }
 
 fn decode_normalized_fingerprint(path: &Path) -> Result<PerceptualFingerprintV1, DynError> {
@@ -248,7 +257,7 @@ fn decode_normalized_fingerprint(path: &Path) -> Result<PerceptualFingerprintV1,
     )?
     .decode_rgb8()?
     .into_gray8(ImageLimits::new(MAX_DECODED_PIXELS)?)?;
-    PerceptualFingerprintV1::from_gray_image(&image).map_err(Into::into)
+    Ok(PerceptualFingerprintV1::from_gray_image(&image)?)
 }
 
 fn nearest_rank_percentile(sorted_values: &[u8], percentile: usize) -> u8 {
@@ -290,7 +299,10 @@ fn write_report(
     fixture_sources: &BTreeMap<String, FixtureSource>,
     pairs: &[ComparisonPair],
 ) -> Result<(), DynError> {
-    if let Some(parent) = output_path.parent() {
+    if let Some(parent) = output_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
         fs::create_dir_all(parent)?;
     }
     let mut fingerprints = BTreeMap::new();
@@ -307,18 +319,32 @@ fn write_report(
     for pair in pairs {
         let baseline = fingerprints.get(&pair.baseline_fixture_id).ok_or_else(|| {
             invalid(format!(
-                "comparison pair {} references unknown baseline fixture {}",
+                "comparison pair {} references unknown baseline fingerprint {}",
                 pair.id, pair.baseline_fixture_id
             ))
         })?;
         let candidate = fingerprints.get(&pair.candidate_fixture_id).ok_or_else(|| {
             invalid(format!(
-                "comparison pair {} references unknown candidate fixture {}",
+                "comparison pair {} references unknown candidate fingerprint {}",
                 pair.id, pair.candidate_fixture_id
             ))
         })?;
-        let baseline_source = &fixture_sources[&pair.baseline_fixture_id];
-        let candidate_source = &fixture_sources[&pair.candidate_fixture_id];
+        let baseline_source = fixture_sources
+            .get(&pair.baseline_fixture_id)
+            .ok_or_else(|| {
+                invalid(format!(
+                    "comparison pair {} references unknown baseline fixture {}",
+                    pair.id, pair.baseline_fixture_id
+                ))
+            })?;
+        let candidate_source = fixture_sources
+            .get(&pair.candidate_fixture_id)
+            .ok_or_else(|| {
+                invalid(format!(
+                    "comparison pair {} references unknown candidate fixture {}",
+                    pair.id, pair.candidate_fixture_id
+                ))
+            })?;
         let difference = baseline.difference(candidate);
         if difference.cell_absolute_differences.len() != PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT {
             return Err(invalid(format!(
@@ -378,8 +404,8 @@ fn run(root: &Path, input_path: &Path, output_path: &Path) -> Result<(), DynErro
         )));
     }
     let input_path = input_path.canonicalize()?;
-    let (fixtures, pairs) = parse_calibration_input(&root, &input_path)?;
-    write_report(output_path, &fixtures, &pairs)
+    let input = parse_calibration_input(&root, &input_path)?;
+    write_report(output_path, &input.fixtures, &input.pairs)
 }
 
 fn main() -> Result<(), DynError> {
