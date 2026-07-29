@@ -1,10 +1,7 @@
-//! The asset commit protocol (TODO 3.3, spec §16.3): temp write → flush/close → compute (and
-//! verify) SHA-256 → atomic rename → caller commits the DB row. This module owns only the
-//! filesystem half; the DB half is `AssetRepository::insert_asset` (repository.rs). They're kept
-//! separate on purpose — a caller composing a larger transaction (e.g. Milestone 9's scan
-//! registration: commit an asset, insert a scan, update a page, all as one commit) calls
-//! `AssetStore::commit` first, then folds `Storage::transaction`'s repository calls around its
-//! result, rather than this module reaching into the database itself.
+//! The asset commit protocol (TODO 3.3, spec §16.3): create-new temp write → flush and sync →
+//! compute and verify SHA-256 → atomic no-replace finalization → sync directories → caller commits
+//! the DB row. This module owns only the filesystem half; the DB half is
+//! `AssetRepository::insert_asset` (repository.rs).
 //!
 //! ```text
 //! library/
@@ -41,6 +38,17 @@ fn map_io_error(context: &str, err: std::io::Error) -> A2dError {
         true,
     )
     .with_detail("context", context)
+}
+
+fn integrity_error(code: &'static str, message: impl Into<String>) -> A2dError {
+    A2dError::new(
+        ErrorCode::new(code),
+        ErrorCategory::Integrity,
+        ErrorSeverity::Critical,
+        "error.storage.asset_integrity",
+        message.into(),
+        false,
+    )
 }
 
 fn asset_kind_dir(kind: AssetKind) -> &'static str {
@@ -83,12 +91,41 @@ impl AssetStore {
         self.root.join("assets").join(asset_kind_dir(kind))
     }
 
-    /// Resolves a relative path stored in the database back to an absolute path, rejecting
-    /// anything that would escape `root` (TODO 3.3: "Validate paths remain inside library
-    /// root"). Writes never need this — this crate always generates the relative path itself
-    /// from an `AssetId` — but reads defend against a corrupted or tampered database value.
+    /// Resolves a relative path stored in the database back to the canonical absolute path,
+    /// rejecting missing files, symlinks, and anything that escapes `root`.
     pub fn resolve(&self, relative_path: &str) -> Result<PathBuf, A2dError> {
         let candidate = self.root.join(relative_path);
+        let metadata = std::fs::symlink_metadata(&candidate).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                A2dError::new(
+                    ErrorCode::new("STORAGE_ASSET_MISSING"),
+                    ErrorCategory::Integrity,
+                    ErrorSeverity::Critical,
+                    "error.storage.asset_missing",
+                    "the database references an asset whose file no longer exists",
+                    false,
+                )
+                .with_detail("relative_path", relative_path)
+            } else {
+                map_io_error("reading asset path metadata", error)
+                    .with_detail("relative_path", relative_path)
+            }
+        })?;
+        if metadata.file_type().is_symlink() {
+            return Err(integrity_error(
+                "STORAGE_ASSET_PATH_IS_SYMLINK",
+                "asset relative_path must not identify a symbolic link",
+            )
+            .with_detail("relative_path", relative_path));
+        }
+        if !metadata.is_file() {
+            return Err(integrity_error(
+                "STORAGE_ASSET_PATH_NOT_FILE",
+                "asset relative_path must identify a regular file",
+            )
+            .with_detail("relative_path", relative_path));
+        }
+
         let canonical_root = self
             .root
             .canonicalize()
@@ -97,32 +134,22 @@ impl AssetStore {
             .canonicalize()
             .map_err(|e| map_io_error("canonicalizing an asset path", e))?;
         if !canonical_candidate.starts_with(&canonical_root) {
-            return Err(A2dError::new(
-                ErrorCode::new("STORAGE_ASSET_PATH_ESCAPES_ROOT"),
-                ErrorCategory::Integrity,
-                ErrorSeverity::Critical,
-                "error.storage.asset_path_escapes_root",
+            return Err(integrity_error(
+                "STORAGE_ASSET_PATH_ESCAPES_ROOT",
                 "asset relative_path resolves outside the library root",
-                false,
             )
             .with_detail("relative_path", relative_path));
         }
-        Ok(candidate)
+        Ok(canonical_candidate)
     }
 
-    /// Runs the asset commit protocol (spec §16.3) for in-memory `data`, returning an `Asset`
-    /// value the caller then inserts into the database (typically inside a
-    /// `Storage::transaction`, so the DB row and the durably-written file become visible
-    /// together). Does **not** touch the database itself — see this module's doc comment.
+    /// Runs the durable no-replace asset commit protocol for in-memory `data`, returning an
+    /// `Asset` value the caller may insert into SQLite only after this function succeeds.
     ///
-    /// 1. Write to a temp file under `tmp/`.
-    /// 2. Flush and close it.
-    /// 3. Compute SHA-256 of what was written, then re-read the file and verify the on-disk
-    ///    bytes hash the same (catches a write bug or disk corruption, not just trusting the
-    ///    in-memory bytes we started with).
-    /// 4. Atomically rename into `assets/<kind>/`.
-    /// 5. For `AssetKind::Original`, mark the file read-only (best-effort OS-level immutability
-    ///    signal, alongside the `immutable` DB flag `AssetRepository` sets).
+    /// The final path is created with a hard link from the synchronized temp inode. Hard-link
+    /// creation is atomic, remains on the same filesystem, and fails rather than replacing an
+    /// existing destination. Android and Apple targets are Unix platforms; on Unix, both the
+    /// destination and temp directories are synchronized before success is returned.
     pub fn commit(
         &self,
         data: &[u8],
@@ -131,55 +158,145 @@ impl AssetStore {
     ) -> Result<Asset, A2dError> {
         let id = AssetId::generate();
         let tmp_path = self.tmp_dir().join(format!("{id}.tmp"));
+        let relative_path = format!("assets/{}/{id}", asset_kind_dir(kind));
+        let final_path = self.root.join(&relative_path);
 
-        // 1 + 2: write to temp, then flush/close (the File is dropped at the end of this block,
-        // closing it; flush() is still called explicitly first so a flush error is caught by
-        // name rather than silently surfacing as a close-time error).
-        {
-            let mut file = std::fs::File::create(&tmp_path)
-                .map_err(|e| map_io_error("creating the temp file", e))?;
-            file.write_all(data)
-                .map_err(|e| map_io_error("writing the temp file", e))?;
-            file.flush()
-                .map_err(|e| map_io_error("flushing the temp file", e))?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp_path)
+            .map_err(|error| {
+                let code = if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    "STORAGE_ASSET_TEMP_PATH_COLLISION"
+                } else {
+                    "STORAGE_ASSET_TEMP_CREATE_FAILED"
+                };
+                A2dError::new(
+                    ErrorCode::new(code),
+                    if error.kind() == std::io::ErrorKind::AlreadyExists {
+                        ErrorCategory::Integrity
+                    } else {
+                        ErrorCategory::Storage
+                    },
+                    if error.kind() == std::io::ErrorKind::AlreadyExists {
+                        ErrorSeverity::Critical
+                    } else {
+                        ErrorSeverity::Error
+                    },
+                    "error.storage.asset_temp_create_failed",
+                    format!("creating the asset temp file failed: {error}"),
+                    error.kind() != std::io::ErrorKind::AlreadyExists,
+                )
+                .with_detail("asset_id", id.to_string())
+                .with_detail("temp_path", tmp_path.to_string_lossy())
+            })?;
+
+        if let Err(error) = file.write_all(data) {
+            drop(file);
+            return Err(with_cleanup_result(
+                map_io_error("writing the asset temp file", error),
+                &tmp_path,
+            )
+            .with_detail("asset_id", id.to_string()));
+        }
+        if let Err(error) = file.flush() {
+            drop(file);
+            return Err(with_cleanup_result(
+                map_io_error("flushing the asset temp file", error),
+                &tmp_path,
+            )
+            .with_detail("asset_id", id.to_string()));
         }
 
-        // 3: compute, then verify against what's actually on disk.
+        let immutable = kind == AssetKind::Original;
+        if immutable {
+            let mut permissions = file
+                .metadata()
+                .map_err(|error| map_io_error("reading asset temp metadata", error))?
+                .permissions();
+            permissions.set_readonly(true);
+            if let Err(error) = std::fs::set_permissions(&tmp_path, permissions) {
+                drop(file);
+                return Err(with_cleanup_result(
+                    map_io_error("marking the original asset read-only", error),
+                    &tmp_path,
+                )
+                .with_detail("asset_id", id.to_string()));
+            }
+        }
+        if let Err(error) = file.sync_all() {
+            drop(file);
+            return Err(with_cleanup_result(
+                map_io_error("synchronizing the asset temp file", error),
+                &tmp_path,
+            )
+            .with_detail("asset_id", id.to_string()));
+        }
+        drop(file);
+
         let expected_hash = hex_sha256(data);
-        let on_disk = std::fs::read(&tmp_path).map_err(|e| {
-            cleanup_tmp(&tmp_path);
-            map_io_error("re-reading the temp file to verify its hash", e)
+        let on_disk = std::fs::read(&tmp_path).map_err(|error| {
+            with_cleanup_result(
+                map_io_error("re-reading the asset temp file to verify its hash", error),
+                &tmp_path,
+            )
+            .with_detail("asset_id", id.to_string())
         })?;
         let actual_hash = hex_sha256(&on_disk);
         if actual_hash != expected_hash {
-            cleanup_tmp(&tmp_path);
-            return Err(A2dError::new(
-                ErrorCode::new("STORAGE_ASSET_HASH_MISMATCH_ON_WRITE"),
-                ErrorCategory::Integrity,
-                ErrorSeverity::Critical,
-                "error.storage.asset_hash_mismatch_on_write",
-                "the temp file's on-disk contents did not hash to the same value as the data written",
-                true,
-            ));
+            return Err(with_cleanup_result(
+                integrity_error(
+                    "STORAGE_ASSET_HASH_MISMATCH_ON_WRITE",
+                    "the temp file contents did not hash to the same value as the supplied data",
+                )
+                .with_detail("expected_sha256", &expected_hash)
+                .with_detail("actual_sha256", actual_hash),
+                &tmp_path,
+            )
+            .with_detail("asset_id", id.to_string()));
         }
 
-        // 4: atomic rename.
-        let relative_path = format!("assets/{}/{id}", asset_kind_dir(kind));
-        let final_path = self.root.join(&relative_path);
-        std::fs::rename(&tmp_path, &final_path).map_err(|e| {
-            cleanup_tmp(&tmp_path);
-            map_io_error("atomically renaming the temp file into place", e)
-        })?;
+        if let Err(error) = std::fs::hard_link(&tmp_path, &final_path) {
+            let mapped = if error.kind() == std::io::ErrorKind::AlreadyExists {
+                integrity_error(
+                    "STORAGE_ASSET_FINAL_PATH_COLLISION",
+                    "asset final path already exists; existing content was not replaced",
+                )
+            } else {
+                map_io_error("atomically finalizing the asset without replacement", error)
+            };
+            return Err(with_cleanup_result(mapped, &tmp_path)
+                .with_detail("asset_id", id.to_string())
+                .with_detail("final_path", final_path.to_string_lossy()));
+        }
 
-        // 5: mark originals read-only.
-        let immutable = kind == AssetKind::Original;
-        if immutable {
-            let mut perms = std::fs::metadata(&final_path)
-                .map_err(|e| map_io_error("reading final asset metadata", e))?
-                .permissions();
-            perms.set_readonly(true);
-            std::fs::set_permissions(&final_path, perms)
-                .map_err(|e| map_io_error("marking the original asset read-only", e))?;
+        if let Err(error) = sync_directory(&self.kind_dir(kind)) {
+            return Err(error
+                .with_detail("asset_id", id.to_string())
+                .with_detail("temp_path", tmp_path.to_string_lossy())
+                .with_detail("final_path", final_path.to_string_lossy())
+                .with_detail("final_file_created", "true")
+                .with_detail("directory_sync_completed", "false"));
+        }
+
+        if let Err(error) = std::fs::remove_file(&tmp_path) {
+            return Err(map_io_error("removing the finalized asset temp link", error)
+                .with_detail("asset_id", id.to_string())
+                .with_detail("temp_path", tmp_path.to_string_lossy())
+                .with_detail("final_path", final_path.to_string_lossy())
+                .with_detail("final_file_created", "true")
+                .with_detail("directory_sync_completed", "true")
+                .with_detail("temp_cleanup_completed", "false"));
+        }
+        if let Err(error) = sync_directory(&self.tmp_dir()) {
+            return Err(error
+                .with_detail("asset_id", id.to_string())
+                .with_detail("temp_path", tmp_path.to_string_lossy())
+                .with_detail("final_path", final_path.to_string_lossy())
+                .with_detail("final_file_created", "true")
+                .with_detail("directory_sync_completed", "true")
+                .with_detail("temp_cleanup_completed", "true")
+                .with_detail("temp_directory_sync_completed", "false"));
         }
 
         Ok(Asset::new(
@@ -195,40 +312,20 @@ impl AssetStore {
         ))
     }
 
-    /// Re-verifies a previously committed asset against the filesystem (TODO 3.4: "Detect
-    /// missing assets and hash mismatches"). Distinct from the write-time check inside
-    /// [`commit`](Self::commit) — this is for auditing an asset some time after it was
-    /// committed, e.g. a library integrity check (spec §16.4) or before trusting a scan's
-    /// original during export.
+    /// Re-verifies a previously committed asset against the filesystem.
     pub fn verify(&self, asset: &Asset) -> Result<(), A2dError> {
-        // Check existence via the plain joined path first: `resolve`'s root-containment check
-        // canonicalizes the path, which itself requires the path to exist, so calling `resolve`
-        // before checking existence would report a missing file as a generic I/O error instead
-        // of the specific "missing" error below.
-        if !self.root.join(&asset.relative_path).is_file() {
-            return Err(A2dError::new(
-                ErrorCode::new("STORAGE_ASSET_MISSING"),
-                ErrorCategory::Integrity,
-                ErrorSeverity::Critical,
-                "error.storage.asset_missing",
-                "the database references an asset whose file no longer exists",
-                false,
-            )
-            .with_detail("asset_id", asset.id().to_string())
-            .with_detail("relative_path", &asset.relative_path));
-        }
-        let path = self.resolve(&asset.relative_path)?;
-        let on_disk =
-            std::fs::read(&path).map_err(|e| map_io_error("reading asset to verify", e))?;
+        let path = self.resolve(&asset.relative_path).map_err(|error| {
+            error
+                .with_detail("asset_id", asset.id().to_string())
+                .with_detail("relative_path", &asset.relative_path)
+        })?;
+        let on_disk = std::fs::read(&path)
+            .map_err(|e| map_io_error("reading asset to verify", e))?;
         let actual_hash = hex_sha256(&on_disk);
         if actual_hash != asset.sha256 {
-            return Err(A2dError::new(
-                ErrorCode::new("STORAGE_ASSET_HASH_MISMATCH"),
-                ErrorCategory::Integrity,
-                ErrorSeverity::Critical,
-                "error.storage.asset_hash_mismatch",
+            return Err(integrity_error(
+                "STORAGE_ASSET_HASH_MISMATCH",
                 "the asset file's current contents do not match its recorded SHA-256",
-                false,
             )
             .with_detail("asset_id", asset.id().to_string())
             .with_detail("expected_sha256", &asset.sha256)
@@ -237,11 +334,8 @@ impl AssetStore {
         Ok(())
     }
 
-    /// Lists files under `tmp/` without deleting anything (TODO 3.3: "Detect orphan temporary
-    /// files without deleting unknown files silently"). A file appears here only if a commit was
-    /// interrupted between the temp write and the atomic rename — successful commits always
-    /// remove their temp file via rename. Cleanup policy (when it's safe to delete an orphan) is
-    /// a follow-up; this only reports.
+    /// Lists files under `tmp/` without deleting anything. Results are sorted for deterministic
+    /// diagnostics and tests.
     pub fn list_orphaned_temp_files(&self) -> Result<Vec<PathBuf>, A2dError> {
         let mut orphans = Vec::new();
         let entries =
@@ -252,14 +346,39 @@ impl AssetStore {
                 orphans.push(entry.path());
             }
         }
+        orphans.sort();
         Ok(orphans)
     }
 }
 
-fn cleanup_tmp(tmp_path: &Path) {
-    // Best-effort: if this fails, list_orphaned_temp_files will surface it later rather than
-    // this losing the original error by trying to also report a cleanup failure.
-    std::fs::remove_file(tmp_path).ok();
+fn with_cleanup_result(error: A2dError, tmp_path: &Path) -> A2dError {
+    match std::fs::remove_file(tmp_path) {
+        Ok(()) => error
+            .with_detail("temp_path", tmp_path.to_string_lossy())
+            .with_detail("temp_cleanup_completed", "true"),
+        Err(cleanup_error) if cleanup_error.kind() == std::io::ErrorKind::NotFound => error
+            .with_detail("temp_path", tmp_path.to_string_lossy())
+            .with_detail("temp_cleanup_completed", "true"),
+        Err(cleanup_error) => error
+            .with_detail("temp_path", tmp_path.to_string_lossy())
+            .with_detail("temp_cleanup_completed", "false")
+            .with_detail("temp_cleanup_error", cleanup_error.to_string()),
+    }
+}
+
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<(), A2dError> {
+    std::fs::File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| map_io_error("synchronizing an asset directory", error))
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_path: &Path) -> Result<(), A2dError> {
+    // Android and Apple production targets are Unix. Rust's standard library does not expose a
+    // portable directory-sync operation on every host; non-Unix desktop builds retain compile and
+    // test feasibility but do not claim the mobile durability guarantee.
+    Ok(())
 }
 
 fn hex_sha256(data: &[u8]) -> String {
