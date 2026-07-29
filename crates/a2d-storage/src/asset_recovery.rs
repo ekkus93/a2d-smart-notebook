@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use std::io::Read;
 use std::path::Path;
 
-use a2d_domain::{A2dError, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity};
+use a2d_domain::{A2dError, AssetId, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity};
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
@@ -23,8 +23,32 @@ const ASSET_DIRECTORIES: [(AssetKind, &str); 5] = [
 ];
 const HASH_BUFFER_BYTES: usize = 64 * 1024;
 
+/// Stable Rust-owned classification for failures spanning filesystem finalization and SQLite
+/// registration. The string representation is transported in `A2dError.details` for FFI callers;
+/// Rust producers use this enum so recovery phase values cannot drift between workflows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AssetPersistenceFailureStage {
+    /// The final library-owned path was never created.
+    BeforeFinalization,
+    /// The final file exists, but no database registration was started successfully.
+    FinalizedUnregistered,
+    /// Database registration began but failed and rolled back, leaving the final file unreferenced.
+    DatabaseRegistrationRolledBack,
+}
+
+impl AssetPersistenceFailureStage {
+    pub const fn as_detail_value(self) -> &'static str {
+        match self {
+            Self::BeforeFinalization => "before_finalization",
+            Self::FinalizedUnregistered => "finalized_unregistered",
+            Self::DatabaseRegistrationRolledBack => "database_registration_rolled_back",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OrphanedFinalAsset {
+    pub asset_id: AssetId,
     pub kind: AssetKind,
     pub relative_path: String,
     pub byte_length: u64,
@@ -169,8 +193,10 @@ fn discover_orphaned_final_assets(
             if referenced.contains(&relative_path) {
                 continue;
             }
+            let asset_id = asset_id_from_path(&canonical_path)?;
             let (byte_length, sha256) = measure_file(&canonical_path)?;
             orphans.push(OrphanedFinalAsset {
+                asset_id,
                 kind,
                 relative_path,
                 byte_length,
@@ -213,6 +239,29 @@ fn canonical_relative_path(root: &Path, path: &Path) -> Result<String, A2dError>
         .with_detail("path", path.to_string_lossy())
     })?;
     Ok(text.replace('\\', "/"))
+}
+
+fn asset_id_from_path(path: &Path) -> Result<AssetId, A2dError> {
+    let file_name = path.file_name().and_then(|value| value.to_str()).ok_or_else(|| {
+        recovery_error(
+            "STORAGE_ORPHAN_DISCOVERY_ASSET_ID_MISSING",
+            ErrorCategory::Integrity,
+            "final asset path does not have a valid UTF-8 asset ID filename",
+            false,
+        )
+        .with_detail("path", path.to_string_lossy())
+    })?;
+    AssetId::parse(file_name).map_err(|error| {
+        recovery_error(
+            "STORAGE_ORPHAN_DISCOVERY_ASSET_ID_INVALID",
+            ErrorCategory::Integrity,
+            "final asset filename is not a canonical AssetId",
+            false,
+        )
+        .with_detail("path", path.to_string_lossy())
+        .with_detail("file_name", file_name)
+        .with_detail("cause_code", error.code.to_string())
+    })
 }
 
 fn measure_file(path: &Path) -> Result<(u64, String), A2dError> {
@@ -309,6 +358,22 @@ mod tests {
     }
 
     #[test]
+    fn failure_stage_detail_values_are_stable() {
+        assert_eq!(
+            AssetPersistenceFailureStage::BeforeFinalization.as_detail_value(),
+            "before_finalization"
+        );
+        assert_eq!(
+            AssetPersistenceFailureStage::FinalizedUnregistered.as_detail_value(),
+            "finalized_unregistered"
+        );
+        assert_eq!(
+            AssetPersistenceFailureStage::DatabaseRegistrationRolledBack.as_detail_value(),
+            "database_registration_rolled_back"
+        );
+    }
+
+    #[test]
     fn unreferenced_final_asset_is_reported_and_never_deleted() {
         let root = temp_root("report");
         let storage = Storage::open_in_memory().unwrap();
@@ -323,6 +388,7 @@ mod tests {
 
         let discovered = storage.discover_orphaned_final_assets(&root).unwrap();
         assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0].asset_id, *orphan.id());
         assert_eq!(discovered[0].kind, AssetKind::Export);
         assert_eq!(discovered[0].relative_path, orphan.relative_path);
         assert_eq!(discovered[0].byte_length, orphan.byte_length);
