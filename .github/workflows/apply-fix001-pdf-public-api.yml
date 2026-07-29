@@ -1,0 +1,55 @@
+name: Apply FIX-001 PDF Public API Repair
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Apply FIX-001 PDF public API repair'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore the tested PDF renderer API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, before: str, after: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              count = text.count(before)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match for {before!r}, found {count}")
+              file.write_text(text.replace(before, after), encoding="utf-8")
+
+          replace_once(
+              "crates/a2d-pdf/src/render.rs",
+              "pub(crate) fn render_page_ops(",
+              "pub fn render_page_ops(",
+          )
+          replace_once(
+              "crates/a2d-pdf/src/lib.rs",
+              "};\n",
+              "};\n\npub use render::render_page_ops;\n",
+          )
+          Path(".github/workflows/apply-fix001-pdf-public-api.yml").unlink()
+          PY
+          cargo fmt --all
+      - name: Commit public API repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git diff --cached --check
+          git commit -m "Restore public PDF render API for compatibility tests"
+          git push origin HEAD:master
