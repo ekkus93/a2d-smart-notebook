@@ -25,9 +25,14 @@ fun renderFirstPdfPage(path: String): Bitmap {
             renderer.openPage(0).use { page ->
                 val width = 900
                 val height = (width.toFloat() * page.height / page.width).roundToInt()
-                return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                try {
                     bitmap.eraseColor(Color.WHITE)
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    return bitmap
+                } catch (failure: Exception) {
+                    bitmap.recycle()
+                    throw failure
                 }
             }
         }
