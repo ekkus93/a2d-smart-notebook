@@ -5,8 +5,8 @@
 //! notebook workflow and deterministic page resolver.
 
 use a2d_domain::{
-    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, Notebook, NotebookDesignId, NotebookId, Page,
-    PageId, SmartPageId,
+    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, Notebook, NotebookDesignId, NotebookId,
+    Page, PageId, SmartPageId,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
