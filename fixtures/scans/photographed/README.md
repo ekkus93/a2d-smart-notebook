@@ -33,23 +33,29 @@ Every comparison pair targets the same A2D page identity and uses one of these l
 
 The verifier rejects self-comparisons, missing fixtures, duplicate unordered pairs, inconsistent labels, path traversal, hash drift, and incomplete provenance.
 
-## Validation
+## Validation and measurement
 
-Run the metadata and immutable-file verifier:
+Validate provenance and immutable files:
 
 ```text
 python tools/verify_photographed_scan_fixtures.py
 ```
 
-After photographed fixtures and labeled pairs exist, generate raw perceptual-difference evidence:
+After photographed fixtures and labeled pairs exist, emit a validated, hash-checked input file and then run the authoritative Rust fingerprint measurement:
 
 ```text
+python tools/verify_photographed_scan_fixtures.py \
+  --calibration-input target/photographed-fingerprint-input.tsv
+
 cargo run -p a2d-image --features fixture-tools \
   --bin a2d-fingerprint-calibration -- \
-  fixtures/scans/photographed/manifest.json \
+  fixtures/scans/photographed \
+  target/photographed-fingerprint-input.tsv \
   target/photographed-fingerprint-calibration.tsv
 ```
 
-The report contains mean and maximum absolute difference, nonzero-cell count, nearest-rank percentiles, the complete 256-bin difference histogram, and every per-cell absolute difference. It does not select a threshold or return a duplicate/revision classification.
+Both output files use create-new semantics and refuse to overwrite an existing report. Remove or archive an earlier output explicitly before rerunning.
+
+The calibration report contains mean and maximum absolute difference, nonzero-cell count, nearest-rank percentiles, the complete 256-bin difference histogram, and every per-cell absolute difference. It does not select a threshold or return a duplicate/revision classification.
 
 Production thresholds may be proposed only after the photographed corpus covers multiple supported Android device tiers and representative lighting, angle, distance, focus, glare, and writing conditions. The proposal must cite the exact manifest and generated report revision, document false-positive and false-negative tradeoffs, and remain reviewable rather than becoming a hidden default.
