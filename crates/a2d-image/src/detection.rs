@@ -70,14 +70,16 @@ impl PageOrientation {
 }
 
 /// Mapping from printed tag IDs to page-corner semantics for one layout
-/// version. The constructor rejects duplicate IDs and duplicate roles.
+/// version. The constructor rejects duplicate IDs, duplicate roles, and incomplete role sets.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarkerIdLayout {
     assignments: BTreeMap<u32, MarkerRole>,
 }
 
 impl MarkerIdLayout {
-    pub fn new(assignments: [(u32, MarkerRole); 4]) -> Result<Self, A2dError> {
+    pub fn new(
+        assignments: impl IntoIterator<Item = (u32, MarkerRole)>,
+    ) -> Result<Self, A2dError> {
         let mut by_id = BTreeMap::new();
         let mut roles = BTreeSet::new();
         for (id, role) in assignments {
@@ -301,6 +303,18 @@ mod tests {
         assert_eq!(resolved.orientation, PageOrientation::Degrees0);
         assert_eq!(resolved.unexpected_tag_ids, vec![99]);
         assert_eq!(resolved.marker(MarkerRole::BottomRight).id, 12);
+    }
+
+    #[test]
+    fn accepts_dynamic_assignment_iterators() {
+        let assignments = vec![
+            (10, MarkerRole::TopLeft),
+            (11, MarkerRole::TopRight),
+            (12, MarkerRole::BottomRight),
+            (13, MarkerRole::BottomLeft),
+        ];
+        let layout = MarkerIdLayout::new(assignments.into_iter()).unwrap();
+        assert_eq!(layout.role_for(12), Some(MarkerRole::BottomRight));
     }
 
     #[test]
