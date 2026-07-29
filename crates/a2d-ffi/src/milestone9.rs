@@ -228,3 +228,7 @@ impl A2dClient {
             .map_err(Into::into)
     }
 }
+
+#[path = "scan_comparison.rs"]
+mod scan_comparison;
+pub use scan_comparison::*;
