@@ -10,6 +10,18 @@ fn temp_dir(label: &str) -> std::path::PathBuf {
     ))
 }
 
+fn sha256(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 #[test]
 fn resolve_returns_the_canonical_file_path() {
     let root = temp_dir("canonical");
@@ -99,11 +111,12 @@ fn final_path_collision_never_replaces_existing_asset_bytes() {
         )
         .unwrap();
     let final_path = store.resolve(&first.relative_path).unwrap();
+    let replacement = b"replacement content";
 
     let error = store
         .commit_with_id_for_test(
             id.clone(),
-            b"replacement content",
+            replacement,
             AssetKind::Corrected,
             "image/png",
         )
@@ -116,6 +129,49 @@ fn final_path_collision_never_replaces_existing_asset_bytes() {
     assert_eq!(
         error.details.get("asset_id").map(String::as_str),
         Some(id.as_str())
+    );
+    assert_eq!(
+        error
+            .details
+            .get("asset_commit_failure_stage")
+            .map(String::as_str),
+        Some("before_finalization")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("final_relative_path")
+            .map(String::as_str),
+        Some(first.relative_path.as_str())
+    );
+    assert_eq!(
+        error.details.get("expected_sha256").map(String::as_str),
+        Some(sha256(replacement).as_str())
+    );
+    assert_eq!(
+        error.details.get("byte_length").map(String::as_str),
+        Some(replacement.len().to_string().as_str())
+    );
+    assert_eq!(
+        error
+            .details
+            .get("final_file_created")
+            .map(String::as_str),
+        Some("false")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("file_sync_completed")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("directory_sync_completed")
+            .map(String::as_str),
+        Some("false")
     );
     assert_eq!(
         error
@@ -137,11 +193,12 @@ fn temp_path_collision_preserves_the_existing_temp_file() {
     let id = AssetId::parse("00000000000000000000000001").unwrap();
     let temp_path = root.join("tmp").join(format!("{id}.tmp"));
     std::fs::write(&temp_path, b"pre-existing recovery data").unwrap();
+    let new_bytes = b"new bytes";
 
     let error = store
         .commit_with_id_for_test(
             id.clone(),
-            b"new bytes",
+            new_bytes,
             AssetKind::Thumbnail,
             "image/png",
         )
@@ -157,6 +214,49 @@ fn temp_path_collision_preserves_the_existing_temp_file() {
     assert_eq!(
         error.details.get("asset_id").map(String::as_str),
         Some(id.as_str())
+    );
+    assert_eq!(
+        error
+            .details
+            .get("asset_commit_failure_stage")
+            .map(String::as_str),
+        Some("before_finalization")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("final_relative_path")
+            .map(String::as_str),
+        Some("assets/thumbnails/00000000000000000000000001")
+    );
+    assert_eq!(
+        error.details.get("expected_sha256").map(String::as_str),
+        Some(sha256(new_bytes).as_str())
+    );
+    assert_eq!(
+        error.details.get("byte_length").map(String::as_str),
+        Some(new_bytes.len().to_string().as_str())
+    );
+    assert_eq!(
+        error
+            .details
+            .get("final_file_created")
+            .map(String::as_str),
+        Some("false")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("file_sync_completed")
+            .map(String::as_str),
+        Some("false")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("directory_sync_completed")
+            .map(String::as_str),
+        Some("false")
     );
 
     std::fs::remove_dir_all(root).ok();
