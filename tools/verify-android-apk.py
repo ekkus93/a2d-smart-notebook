@@ -36,6 +36,7 @@ REQUIRED_NATIVE_SYMBOL_NAMES = (
     b"a2d_preview_cancellation_cancel",
     b"a2d_preview_cancellation_free",
     b"uniffi_a2d_ffi_fn_method_a2dclient_register_scan",
+    b"uniffi_a2d_ffi_fn_method_a2dclient_compare_stored_scans",
 )
 
 
