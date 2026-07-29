@@ -51,7 +51,9 @@ internal class PendingSmartPageSaveStore(
             savedStateHandle.get<String>(PENDING_SAVE_ASSET_ID_KEY),
             savedStateHandle.get<String>(PENDING_SAVE_PATH_KEY),
         )
-        if (values.any { it == null } && values.any { it != null } || values.any { it?.isBlank() == true }) {
+        val partiallyPresent = values.any { it == null } && values.any { it != null }
+        val containsBlankValue = values.any { it?.isBlank() == true }
+        if (partiallyPresent || containsBlankValue) {
             clear()
         }
     }
@@ -70,14 +72,19 @@ internal class PendingSmartPageSaveStore(
         if (assetId.isBlank() || path.isBlank()) {
             return Result.failure(IllegalArgumentException("generated PDF identity is incomplete"))
         }
+        val token = try {
+            tokenFactory()
+        } catch (failure: Exception) {
+            return Result.failure(failure)
+        }
+        if (token.isBlank()) {
+            return Result.failure(IllegalStateException("save token generator returned an empty token"))
+        }
         val pending = PendingSmartPageSave(
-            token = tokenFactory(),
+            token = token,
             assetId = assetId,
             path = path,
         )
-        if (pending.token.isBlank()) {
-            return Result.failure(IllegalStateException("save token generator returned an empty token"))
-        }
         savedStateHandle[PENDING_SAVE_TOKEN_KEY] = pending.token
         savedStateHandle[PENDING_SAVE_ASSET_ID_KEY] = pending.assetId
         savedStateHandle[PENDING_SAVE_PATH_KEY] = pending.path
