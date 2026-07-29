@@ -23,8 +23,6 @@ mod preview_processing;
 pub use preview_processing::*;
 mod milestone9;
 pub use milestone9::*;
-mod scan_policy;
-pub use scan_policy::*;
 
 #[derive(uniffi::Record)]
 pub struct OpenLibraryRequest {
