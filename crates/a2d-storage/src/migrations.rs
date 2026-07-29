@@ -38,4 +38,9 @@ pub static MIGRATIONS: &[Migration] = &[
         name: "preferred_scan_two_phase_sync",
         sql: include_str!("migrations/0006_preferred_scan_two_phase_sync.sql"),
     },
+    Migration {
+        version: 7,
+        name: "preferred_scan_selected_flag_sync",
+        sql: include_str!("migrations/0007_preferred_scan_selected_flag_sync.sql"),
+    },
 ];
