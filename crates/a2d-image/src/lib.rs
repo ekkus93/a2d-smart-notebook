@@ -7,6 +7,7 @@
 //! Native pointers, ownership, and allocation never cross the public Rust API.
 
 mod change_regions;
+mod content_comparison;
 mod derived;
 mod detection;
 mod detector;
@@ -20,6 +21,10 @@ mod rectification;
 pub use change_regions::{
     AlignedChangeCell, AlignedChangeRegion, AlignedChangeRegionComparison,
     AlignedChangeRegionConfig,
+};
+pub use content_comparison::{
+    ScanContentComparison, ScanContentComparisonConfidence, ScanContentComparisonConfig,
+    ScanContentComparisonReason, ScanContentFingerprintV1,
 };
 pub use derived::{
     ContrastNormalizationConfig, ContrastNormalizationProvenance, DerivedImageConfig,
