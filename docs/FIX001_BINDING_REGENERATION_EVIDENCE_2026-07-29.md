@@ -68,6 +68,28 @@ Rust formatting was applied after those handwritten-source changes.
 
 The remaining Rust failure showed that `render_page_ops` is an intentionally tested public compatibility API. The implementation was made public and the crate-root re-export restored in commit `ba46eb1322909ddd87d2eb8c4544bcec737345bc`.
 
+## Preferred-scan trigger correction
+
+The next full test run exposed a defect in migration 0006. Its two-phase synchronization first cleared every preferred flag after the page pointer already referenced the selected scan. The migration-0005 guard correctly rejected clearing that selected scan.
+
+Migration 0007 fixes forward by:
+
+- clearing only non-selected preferred scans;
+- setting the selected scan after the clear phase;
+- retaining the partial unique index and page-pointer/scan-flag guards.
+
+Relevant commits:
+
+- `f8f8eb0c3199bfc3f747e86fcec6ca3852946ea8` — add migration 0007 SQL
+- `f8a188e8094c274d6ec5328efc7a686cebdfed57` — add migration 0007 to the immutable catalog
+
+That correction reduced the `a2d-core` failures from ten to two. The remaining failures were test-fixture defects, not production failures:
+
+- an extensionless corrected asset was opened by filename inference instead of decoded from bytes;
+- the hash-mismatch test changed the file length, so length verification correctly failed before hash verification.
+
+Both tests were corrected without weakening production validation in commit `35d5881b61a3489043679961c3aa3c2254ca5ff4`.
+
 ## Remaining acceptance gates
 
 FIX-001 remains pending until permanent CI passes on the exact final validation head, including:
