@@ -123,7 +123,8 @@
     <string name="smart_pages_start_number">Starting visible page number</string>
     <string name="smart_pages_generate">Generate PDF</string>
     <string name="smart_pages_invalid_count">Page count must be between 1 and 500.</string>
-    <string name="smart_pages_invalid_start">Starting page number must be at least 1.</string>
+    <string name="smart_pages_invalid_start">Starting page number must be between 1 and 999999.</string>
+    <string name="smart_pages_invalid_range">The final visible page number must not exceed 999999.</string>
     <string name="smart_pages_generated">Smart Pages generated</string>
     <string name="smart_pages_set_id">Page Set: %1$s</string>
     <string name="smart_pages_page_total">%1$d unique page identities</string>
@@ -132,6 +133,12 @@
     <string name="smart_pages_print">Print</string>
     <string name="smart_pages_saved">PDF copy saved.</string>
     <string name="smart_pages_save_failed">The PDF could not be copied to the selected destination.</string>
+    <string name="smart_pages_save_pending">Another PDF save operation is already pending.</string>
+    <string name="smart_pages_save_stale">The pending PDF save operation is missing or stale. Start the save again.</string>
+    <string name="smart_pages_share_failed">The generated PDF could not be shared.</string>
+    <string name="smart_pages_print_failed">The generated PDF could not be sent to the print service.</string>
+    <string name="smart_pages_preview_loading">Rendering PDF preview…</string>
+    <string name="smart_pages_preview_failed">PDF preview failed. The verified PDF can still be saved, shared, or printed.</string>
     <string name="smart_pages_preview_unavailable">PDF preview unavailable.</string>
     <string name="smart_pages_preview_description">Generated Smart Page preview</string>
 </resources>
