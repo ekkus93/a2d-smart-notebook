@@ -8,6 +8,9 @@ use a2d_storage::{NotebookDesignRepository, PageRepository};
 
 use super::A2dCore;
 
+/// Core-facing name for the canonical layout and processing policy resolved from stored state.
+pub type StoredScanLayout = ResolvedScanLayout;
+
 impl A2dCore {
     /// Loads the canonical stored `Page` and, for Notebook Pages, its stored `NotebookDesign`, then
     /// resolves one Rust-owned scan-processing policy. Missing or contradictory canonical state
@@ -15,7 +18,7 @@ impl A2dCore {
     pub fn resolve_stored_scan_layout(
         &self,
         page_id: &PageId,
-    ) -> Result<ResolvedScanLayout, A2dError> {
+    ) -> Result<StoredScanLayout, A2dError> {
         let storage = self.lock_storage()?;
         let page = storage.get_page(page_id)?.ok_or_else(|| {
             policy_error(
