@@ -28,4 +28,9 @@ pub static MIGRATIONS: &[Migration] = &[
         name: "scan_registration_invariants",
         sql: include_str!("migrations/0004_scan_registration_invariants.sql"),
     },
+    Migration {
+        version: 5,
+        name: "preferred_scan_consistency",
+        sql: include_str!("migrations/0005_preferred_scan_consistency.sql"),
+    },
 ];
