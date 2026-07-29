@@ -18,7 +18,7 @@ mod migrations;
 mod repository;
 mod workflow;
 
-pub use asset_recovery::OrphanedFinalAsset;
+pub use asset_recovery::{AssetPersistenceFailureStage, OrphanedFinalAsset};
 pub use assets::AssetStore;
 pub use migrations::{MIGRATIONS, Migration};
 pub use repository::{
