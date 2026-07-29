@@ -5,6 +5,7 @@ pub mod layout_builder;
 pub mod manifest;
 pub mod notebook;
 pub mod page_layout;
+pub mod scan_layout;
 pub mod smart_page;
 
 pub use manifest::{ManifestRegistry, bundled_placeholder_registry, parse_manifest};
@@ -13,4 +14,9 @@ pub use notebook::{
     writable_page_layout,
 };
 pub use page_layout::{CalibrationMark, ContentStyle, MarkerPlacement, MarkerRole, PageLayout};
+pub use scan_layout::{
+    ResolvedMarkerRole, ResolvedScanLayout, SCAN_PROCESSING_POLICY_VERSION,
+    V1_CORRECTED_WIDTH_PX, V1_MARKER_FAMILY, marker_id_for_role, resolve_bundled_scan_layout,
+    resolve_scan_layout_for_page,
+};
 pub use smart_page::{PaperSize, SmartPageStyle, smart_page_layout};
