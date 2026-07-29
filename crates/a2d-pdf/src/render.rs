@@ -343,7 +343,7 @@ fn qr_label_ops(page_height_mm: f64, rect: &PhysicalRect, label: &str) -> Vec<Op
     ]
 }
 
-pub(crate) fn render_page_ops(
+pub fn render_page_ops(
     layout: &PageLayout,
     qr_payload: &str,
     visible_page_number: Option<u32>,
