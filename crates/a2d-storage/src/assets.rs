@@ -24,6 +24,8 @@ use a2d_domain::{
 };
 use sha2::{Digest, Sha256};
 
+use crate::AssetPersistenceFailureStage;
+
 pub struct AssetStore {
     root: PathBuf,
 }
@@ -151,7 +153,7 @@ impl AssetStore {
         kind: AssetKind,
         media_type: impl Into<String>,
     ) -> Result<Asset, A2dError> {
-        self.commit_with_id(AssetId::generate(), data, kind, media_type.into())
+        self.commit_with_id(AssetId::try_generate()?, data, kind, media_type.into())
     }
 
     /// Test-only deterministic entry point for collision and interruption coverage. Production
@@ -185,6 +187,7 @@ impl AssetStore {
             )
             .with_detail("asset_id", id.to_string())
         })?;
+        let expected_hash = hex_sha256(data);
         // Resolve the canonical timestamp before creating a temp file. A clock failure therefore
         // leaves no filesystem mutation and cannot produce an asset with an invented zero time.
         let created_at_ms = system_now_ms()?;
@@ -198,45 +201,66 @@ impl AssetStore {
             .open(&tmp_path)
             .map_err(|error| {
                 let already_exists = error.kind() == std::io::ErrorKind::AlreadyExists;
-                A2dError::new(
-                    ErrorCode::new(if already_exists {
-                        "STORAGE_ASSET_TEMP_PATH_COLLISION"
-                    } else {
-                        "STORAGE_ASSET_TEMP_CREATE_FAILED"
-                    }),
-                    if already_exists {
-                        ErrorCategory::Integrity
-                    } else {
-                        ErrorCategory::Storage
-                    },
-                    if already_exists {
-                        ErrorSeverity::Critical
-                    } else {
-                        ErrorSeverity::Error
-                    },
-                    "error.storage.asset_temp_create_failed",
-                    format!("creating the asset temp file failed: {error}"),
-                    !already_exists,
+                with_persistence_details(
+                    A2dError::new(
+                        ErrorCode::new(if already_exists {
+                            "STORAGE_ASSET_TEMP_PATH_COLLISION"
+                        } else {
+                            "STORAGE_ASSET_TEMP_CREATE_FAILED"
+                        }),
+                        if already_exists {
+                            ErrorCategory::Integrity
+                        } else {
+                            ErrorCategory::Storage
+                        },
+                        if already_exists {
+                            ErrorSeverity::Critical
+                        } else {
+                            ErrorSeverity::Error
+                        },
+                        "error.storage.asset_temp_create_failed",
+                        format!("creating the asset temp file failed: {error}"),
+                        !already_exists,
+                    )
+                    .with_detail("temp_path", tmp_path.to_string_lossy()),
+                    AssetPersistenceFailureStage::BeforeFinalization,
+                    &id,
+                    kind,
+                    &relative_path,
+                    &expected_hash,
+                    byte_length,
+                    false,
+                    false,
                 )
-                .with_detail("asset_id", id.to_string())
-                .with_detail("temp_path", tmp_path.to_string_lossy())
             })?;
 
         if let Err(error) = file.write_all(data) {
             drop(file);
-            return Err(with_cleanup_result(
-                map_io_error("writing the asset temp file", error),
-                &tmp_path,
-            )
-            .with_detail("asset_id", id.to_string()));
+            return Err(with_persistence_details(
+                with_cleanup_result(map_io_error("writing the asset temp file", error), &tmp_path),
+                AssetPersistenceFailureStage::BeforeFinalization,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                false,
+                false,
+            ));
         }
         if let Err(error) = file.flush() {
             drop(file);
-            return Err(with_cleanup_result(
-                map_io_error("flushing the asset temp file", error),
-                &tmp_path,
-            )
-            .with_detail("asset_id", id.to_string()));
+            return Err(with_persistence_details(
+                with_cleanup_result(map_io_error("flushing the asset temp file", error), &tmp_path),
+                AssetPersistenceFailureStage::BeforeFinalization,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                false,
+                false,
+            ));
         }
 
         let immutable = kind == AssetKind::Original;
@@ -245,76 +269,138 @@ impl AssetStore {
                 Ok(metadata) => metadata,
                 Err(error) => {
                     drop(file);
-                    return Err(with_cleanup_result(
-                        map_io_error("reading asset temp metadata", error),
-                        &tmp_path,
-                    )
-                    .with_detail("asset_id", id.to_string()));
+                    return Err(with_persistence_details(
+                        with_cleanup_result(
+                            map_io_error("reading asset temp metadata", error),
+                            &tmp_path,
+                        ),
+                        AssetPersistenceFailureStage::BeforeFinalization,
+                        &id,
+                        kind,
+                        &relative_path,
+                        &expected_hash,
+                        byte_length,
+                        false,
+                        false,
+                    ));
                 }
             };
             let mut permissions = metadata.permissions();
             permissions.set_readonly(true);
             if let Err(error) = std::fs::set_permissions(&tmp_path, permissions) {
                 drop(file);
-                return Err(with_cleanup_result(
-                    map_io_error("marking the original asset read-only", error),
-                    &tmp_path,
-                )
-                .with_detail("asset_id", id.to_string()));
+                return Err(with_persistence_details(
+                    with_cleanup_result(
+                        map_io_error("marking the original asset read-only", error),
+                        &tmp_path,
+                    ),
+                    AssetPersistenceFailureStage::BeforeFinalization,
+                    &id,
+                    kind,
+                    &relative_path,
+                    &expected_hash,
+                    byte_length,
+                    false,
+                    false,
+                ));
             }
         }
         if let Err(error) = file.sync_all() {
             drop(file);
-            return Err(with_cleanup_result(
-                map_io_error("synchronizing the asset temp file", error),
-                &tmp_path,
-            )
-            .with_detail("asset_id", id.to_string()));
+            return Err(with_persistence_details(
+                with_cleanup_result(
+                    map_io_error("synchronizing the asset temp file", error),
+                    &tmp_path,
+                ),
+                AssetPersistenceFailureStage::BeforeFinalization,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                false,
+                false,
+            ));
         }
         drop(file);
 
-        let expected_hash = hex_sha256(data);
         let on_disk = std::fs::read(&tmp_path).map_err(|error| {
-            with_cleanup_result(
-                map_io_error("re-reading the asset temp file to verify its contents", error),
-                &tmp_path,
+            with_persistence_details(
+                with_cleanup_result(
+                    map_io_error("re-reading the asset temp file to verify its contents", error),
+                    &tmp_path,
+                ),
+                AssetPersistenceFailureStage::BeforeFinalization,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                false,
             )
-            .with_detail("asset_id", id.to_string())
         })?;
         let actual_byte_length = u64::try_from(on_disk.len()).map_err(|_| {
-            with_cleanup_result(
-                integrity_error(
-                    "STORAGE_ASSET_LENGTH_UNSUPPORTED",
-                    "written asset byte length does not fit the portable stored representation",
+            with_persistence_details(
+                with_cleanup_result(
+                    integrity_error(
+                        "STORAGE_ASSET_LENGTH_UNSUPPORTED",
+                        "written asset byte length does not fit the portable stored representation",
+                    ),
+                    &tmp_path,
                 ),
-                &tmp_path,
+                AssetPersistenceFailureStage::BeforeFinalization,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                false,
             )
-            .with_detail("asset_id", id.to_string())
         })?;
         if actual_byte_length != byte_length {
-            return Err(with_cleanup_result(
-                integrity_error(
-                    "STORAGE_ASSET_LENGTH_MISMATCH_ON_WRITE",
-                    "the temp file byte length differs from the supplied asset bytes",
-                )
-                .with_detail("expected_byte_length", byte_length.to_string())
-                .with_detail("actual_byte_length", actual_byte_length.to_string()),
-                &tmp_path,
-            )
-            .with_detail("asset_id", id.to_string()));
+            return Err(with_persistence_details(
+                with_cleanup_result(
+                    integrity_error(
+                        "STORAGE_ASSET_LENGTH_MISMATCH_ON_WRITE",
+                        "the temp file byte length differs from the supplied asset bytes",
+                    )
+                    .with_detail("expected_byte_length", byte_length.to_string())
+                    .with_detail("actual_byte_length", actual_byte_length.to_string()),
+                    &tmp_path,
+                ),
+                AssetPersistenceFailureStage::BeforeFinalization,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                false,
+            ));
         }
         let actual_hash = hex_sha256(&on_disk);
         if actual_hash != expected_hash {
-            return Err(with_cleanup_result(
-                integrity_error(
-                    "STORAGE_ASSET_HASH_MISMATCH_ON_WRITE",
-                    "the temp file contents did not hash to the same value as the supplied data",
-                )
-                .with_detail("expected_sha256", &expected_hash)
-                .with_detail("actual_sha256", actual_hash),
-                &tmp_path,
-            )
-            .with_detail("asset_id", id.to_string()));
+            return Err(with_persistence_details(
+                with_cleanup_result(
+                    integrity_error(
+                        "STORAGE_ASSET_HASH_MISMATCH_ON_WRITE",
+                        "the temp file contents did not hash to the same value as the supplied data",
+                    )
+                    .with_detail("expected_sha256", &expected_hash)
+                    .with_detail("actual_sha256", actual_hash),
+                    &tmp_path,
+                ),
+                AssetPersistenceFailureStage::BeforeFinalization,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                false,
+            ));
         }
 
         if let Err(error) = std::fs::hard_link(&tmp_path, &final_path) {
@@ -326,41 +412,82 @@ impl AssetStore {
             } else {
                 map_io_error("atomically finalizing the asset without replacement", error)
             };
-            return Err(with_cleanup_result(mapped, &tmp_path)
-                .with_detail("asset_id", id.to_string())
-                .with_detail("final_path", final_path.to_string_lossy()));
+            return Err(with_persistence_details(
+                with_cleanup_result(mapped, &tmp_path)
+                    .with_detail("final_path", final_path.to_string_lossy()),
+                AssetPersistenceFailureStage::BeforeFinalization,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                false,
+            ));
+        }
+
+        if let Err(error) = verify_finalized_metadata(&final_path, byte_length, immutable) {
+            return Err(with_persistence_details(
+                error.with_detail("final_path", final_path.to_string_lossy()),
+                AssetPersistenceFailureStage::FinalizedUnregistered,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                false,
+            ));
         }
 
         if let Err(error) = sync_directory(&self.kind_dir(kind)) {
-            return Err(error
-                .with_detail("asset_id", id.to_string())
-                .with_detail("temp_path", tmp_path.to_string_lossy())
-                .with_detail("final_path", final_path.to_string_lossy())
-                .with_detail("final_file_created", "true")
-                .with_detail("file_sync_completed", "true")
-                .with_detail("directory_sync_completed", "false"));
+            return Err(with_persistence_details(
+                error
+                    .with_detail("temp_path", tmp_path.to_string_lossy())
+                    .with_detail("final_path", final_path.to_string_lossy()),
+                AssetPersistenceFailureStage::FinalizedUnregistered,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                false,
+            ));
         }
 
         if let Err(error) = std::fs::remove_file(&tmp_path) {
-            return Err(map_io_error("removing the finalized asset temp link", error)
-                .with_detail("asset_id", id.to_string())
-                .with_detail("temp_path", tmp_path.to_string_lossy())
-                .with_detail("final_path", final_path.to_string_lossy())
-                .with_detail("final_file_created", "true")
-                .with_detail("file_sync_completed", "true")
-                .with_detail("directory_sync_completed", "true")
-                .with_detail("temp_cleanup_completed", "false"));
+            return Err(with_persistence_details(
+                map_io_error("removing the finalized asset temp link", error)
+                    .with_detail("temp_path", tmp_path.to_string_lossy())
+                    .with_detail("final_path", final_path.to_string_lossy())
+                    .with_detail("temp_cleanup_completed", "false"),
+                AssetPersistenceFailureStage::FinalizedUnregistered,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                true,
+            ));
         }
         if let Err(error) = sync_directory(&self.tmp_dir()) {
-            return Err(error
-                .with_detail("asset_id", id.to_string())
-                .with_detail("temp_path", tmp_path.to_string_lossy())
-                .with_detail("final_path", final_path.to_string_lossy())
-                .with_detail("final_file_created", "true")
-                .with_detail("file_sync_completed", "true")
-                .with_detail("directory_sync_completed", "true")
-                .with_detail("temp_cleanup_completed", "true")
-                .with_detail("temp_directory_sync_completed", "false"));
+            return Err(with_persistence_details(
+                error
+                    .with_detail("temp_path", tmp_path.to_string_lossy())
+                    .with_detail("final_path", final_path.to_string_lossy())
+                    .with_detail("temp_cleanup_completed", "true")
+                    .with_detail("temp_directory_sync_completed", "false"),
+                AssetPersistenceFailureStage::FinalizedUnregistered,
+                &id,
+                kind,
+                &relative_path,
+                &expected_hash,
+                byte_length,
+                true,
+                true,
+            ));
         }
 
         Ok(Asset::new(
@@ -431,6 +558,36 @@ impl AssetStore {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn with_persistence_details(
+    error: A2dError,
+    stage: AssetPersistenceFailureStage,
+    asset_id: &AssetId,
+    kind: AssetKind,
+    final_relative_path: &str,
+    expected_sha256: &str,
+    byte_length: u64,
+    file_sync_completed: bool,
+    directory_sync_completed: bool,
+) -> A2dError {
+    error
+        .with_detail("asset_commit_failure_stage", stage.as_detail_value())
+        .with_detail("asset_id", asset_id.to_string())
+        .with_detail("asset_kind", format!("{kind:?}"))
+        .with_detail("final_relative_path", final_relative_path)
+        .with_detail("expected_sha256", expected_sha256)
+        .with_detail("byte_length", byte_length.to_string())
+        .with_detail(
+            "final_file_created",
+            (stage != AssetPersistenceFailureStage::BeforeFinalization).to_string(),
+        )
+        .with_detail("file_sync_completed", file_sync_completed.to_string())
+        .with_detail(
+            "directory_sync_completed",
+            directory_sync_completed.to_string(),
+        )
+}
+
 fn with_cleanup_result(error: A2dError, tmp_path: &Path) -> A2dError {
     match std::fs::remove_file(tmp_path) {
         Ok(()) => error
@@ -446,6 +603,36 @@ fn with_cleanup_result(error: A2dError, tmp_path: &Path) -> A2dError {
     }
 }
 
+fn verify_finalized_metadata(
+    path: &Path,
+    expected_byte_length: u64,
+    immutable: bool,
+) -> Result<(), A2dError> {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|error| map_io_error("reading finalized asset metadata", error))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(integrity_error(
+            "STORAGE_ASSET_FINAL_PATH_INVALID",
+            "finalized asset path must identify a regular non-symlink file",
+        ));
+    }
+    if metadata.len() != expected_byte_length {
+        return Err(integrity_error(
+            "STORAGE_ASSET_FINAL_LENGTH_MISMATCH",
+            "finalized asset byte length differs from the synchronized temp file",
+        )
+        .with_detail("expected_byte_length", expected_byte_length.to_string())
+        .with_detail("actual_byte_length", metadata.len().to_string()));
+    }
+    if immutable && !metadata.permissions().readonly() {
+        return Err(integrity_error(
+            "STORAGE_ASSET_FINAL_ORIGINAL_WRITABLE",
+            "finalized original asset is not read-only",
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 fn sync_directory(path: &Path) -> Result<(), A2dError> {
     std::fs::File::open(path)
@@ -454,11 +641,16 @@ fn sync_directory(path: &Path) -> Result<(), A2dError> {
 }
 
 #[cfg(not(unix))]
-fn sync_directory(_path: &Path) -> Result<(), A2dError> {
-    // Android and Apple production targets are Unix. Rust's standard library does not expose a
-    // portable directory-sync operation on every host; non-Unix desktop builds retain compile and
-    // test feasibility but do not claim the mobile durability guarantee.
-    Ok(())
+fn sync_directory(path: &Path) -> Result<(), A2dError> {
+    Err(A2dError::new(
+        ErrorCode::new("STORAGE_DIRECTORY_SYNC_UNSUPPORTED"),
+        ErrorCategory::PlatformAdapter,
+        ErrorSeverity::Error,
+        "error.storage.directory_sync_unsupported",
+        "this platform cannot provide the required asset directory synchronization semantics",
+        false,
+    )
+    .with_detail("directory", path.to_string_lossy()))
 }
 
 fn hex_sha256(data: &[u8]) -> String {
