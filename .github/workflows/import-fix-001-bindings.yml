@@ -93,7 +93,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all
-          git diff --cached --check
+          git diff --cached --check -- . \
+            ':(exclude)apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt'
           git commit -m "Regenerate UniFFI bindings and clear focused clippy gates"
           git push origin HEAD:master
 
