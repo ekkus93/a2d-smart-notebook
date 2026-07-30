@@ -31,6 +31,9 @@ jobs:
           end = next(index for index in range(start, len(lines)) if lines[index].strip() == 'PY')
           code_lines = []
           for line in lines[start:end]:
+              if line == '':
+                  code_lines.append('')
+                  continue
               if not line.startswith('          '):
                   raise SystemExit(f'unexpected embedded patch indentation: {line!r}')
               code_lines.append(line[10:])
