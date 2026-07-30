@@ -23,13 +23,12 @@ jobs:
       - name: Apply pinned Rust formatting
         run: cargo fmt
 
-      - name: Restore permanent CI and commit formatting
+      - name: Commit formatted Rust files
         shell: bash
         run: |
-          git show dc293354c27eaac3420cc50ba5e0fd9703672865:.github/workflows/ci.yml > .github/workflows/ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/ci.yml crates/a2d-core/src/milestone9.rs crates/a2d-core/src/milestone9_tests.rs
+          git add crates/a2d-core/src/milestone9.rs crates/a2d-core/src/milestone9_tests.rs
           git diff --cached --check
           git commit -m "Format FIX-022 rollback regression"
           git push origin HEAD:master
