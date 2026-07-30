@@ -26,14 +26,7 @@ jobs:
           lines = Path('.github/workflows/apply-fix022-scan-rollback.yml').read_text().splitlines()
           start = next(index for index, line in enumerate(lines) if line.strip() == "python3 - <<'PY'") + 1
           end = next(index for index in range(start, len(lines)) if lines[index].strip() == 'PY')
-          code_lines = []
-          for line in lines[start:end]:
-              if line == '':
-                  code_lines.append('')
-                  continue
-              if not line.startswith('          '):
-                  raise SystemExit(f'unexpected embedded patch indentation: {line!r}')
-              code_lines.append(line[10:])
+          code_lines = [line[10:] if line.startswith('          ') else line for line in lines[start:end]]
           Path('/tmp/apply_fix022.py').write_text('\n'.join(code_lines) + '\n')
           PY
           python3 /tmp/apply_fix022.py
