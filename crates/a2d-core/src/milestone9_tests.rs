@@ -442,7 +442,10 @@ fn database_failure_rolls_back_all_scan_rows_and_reports_each_finalized_asset() 
         Some("true")
     );
     assert_eq!(
-        error.details.get("orphaned_asset_count").map(String::as_str),
+        error
+            .details
+            .get("orphaned_asset_count")
+            .map(String::as_str),
         Some("4")
     );
     assert!(staging_path.is_file());
@@ -460,8 +463,7 @@ fn database_failure_rolls_back_all_scan_rows_and_reports_each_finalized_asset() 
     assert!(!journal.contains("\"phase\":\"database_committed\""));
 
     let scan_id = ScanId::parse(error.details.get("scan_id").unwrap()).unwrap();
-    let audit_event_id =
-        AuditEventId::parse(error.details.get("audit_event_id").unwrap()).unwrap();
+    let audit_event_id = AuditEventId::parse(error.details.get("audit_event_id").unwrap()).unwrap();
     let mut evidence = Vec::new();
     for index in 0..4 {
         let prefix = format!("orphaned_asset_{index}");
