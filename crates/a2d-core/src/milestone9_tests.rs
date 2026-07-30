@@ -2,15 +2,19 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use a2d_domain::{
-    CaptureSource, LayoutId, Notebook, NotebookDesign, NotebookDesignId, NotebookId, Page, PageId,
-    PageKind, PageState, QualityStatus, ScanId, SmartPageId, TrimSizeMm, TrustState,
+    AssetId, AuditEventId, CaptureSource, ErrorCategory, LayoutId, Notebook, NotebookDesign,
+    NotebookDesignId, NotebookId, Page, PageId, PageKind, PageState, QualityStatus, ScanId,
+    SmartPageId, TrimSizeMm, TrustState,
 };
 use a2d_identity::PageCode;
 use a2d_image::{AprilTagDetector, DetectorConfig};
 use a2d_layout::{
     MarkerRole, PageLayout, PaperSize, SmartPageStyle, smart_page_layout, writable_page_layout,
 };
-use a2d_storage::{NotebookDesignRepository, NotebookRepository, PageRepository, ScanRepository};
+use a2d_storage::{
+    AssetRepository, AuditEventRepository, NotebookDesignRepository, NotebookRepository,
+    PageRepository, ScanRepository,
+};
 use image::{DynamicImage, GenericImageView, ImageFormat, Rgb, RgbImage};
 
 use super::*;
@@ -379,6 +383,176 @@ fn changed_marker_identity_is_a_hard_registration_error() {
         error.code.to_string(),
         "CORE_SCAN_MARKERS_CHANGED_SINCE_REVIEW"
     );
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn database_failure_rolls_back_all_scan_rows_and_reports_each_finalized_asset() {
+    let (core, root, page_id, notebook_id, payload) = test_core();
+    let failed_request = request(
+        &root,
+        page_id.clone(),
+        notebook_id.clone(),
+        payload.clone(),
+        "rollback.png",
+    );
+    let staging_path = PathBuf::from(&failed_request.staging_path);
+
+    let error = core
+        .register_scan_with_transaction_guard(failed_request, || {
+            Err(registration_error(
+                "CORE_SCAN_TEST_TRANSACTION_FAILURE",
+                ErrorCategory::Storage,
+                "forced failure immediately before the generic scan-registration transaction commit",
+            ))
+        })
+        .unwrap_err();
+
+    assert_eq!(error.code.to_string(), "CORE_SCAN_TEST_TRANSACTION_FAILURE");
+    assert_eq!(
+        error
+            .details
+            .get("asset_commit_failure_stage")
+            .map(String::as_str),
+        Some("database_registration_rolled_back")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("database_registration_started")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("database_registration_committed")
+            .map(String::as_str),
+        Some("false")
+    );
+    assert_eq!(
+        error.details.get("file_sync_completed").map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        error
+            .details
+            .get("directory_sync_completed")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        error.details.get("orphaned_asset_count").map(String::as_str),
+        Some("4")
+    );
+    assert!(staging_path.is_file());
+
+    let journal_path = PathBuf::from(error.details.get("asset_commit_journal").unwrap());
+    assert!(journal_path.is_file());
+    let journal = std::fs::read_to_string(&journal_path).unwrap();
+    assert_eq!(
+        journal
+            .lines()
+            .filter(|line| line.contains("\"phase\":\"asset_committed\""))
+            .count(),
+        4
+    );
+    assert!(!journal.contains("\"phase\":\"database_committed\""));
+
+    let scan_id = ScanId::parse(error.details.get("scan_id").unwrap()).unwrap();
+    let audit_event_id =
+        AuditEventId::parse(error.details.get("audit_event_id").unwrap()).unwrap();
+    let mut evidence = Vec::new();
+    for index in 0..4 {
+        let prefix = format!("orphaned_asset_{index}");
+        evidence.push((
+            AssetId::parse(error.details.get(&format!("{prefix}_id")).unwrap()).unwrap(),
+            error
+                .details
+                .get(&format!("{prefix}_kind"))
+                .unwrap()
+                .clone(),
+            error
+                .details
+                .get(&format!("{prefix}_final_relative_path"))
+                .unwrap()
+                .clone(),
+            error
+                .details
+                .get(&format!("{prefix}_expected_sha256"))
+                .unwrap()
+                .clone(),
+            error
+                .details
+                .get(&format!("{prefix}_byte_length"))
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+        ));
+    }
+
+    {
+        let storage = core.lock_storage().unwrap();
+        assert_eq!(storage.get_scan(&scan_id).unwrap(), None);
+        assert_eq!(storage.get_audit_event(&audit_event_id).unwrap(), None);
+        let page = storage.get_page(&page_id).unwrap().unwrap();
+        assert_eq!(page.state, PageState::Unscanned);
+        assert_eq!(page.preferred_scan_id, None);
+        for (asset_id, _, relative_path, _, _) in &evidence {
+            assert_eq!(storage.get_asset(asset_id).unwrap(), None);
+            assert!(root.join(relative_path).is_file());
+        }
+
+        let orphans = storage.discover_orphaned_final_assets(&root).unwrap();
+        assert_eq!(orphans.len(), 4);
+        for orphan in &orphans {
+            let (_, expected_kind, expected_path, expected_sha256, expected_length) = evidence
+                .iter()
+                .find(|(asset_id, _, _, _, _)| asset_id == &orphan.asset_id)
+                .expect("every discovered orphan must have immutable rollback evidence");
+            assert_eq!(&format!("{:?}", orphan.kind), expected_kind);
+            assert_eq!(&orphan.relative_path, expected_path);
+            assert_eq!(&orphan.sha256, expected_sha256);
+            assert_eq!(&orphan.byte_length, expected_length);
+        }
+    }
+
+    let retried = core
+        .register_scan(request(
+            &root,
+            page_id,
+            notebook_id,
+            payload,
+            "rollback-retry.png",
+        ))
+        .unwrap();
+    let retry_asset_ids = [
+        retried.original_asset_id,
+        retried.corrected_asset_id,
+        retried.ocr_asset_id,
+        retried.thumbnail_asset_id,
+    ];
+    for (orphaned_id, _, _, _, _) in &evidence {
+        assert!(!retry_asset_ids.contains(orphaned_id));
+    }
+
+    let storage = core.lock_storage().unwrap();
+    let remaining_orphans = storage.discover_orphaned_final_assets(&root).unwrap();
+    assert_eq!(remaining_orphans.len(), 4);
+    for orphan in &remaining_orphans {
+        let (_, _, expected_path, expected_sha256, expected_length) = evidence
+            .iter()
+            .find(|(asset_id, _, _, _, _)| asset_id == &orphan.asset_id)
+            .expect("retry must preserve every prior orphan without replacement");
+        assert_eq!(&orphan.relative_path, expected_path);
+        assert_eq!(&orphan.sha256, expected_sha256);
+        assert_eq!(&orphan.byte_length, expected_length);
+    }
+    assert!(staging_path.is_file());
+    assert!(journal_path.is_file());
+
+    drop(storage);
+    drop(core);
     std::fs::remove_dir_all(root).ok();
 }
 

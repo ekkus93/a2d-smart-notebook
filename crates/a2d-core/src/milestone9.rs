@@ -27,7 +27,10 @@ use a2d_image::{
     ThumbnailConfig, measure_gray_quality, resolve_page_markers,
 };
 use a2d_layout::ResolvedScanLayout;
-use a2d_storage::{AssetRepository, AuditEventRepository, PageRepository, ScanRepository};
+use a2d_storage::{
+    AssetPersistenceFailureStage, AssetRepository, AuditEventRepository, PageRepository,
+    ScanRepository,
+};
 use image::{DynamicImage, GrayImage, ImageFormat, RgbImage};
 use serde_json::json;
 
@@ -284,8 +287,71 @@ fn registration_error(
     )
 }
 
+fn with_scan_registration_rollback_details(
+    mut error: A2dError,
+    journal_path: &str,
+    staging_path: &Path,
+    scan: &Scan,
+    audit: &AuditEvent,
+    assets: [&Asset; 4],
+) -> A2dError {
+    let committed_asset_ids = assets
+        .iter()
+        .map(|asset| asset.id().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    error = error
+        .with_detail(
+            "asset_commit_failure_stage",
+            AssetPersistenceFailureStage::DatabaseRegistrationRolledBack.as_detail_value(),
+        )
+        .with_detail("asset_commit_journal", journal_path)
+        .with_detail("staging_path", staging_path.to_string_lossy())
+        .with_detail("scan_id", scan.id().to_string())
+        .with_detail("audit_event_id", audit.id().to_string())
+        .with_detail("committed_asset_ids", committed_asset_ids)
+        .with_detail("orphaned_asset_count", assets.len().to_string())
+        .with_detail("final_file_created", "true")
+        .with_detail("file_sync_completed", "true")
+        .with_detail("directory_sync_completed", "true")
+        .with_detail("database_registration_started", "true")
+        .with_detail("database_registration_committed", "false")
+        .with_detail(
+            "recovery_action",
+            "inspect_orphaned_final_assets_before_any_reviewed_recovery_action",
+        );
+
+    for (index, asset) in assets.into_iter().enumerate() {
+        let prefix = format!("orphaned_asset_{index}");
+        error = error
+            .with_detail(format!("{prefix}_id"), asset.id().to_string())
+            .with_detail(format!("{prefix}_kind"), format!("{:?}", asset.kind))
+            .with_detail(
+                format!("{prefix}_final_relative_path"),
+                &asset.relative_path,
+            )
+            .with_detail(format!("{prefix}_expected_sha256"), &asset.sha256)
+            .with_detail(
+                format!("{prefix}_byte_length"),
+                asset.byte_length.to_string(),
+            );
+    }
+    error
+}
+
 impl A2dCore {
     pub fn register_scan(&self, request: RegisterScanRequest) -> Result<RegisteredScan, A2dError> {
+        self.register_scan_with_transaction_guard(request, || Ok(()))
+    }
+
+    fn register_scan_with_transaction_guard<F>(
+        &self,
+        request: RegisterScanRequest,
+        before_transaction_commit: F,
+    ) -> Result<RegisteredScan, A2dError>
+    where
+        F: FnOnce() -> Result<(), A2dError>,
+    {
         if !request.user_approved {
             return Err(registration_error(
                 "CORE_SCAN_APPROVAL_REQUIRED",
@@ -577,20 +643,18 @@ impl A2dCore {
                     "scan registration trigger did not preserve the existing preferred scan",
                 ));
             }
+            before_transaction_commit()?;
             Ok(())
         });
         transaction_result.map_err(|error| {
-            error
-                .with_detail("asset_commit_journal", journal_path.clone())
-                .with_detail("staging_path", staged.canonical_path.to_string_lossy())
-                .with_detail(
-                    "committed_asset_ids",
-                    [original.id(), corrected.id(), ocr.id(), thumbnail.id()]
-                        .into_iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(","),
-                )
+            with_scan_registration_rollback_details(
+                error,
+                &journal_path,
+                &staged.canonical_path,
+                &scan,
+                &audit,
+                [&original, &corrected, &ocr, &thumbnail],
+            )
         })?;
         drop(storage);
 
