@@ -139,7 +139,11 @@ fun SmartPagesScreen(
 
     fun generate() {
         val countText = if (mode == SmartPageMode.SINGLE) "1" else pageCount
-        val validated = validateSmartPageForm(countText, startingPage)
+        val validated = validateSmartPageForm(
+            countText,
+            startingPage,
+            viewModel.generationPolicy,
+        )
         if (validated.isFailure) {
             formError = when (validated.exceptionOrNull()?.message) {
                 "starting_page" -> context.getString(R.string.smart_pages_invalid_start)
@@ -177,7 +181,6 @@ fun SmartPagesScreen(
             replacePreview(SmartPagePreviewState.Idle)
             return@LaunchedEffect
         }
-
         replacePreview(SmartPagePreviewState.Loading)
         var renderedBitmap: Bitmap? = null
         try {
