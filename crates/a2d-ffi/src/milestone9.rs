@@ -247,5 +247,9 @@ pub use policy_preview_processing::*;
 mod stored_scan_policy_abi;
 pub use stored_scan_policy_abi::*;
 
+#[path = "scanner_recovery.rs"]
+mod scanner_recovery;
+pub use scanner_recovery::*;
+
 #[path = "registration_policy_evidence.rs"]
 mod registration_policy_evidence;
