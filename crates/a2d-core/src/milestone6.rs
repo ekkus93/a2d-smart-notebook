@@ -177,9 +177,8 @@ impl A2dCore {
 
     fn setup_design_from_payload(&self, payload: &str) -> Result<NotebookDesign, A2dError> {
         let registry = bundled_placeholder_registry()?;
-        let parsed = a2d_identity::qr::parse(payload, |layout_id| {
-            is_known_layout(&registry, layout_id)
-        })?;
+        let parsed =
+            a2d_identity::qr::parse(payload, |layout_id| is_known_layout(&registry, layout_id))?;
         let PageCode::NotebookSetup { design_id } = parsed else {
             return Err(workflow_error(
                 "CORE_EXPECTED_NOTEBOOK_SETUP_CODE",
@@ -364,9 +363,8 @@ impl A2dCore {
         confirmed_notebook_id: Option<&NotebookId>,
     ) -> Result<PageResolution, A2dError> {
         let registry = bundled_placeholder_registry()?;
-        let code = a2d_identity::qr::parse(payload, |layout_id| {
-            is_known_layout(&registry, layout_id)
-        })?;
+        let code =
+            a2d_identity::qr::parse(payload, |layout_id| is_known_layout(&registry, layout_id))?;
         let storage = self.lock_storage()?;
         match code {
             PageCode::NotebookSetup { .. } => Ok(PageResolution::UnsupportedCode {
