@@ -471,15 +471,17 @@ private fun ScannerDetailsDialog(
 }
 
 @Composable
-private fun CalibrationSummary() {
+internal fun CalibrationSummary() {
     val calibration = SinglePageScannerPolicies.V1.qualityCalibration
     Text(
-        stringResource(
-            R.string.single_scanner_quality_calibration,
-            calibration.state.name,
-            calibration.evidence.name,
-            calibration.thresholdPolicyVersion,
-        ),
+        text =
+            stringResource(
+                R.string.single_scanner_quality_calibration,
+                calibration.state.name,
+                calibration.evidence.name,
+                calibration.thresholdPolicyVersion,
+            ),
+        modifier = Modifier.testTag(SinglePageScannerTestTags.QUALITY_CALIBRATION),
     )
     calibration.warningCode?.let { warningCode ->
         Text(stringResource(R.string.single_scanner_quality_warning_code, warningCode))
