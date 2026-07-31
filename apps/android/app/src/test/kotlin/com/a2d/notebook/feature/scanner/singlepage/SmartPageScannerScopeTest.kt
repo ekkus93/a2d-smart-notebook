@@ -1,7 +1,7 @@
 package com.a2d.notebook.feature.scanner.singlepage
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
+import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class SmartPageScannerScopeTest {
     @Test
