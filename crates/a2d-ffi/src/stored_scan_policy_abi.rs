@@ -88,10 +88,7 @@ fn parse_utf8(bytes: *const u8, len: u64, field: &'static str) -> Result<String,
         })
 }
 
-fn marker_id(
-    policy: &StoredScanProcessingPolicy,
-    role: MarkerRole,
-) -> Result<u32, A2dError> {
+fn marker_id(policy: &StoredScanProcessingPolicy, role: MarkerRole) -> Result<u32, A2dError> {
     policy
         .marker_roles
         .iter()
@@ -277,9 +274,7 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
 
 unsafe fn set_status(status: *mut A2dPreviewStatus, code: i32, error: A2dPreviewBuffer) {
     // SAFETY: callers validate `status` before this helper and promise writable storage.
-    unsafe {
-        ptr::write(status, A2dPreviewStatus { code, error })
-    };
+    unsafe { ptr::write(status, A2dPreviewStatus { code, error }) };
 }
 
 /// Resolve one stored page's canonical layout and portable live-analysis policy.
@@ -302,9 +297,7 @@ pub unsafe extern "C" fn a2d_resolve_stored_scan_policy_v1(
         return A2dPreviewBuffer::default();
     }
     // SAFETY: status is non-null and writable by contract.
-    unsafe {
-        set_status(status, PREVIEW_STATUS_SUCCESS, A2dPreviewBuffer::default())
-    };
+    unsafe { set_status(status, PREVIEW_STATUS_SUCCESS, A2dPreviewBuffer::default()) };
 
     let execution = catch_unwind(AssertUnwindSafe(|| {
         let library_path = parse_utf8(library_path_bytes, library_path_len, "library_path")?;
@@ -340,9 +333,7 @@ mod tests {
     use a2d_domain::PageId;
 
     use super::*;
-    use crate::{
-        A2dClient, SmartPageContentStyle, SmartPageGenerationRequest, SmartPagePaperSize,
-    };
+    use crate::{A2dClient, SmartPageContentStyle, SmartPageGenerationRequest, SmartPagePaperSize};
 
     #[test]
     fn policy_codec_starts_with_stable_magic_and_version() {
@@ -358,10 +349,8 @@ mod tests {
 
     #[test]
     fn stored_page_resolution_reports_the_same_policy_identity() {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-stored-policy-abi-{}",
-            PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-stored-policy-abi-{}", PageId::generate()));
         let client = A2dClient::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })
