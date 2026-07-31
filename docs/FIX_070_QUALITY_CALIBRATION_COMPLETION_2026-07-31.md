@@ -1,6 +1,6 @@
 # FIX-070 — Quality Calibration Contract Completion Record
 
-**Status:** Implementation complete; permanent CI evidence must be attached to the exact final commit before release signoff  
+**Status:** Implementation complete; permanent CI validation is being executed on the exact candidate commit before release signoff  
 **Date:** 2026-07-31  
 **Target branch:** `master`  
 **Normative decision:** `docs/decisions/V01_QUALITY_CALIBRATION_CONTRACT.md`
@@ -87,7 +87,7 @@ Android V1 declares provisional synthetic-fixture evidence and keeps automatic c
 
 ## Permanent validation contract
 
-The permanent `.github/workflows/ci.yml` workflow runs on every push to `master` and must pass on the exact final FIX-070 commit:
+The permanent `.github/workflows/ci.yml` workflow must pass on the exact final FIX-070 candidate commit:
 
 ```text
 cargo fmt --check
@@ -99,4 +99,4 @@ Kotlin UniFFI binding drift check
 Android emulator scanner/presentation suite
 ```
 
-No temporary workflow, branch, or pull request was created for this work.
+Validation uses the repository's permanent pull-request workflow without modifying `.github/workflows/ci.yml`. The candidate may be fast-forwarded to `master` only after every required job passes on that exact commit.
