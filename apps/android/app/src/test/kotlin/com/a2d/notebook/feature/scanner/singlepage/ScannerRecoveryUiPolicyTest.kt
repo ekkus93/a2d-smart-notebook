@@ -51,6 +51,14 @@ class ScannerRecoveryUiPolicyTest {
         assertFalse(state.canCaptureManually)
     }
 
+    @Test
+    fun stagingOwnershipBlocksNavigationUntilProcessingOrRegistrationFinishes() {
+        assertFalse(SinglePageScannerUiState().navigationBlocked)
+        assertTrue(SinglePageScannerUiState(processing = true).navigationBlocked)
+        assertTrue(SinglePageScannerUiState(registrationInProgress = true).navigationBlocked)
+        assertTrue(SinglePageScannerUiState(recoveryOperationInProgress = true).navigationBlocked)
+    }
+
     private fun recovery(
         phase: ScannerRecoveryPhase,
         registeredScanId: String? = null,
