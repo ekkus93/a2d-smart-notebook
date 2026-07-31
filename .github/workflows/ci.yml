@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -26,23 +26,8 @@ jobs:
       - name: Show resolved toolchain
         run: rustc --version && cargo --version
       - uses: Swatinem/rust-cache@v2
-      - name: Check out FIX-070 head for canonical formatting repair
-        if: github.event_name == 'pull_request' && github.head_ref == 'fix-070-ci-signoff'
-        run: |
-          git fetch origin "${{ github.head_ref }}"
-          git checkout -B "${{ github.head_ref }}" "origin/${{ github.head_ref }}"
       - name: Generate canonical Rust formatting
         run: cargo fmt
-      - name: Commit canonical FIX-070 rustfmt output
-        if: github.event_name == 'pull_request' && github.head_ref == 'fix-070-ci-signoff'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- '*.rs'
-          if ! git diff --cached --quiet; then
-            git commit -m "Apply canonical rustfmt"
-            git push origin "HEAD:${{ github.head_ref }}"
-          fi
       - name: Upload exact rustfmt output for review
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,10 +38,6 @@ jobs:
             crates/a2d-image/src/bin/a2d_fixture_measurements.rs
             crates/a2d-image/src/bin/a2d_fingerprint_calibration.rs
             crates/a2d-image/tests/synthetic_processing_expectations.rs
-            crates/a2d-core/src/milestone9.rs
-            crates/a2d-core/src/milestone9_tests.rs
-            crates/a2d-image/src/lib.rs
-            crates/a2d-image/src/quality_calibration.rs
           if-no-files-found: error
       - name: Fail if Rust formatting drifted
         run: git diff --exit-code -- '*.rs'
