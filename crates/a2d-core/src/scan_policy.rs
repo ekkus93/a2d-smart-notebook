@@ -41,9 +41,7 @@ impl A2dCore {
         &self,
         page_id: &PageId,
     ) -> Result<StoredScanProcessingPolicy, A2dError> {
-        StoredScanProcessingPolicy::from_resolved_layout(
-            self.resolve_stored_scan_layout(page_id)?,
-        )
+        StoredScanProcessingPolicy::from_resolved_layout(self.resolve_stored_scan_layout(page_id)?)
     }
 }
 
