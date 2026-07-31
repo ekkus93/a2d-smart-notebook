@@ -5,9 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -129,7 +130,7 @@ class LiveScannerPresentationUiTest {
             .onNodeWithText("Production quality classification is unavailable", substring = true)
             .assertIsDisplayed()
         composeRule
-            .onNodeWithText("Quality calibration: CALIBRATED", substring = true)
-            .assertDoesNotExist()
+            .onAllNodesWithText("Quality calibration: CALIBRATED", substring = true)
+            .assertCountEquals(0)
     }
 }
