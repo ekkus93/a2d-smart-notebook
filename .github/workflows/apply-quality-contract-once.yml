@@ -1,0 +1,208 @@
+name: Apply quality contract once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-quality-contract-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply explicit calibration contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              'const SCANNER_STAGING_DIRECTORY: &str = "scanner-staging";\n',
+              'const SCANNER_STAGING_DIRECTORY: &str = "scanner-staging";\nconst QUALITY_CALIBRATION_STATE: QualityCalibrationState = QualityCalibrationState::Provisional;\n',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]\npub enum RegistrationWarning {\n',
+              '''#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+          pub enum QualityCalibrationState {
+              Calibrated,
+              Provisional,
+              Unavailable,
+          }
+
+          #[derive(Clone, Copy, Debug, PartialEq)]
+          pub struct RegistrationQualityMeasurements {
+              pub focus_laplacian_variance: Option<f64>,
+              pub focus_interior_sample_count: Option<u64>,
+              pub mean_luminance: f64,
+              pub luminance_standard_deviation: f64,
+              pub dark_fraction: f64,
+              pub highlight_fraction: f64,
+              pub max_tile_highlight_fraction: f64,
+              pub populated_tile_count: u32,
+          }
+
+          impl From<GrayQualityMetrics> for RegistrationQualityMeasurements {
+              fn from(value: GrayQualityMetrics) -> Self {
+                  Self {
+                      focus_laplacian_variance: value.focus.map(|item| item.laplacian_variance),
+                      focus_interior_sample_count: value.focus.map(|item| item.interior_sample_count),
+                      mean_luminance: value.exposure.mean_luminance,
+                      luminance_standard_deviation: value.exposure.luminance_standard_deviation,
+                      dark_fraction: value.exposure.dark_fraction,
+                      highlight_fraction: value.exposure.highlight_fraction,
+                      max_tile_highlight_fraction: value.glare.max_tile_highlight_fraction,
+                      populated_tile_count: value.glare.populated_tile_count,
+                  }
+              }
+          }
+
+          #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+          pub enum RegistrationWarning {
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '    ScannerRecoveryReconciliationPending,\n}\n',
+              '    ScannerRecoveryReconciliationPending,\n    QualityThresholdsUncalibrated,\n}\n',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''            Self::ScannerRecoveryReconciliationPending => {
+                          "SCANNER_RECOVERY_RECONCILIATION_PENDING"
+                      }
+          ''',
+              '''            Self::ScannerRecoveryReconciliationPending => {
+                          "SCANNER_RECOVERY_RECONCILIATION_PENDING"
+                      }
+                      Self::QualityThresholdsUncalibrated => "QUALITY_THRESHOLDS_UNCALIBRATED",
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '    pub quality_status: QualityStatus,\n    pub preferred: bool,\n',
+              '    pub quality_status: QualityStatus,\n    pub quality_calibration_state: QualityCalibrationState,\n    pub quality_measurements: RegistrationQualityMeasurements,\n    pub preferred: bool,\n',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''        let mut warnings = quality_warnings(&processed);
+              merge_preview_warnings(&request.preview_warnings, &mut warnings)?;
+          ''',
+              '''        let mut warnings = quality_warnings(&processed);
+              if QUALITY_CALIBRATION_STATE != QualityCalibrationState::Calibrated {
+                  warnings.insert(RegistrationWarning::QualityThresholdsUncalibrated);
+              }
+              merge_preview_warnings(&request.preview_warnings, &mut warnings)?;
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '            quality_status,\n            preferred,\n',
+              '            quality_status,\n            quality_calibration_state: QUALITY_CALIBRATION_STATE,\n            quality_measurements: processed.quality.into(),\n            preferred,\n',
+          )
+
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]\npub enum RegisteredScanWarning {\n',
+              '''#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+          pub enum RegisteredScanQualityCalibrationState {
+              Calibrated,
+              Provisional,
+              Unavailable,
+          }
+
+          impl From<core::QualityCalibrationState> for RegisteredScanQualityCalibrationState {
+              fn from(value: core::QualityCalibrationState) -> Self {
+                  match value {
+                      core::QualityCalibrationState::Calibrated => Self::Calibrated,
+                      core::QualityCalibrationState::Provisional => Self::Provisional,
+                      core::QualityCalibrationState::Unavailable => Self::Unavailable,
+                  }
+              }
+          }
+
+          #[derive(Clone, Debug, PartialEq, uniffi::Record)]
+          pub struct RegisteredScanQualityMeasurements {
+              pub focus_laplacian_variance: Option<f64>,
+              pub focus_interior_sample_count: Option<u64>,
+              pub mean_luminance: f64,
+              pub luminance_standard_deviation: f64,
+              pub dark_fraction: f64,
+              pub highlight_fraction: f64,
+              pub max_tile_highlight_fraction: f64,
+              pub populated_tile_count: u32,
+          }
+
+          impl From<core::RegistrationQualityMeasurements> for RegisteredScanQualityMeasurements {
+              fn from(value: core::RegistrationQualityMeasurements) -> Self {
+                  Self {
+                      focus_laplacian_variance: value.focus_laplacian_variance,
+                      focus_interior_sample_count: value.focus_interior_sample_count,
+                      mean_luminance: value.mean_luminance,
+                      luminance_standard_deviation: value.luminance_standard_deviation,
+                      dark_fraction: value.dark_fraction,
+                      highlight_fraction: value.highlight_fraction,
+                      max_tile_highlight_fraction: value.max_tile_highlight_fraction,
+                      populated_tile_count: value.populated_tile_count,
+                  }
+              }
+          }
+
+          #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+          pub enum RegisteredScanWarning {
+          ''',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '    ScannerRecoveryReconciliationPending,\n}\n',
+              '    ScannerRecoveryReconciliationPending,\n    QualityThresholdsUncalibrated,\n}\n',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '''            core::RegistrationWarning::ScannerRecoveryReconciliationPending => {
+                          Self::ScannerRecoveryReconciliationPending
+                      }
+          ''',
+              '''            core::RegistrationWarning::ScannerRecoveryReconciliationPending => {
+                          Self::ScannerRecoveryReconciliationPending
+                      }
+                      core::RegistrationWarning::QualityThresholdsUncalibrated => {
+                          Self::QualityThresholdsUncalibrated
+                      }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '    pub quality_status: RegisteredScanQualityStatus,\n    pub preferred: bool,\n',
+              '    pub quality_status: RegisteredScanQualityStatus,\n    pub quality_calibration_state: RegisteredScanQualityCalibrationState,\n    pub quality_measurements: RegisteredScanQualityMeasurements,\n    pub preferred: bool,\n',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '            quality_status: value.quality_status.into(),\n            preferred: value.preferred,\n',
+              '            quality_status: value.quality_status.into(),\n            quality_calibration_state: value.quality_calibration_state.into(),\n            quality_measurements: value.quality_measurements.into(),\n            preferred: value.preferred,\n',
+          )
+          Path('.github/workflows/apply-quality-contract-once.yml').unlink()
+          PY
+          cargo fmt
+          git diff --check
+      - name: Commit explicit calibration contract
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Make scan quality calibration explicit'
+          git push origin HEAD:master
