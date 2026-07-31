@@ -125,6 +125,14 @@ data class SinglePageScannerUiState(
     val torchEnabled: Boolean
         get() = (cameraState as? CameraAdapterState.Bound)?.torchEnabled == true
 
+    /**
+     * A captured staging file is owned by either preview processing, recovery journaling, or durable
+     * registration. Navigation is blocked until that boundary finishes so teardown cannot race a
+     * journal write or delete the file before Rust records it.
+     */
+    val navigationBlocked: Boolean
+        get() = processing || registrationInProgress || recoveryOperationInProgress
+
     val canCaptureManually: Boolean
         get() =
             activeNotebook != null &&
