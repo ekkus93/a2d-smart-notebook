@@ -56,8 +56,9 @@ pub use quality::{
     measure_gray_quality, measure_marker_confidence, measure_perspective,
 };
 pub use quality_calibration::{
-    CalibrationQualifiedQualityAssessment, QualityCalibrationMetadata, QualityCalibrationState,
-    QualityThresholdEvidence, QUALITY_THRESHOLDS_UNCALIBRATED, qualify_quality_assessment,
+    CalibrationQualifiedQualityAssessment, QUALITY_THRESHOLDS_UNCALIBRATED,
+    QualityCalibrationMetadata, QualityCalibrationState, QualityThresholdEvidence,
+    qualify_quality_assessment,
 };
 pub use rectification::{
     ImageQuad, ProjectiveTransform, RectificationLimits, RectificationPlan, RectifiedImageSize,
