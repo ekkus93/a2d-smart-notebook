@@ -16,6 +16,10 @@ pub use scan_processing_policy::*;
 mod integrity;
 pub use integrity::*;
 
+#[path = "scanner_recovery.rs"]
+mod scanner_recovery;
+pub use scanner_recovery::*;
+
 /// Core-facing name for the canonical layout and processing policy resolved from stored state.
 pub type StoredScanLayout = ResolvedScanLayout;
 
