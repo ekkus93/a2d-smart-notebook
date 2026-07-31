@@ -97,7 +97,13 @@
     <string name="single_scanner_registering_explanation">Rust is revalidating identity and markers, committing immutable image assets, and updating the library transactionally.</string>
     <string name="single_scanner_saved">Scan saved</string>
     <string name="single_scanner_saved_scan_id">Scan ID: %1$s</string>
-    <string name="single_scanner_saved_status">Status: %1$s</string>
+    <string name="single_scanner_saved_status">Durable review status: %1$s</string>
+    <string name="single_scanner_quality_calibration">Quality calibration: %1$s · evidence: %2$s · threshold policy v%3$d</string>
+    <string name="single_scanner_quality_warning_code">Quality warning: %1$s</string>
+    <string name="single_scanner_production_quality_unavailable">Production quality classification is unavailable. The preserved scan requires review.</string>
+    <string name="single_scanner_quality_focus">Measured focus variance: %1$.2f · interior samples: %2$s</string>
+    <string name="single_scanner_quality_luminance">Measured luminance mean: %1$.2f · standard deviation: %2$.2f</string>
+    <string name="single_scanner_quality_fractions">Measured dark fraction: %1$.4f · highlight fraction: %2$.4f · maximum tile highlight fraction: %3$.4f</string>
     <string name="single_scanner_required_action">Required action: %1$s</string>
     <string name="single_scanner_awaiting_registration">This reviewed capture has not been saved yet.</string>
     <string name="single_scanner_warning_title">Capture warnings</string>
