@@ -253,9 +253,7 @@ impl Storage {
         let mut applied = Vec::new();
         for row in rows {
             bump_db(report, options)?;
-            applied.push(
-                row.map_err(|error| map_rusqlite_error("decoding migration row", error))?,
-            );
+            applied.push(row.map_err(|error| map_rusqlite_error("decoding migration row", error))?);
         }
         if applied.len() != MIGRATIONS.len() {
             report.findings.push(
@@ -465,9 +463,9 @@ impl Storage {
         for row in rows {
             bump_db(report, options)?;
             let id = row.map_err(|error| map_rusqlite_error("decoding integrity row", error))?;
-            report.findings.push(
-                IntegrityFinding::new(code, IntegrityFindingSeverity::Critical).affected(id),
-            );
+            report
+                .findings
+                .push(IntegrityFinding::new(code, IntegrityFindingSeverity::Critical).affected(id));
         }
         Ok(())
     }
@@ -517,27 +515,23 @@ impl Storage {
     }
 }
 
-fn bump_db(
-    report: &mut IntegrityReport,
-    options: IntegrityCheckOptions,
-) -> Result<(), A2dError> {
+fn bump_db(report: &mut IntegrityReport, options: IntegrityCheckOptions) -> Result<(), A2dError> {
     report.database_rows_examined = report
         .database_rows_examined
         .checked_add(1)
         .ok_or_else(|| limit_error("database row counter overflowed"))?;
     if report.database_rows_examined > options.maximum_database_rows {
-        return Err(limit_error("integrity check exceeded maximum_database_rows").with_detail(
-            "maximum_database_rows",
-            options.maximum_database_rows.to_string(),
-        ));
+        return Err(
+            limit_error("integrity check exceeded maximum_database_rows").with_detail(
+                "maximum_database_rows",
+                options.maximum_database_rows.to_string(),
+            ),
+        );
     }
     Ok(())
 }
 
-fn bump_fs(
-    report: &mut IntegrityReport,
-    options: IntegrityCheckOptions,
-) -> Result<(), A2dError> {
+fn bump_fs(report: &mut IntegrityReport, options: IntegrityCheckOptions) -> Result<(), A2dError> {
     report.filesystem_entries_examined = report
         .filesystem_entries_examined
         .checked_add(1)
@@ -679,10 +673,8 @@ fn hash_file(
             .checked_add(u64::try_from(read).map_err(|_| limit_error("hash size overflowed"))?)
             .ok_or_else(|| limit_error("hash byte counter overflowed"))?;
         if report.bytes_hashed > options.maximum_hash_bytes {
-            return Err(limit_error("integrity check exceeded maximum_hash_bytes").with_detail(
-                "maximum_hash_bytes",
-                options.maximum_hash_bytes.to_string(),
-            ));
+            return Err(limit_error("integrity check exceeded maximum_hash_bytes")
+                .with_detail("maximum_hash_bytes", options.maximum_hash_bytes.to_string()));
         }
         digest.update(&buffer[..read]);
     }
@@ -863,10 +855,8 @@ mod tests {
     use crate::AssetRepository;
 
     fn open_storage(name: &str) -> (Storage, PathBuf) {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-integrity-{name}-{}",
-            PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-integrity-{name}-{}", PageId::generate()));
         std::fs::create_dir_all(&root).unwrap();
         let storage = Storage::open(&root.join("library.sqlite")).unwrap();
         (storage, root)
