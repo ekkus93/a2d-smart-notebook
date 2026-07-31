@@ -1,10 +1,9 @@
 //! Bounded, cancellable, non-destructive canonical-library integrity diagnostics.
 //!
-//! The checker reports stable findings and never repairs, deletes, imports, or rewrites data. It
-//! operates on the already-open SQLite connection and the caller-supplied library root, with
-//! explicit limits for database rows, filesystem entries, and bytes hashed.
+//! This module reports stable findings only. It never repairs, deletes, imports, or rewrites
+//! canonical data. Database rows, filesystem entries, and hashed bytes all have explicit limits.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -12,7 +11,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
-use rusqlite::OptionalExtension;
 use sha2::{Digest, Sha256};
 
 use crate::{MIGRATIONS, Storage, map_rusqlite_error};
@@ -95,7 +93,7 @@ impl IntegrityCheckOptions {
             || self.maximum_filesystem_entries == 0
             || self.maximum_hash_bytes == 0
         {
-            return Err(integrity_request_error(
+            return Err(request_error(
                 "STORAGE_INTEGRITY_LIMIT_INVALID",
                 "integrity-check limits must all be greater than zero",
             ));
@@ -131,7 +129,7 @@ pub struct IntegrityReport {
     pub filesystem_entries_examined: u64,
     pub bytes_hashed: u64,
     pub findings: Vec<IntegrityFinding>,
-    /// Reserved hook for the future search milestone. No index is claimed to exist in v0.1.
+    /// Reserved for the future search milestone; v0.1 does not claim a search index exists.
     pub search_index_check: String,
 }
 
@@ -175,69 +173,53 @@ impl Storage {
         cancellation: &IntegrityCancellation,
     ) -> Result<IntegrityCheckOutcome, A2dError> {
         let options = options.validate()?;
-        let canonical_root = library_root.canonicalize().map_err(|error| {
-            integrity_request_error(
+        let root = library_root.canonicalize().map_err(|error| {
+            request_error(
                 "STORAGE_INTEGRITY_LIBRARY_ROOT_INVALID",
                 format!("failed to canonicalize library root: {error}"),
             )
             .with_detail("library_root", library_root.to_string_lossy())
         })?;
-        if !canonical_root.is_dir() {
-            return Err(integrity_request_error(
+        if !root.is_dir() {
+            return Err(request_error(
                 "STORAGE_INTEGRITY_LIBRARY_ROOT_NOT_DIRECTORY",
                 "integrity-check library root must be a directory",
-            )
-            .with_detail("library_root", canonical_root.to_string_lossy()));
+            ));
         }
 
-        let schema_version = self.schema_version()?;
-        let mut report = IntegrityReport::new(schema_version, options.verify_asset_hashes);
-        if cancelled(cancellation, &report) {
+        let mut report = IntegrityReport::new(self.schema_version()?, options.verify_asset_hashes);
+        if cancellation.is_cancelled() {
             return Ok(IntegrityCheckOutcome::Cancelled(report));
         }
 
-        self.check_migration_identity(&mut report, options)?;
-        if cancelled(cancellation, &report) {
-            return Ok(IntegrityCheckOutcome::Cancelled(report));
-        }
+        self.check_migrations(&mut report, options)?;
         self.check_foreign_keys(&mut report, options)?;
-        self.check_preferred_scan_consistency(&mut report, options)?;
-        self.check_active_notebook_count(&mut report, options)?;
-        self.check_page_kind_columns(&mut report, options)?;
-        self.check_scan_originals(&mut report, options)?;
-        self.check_scan_fingerprints(&mut report, options)?;
-        self.check_generated_pdf_references(&mut report, options)?;
-        if cancelled(cancellation, &report) {
+        self.check_relational_invariants(&mut report, options)?;
+        if cancellation.is_cancelled() {
             return Ok(IntegrityCheckOutcome::Cancelled(report));
         }
 
-        let assets = self.load_asset_rows(&mut report, options)?;
-        let known_asset_paths = assets
+        let assets = self.load_assets(&mut report, options)?;
+        let known_paths = assets
             .iter()
-            .map(|asset| normalize_relative_path(&asset.relative_path))
+            .map(|asset| normalize_relative(&asset.relative_path))
             .collect::<BTreeSet<_>>();
-        check_asset_files(
-            &canonical_root,
-            &assets,
+        check_asset_rows(&root, &assets, options, cancellation, &mut report)?;
+        if cancellation.is_cancelled() {
+            return Ok(IntegrityCheckOutcome::Cancelled(report));
+        }
+        check_tree(
+            &root,
+            &root.join("assets"),
+            Some(&known_paths),
             options,
             cancellation,
             &mut report,
         )?;
-        if cancelled(cancellation, &report) {
-            return Ok(IntegrityCheckOutcome::Cancelled(report));
-        }
-        check_orphan_final_files(
-            &canonical_root,
-            &known_asset_paths,
-            options,
-            cancellation,
-            &mut report,
-        )?;
-        if cancelled(cancellation, &report) {
-            return Ok(IntegrityCheckOutcome::Cancelled(report));
-        }
-        check_temp_files(
-            &canonical_root,
+        check_tree(
+            &root,
+            &root.join("tmp"),
+            None,
             options,
             cancellation,
             &mut report,
@@ -250,7 +232,7 @@ impl Storage {
         }
     }
 
-    fn check_migration_identity(
+    fn check_migrations(
         &self,
         report: &mut IntegrityReport,
         options: IntegrityCheckOptions,
@@ -270,14 +252,11 @@ impl Storage {
             .map_err(|error| map_rusqlite_error("reading migration integrity rows", error))?;
         let mut applied = Vec::new();
         for row in rows {
-            bump_database_rows(report, options)?;
+            bump_db(report, options)?;
             applied.push(
-                row.map_err(|error| {
-                    map_rusqlite_error("decoding migration integrity row", error)
-                })?,
+                row.map_err(|error| map_rusqlite_error("decoding migration row", error))?,
             );
         }
-
         if applied.len() != MIGRATIONS.len() {
             report.findings.push(
                 IntegrityFinding::new(
@@ -339,7 +318,7 @@ impl Storage {
         let mut statement = self
             .conn
             .prepare("PRAGMA foreign_key_check")
-            .map_err(|error| map_rusqlite_error("preparing foreign-key integrity check", error))?;
+            .map_err(|error| map_rusqlite_error("preparing foreign-key check", error))?;
         let rows = statement
             .query_map([], |row| {
                 Ok((
@@ -349,12 +328,11 @@ impl Storage {
                     row.get::<_, i64>(3)?,
                 ))
             })
-            .map_err(|error| map_rusqlite_error("running foreign-key integrity check", error))?;
+            .map_err(|error| map_rusqlite_error("running foreign-key check", error))?;
         for row in rows {
-            bump_database_rows(report, options)?;
-            let (table, row_id, parent, foreign_key_index) = row.map_err(|error| {
-                map_rusqlite_error("decoding foreign-key integrity finding", error)
-            })?;
+            bump_db(report, options)?;
+            let (table, row_id, parent, index) =
+                row.map_err(|error| map_rusqlite_error("decoding foreign-key finding", error))?;
             report.findings.push(
                 IntegrityFinding::new(
                     "INTEGRITY_FOREIGN_KEY_VIOLATION",
@@ -366,199 +344,96 @@ impl Storage {
                     row_id.map_or_else(|| "unknown".to_string(), |value| value.to_string()),
                 )
                 .detail("parent_table", parent)
-                .detail("foreign_key_index", foreign_key_index.to_string()),
+                .detail("foreign_key_index", index.to_string()),
             );
         }
         Ok(())
     }
 
-    fn check_preferred_scan_consistency(
+    fn check_relational_invariants(
         &self,
         report: &mut IntegrityReport,
         options: IntegrityCheckOptions,
     ) -> Result<(), A2dError> {
-        let sql =
-            "SELECT p.id, p.preferred_scan_id,
-                    (SELECT COUNT(*) FROM scans s WHERE s.page_id = p.id AND s.preferred = 1)
-             FROM pages p
-             WHERE
+        self.query_id_findings(
+            "SELECT p.id FROM pages p WHERE
                (p.preferred_scan_id IS NULL AND
-                (SELECT COUNT(*) FROM scans s WHERE s.page_id = p.id AND s.preferred = 1) != 0)
+                (SELECT COUNT(*) FROM scans s WHERE s.page_id=p.id AND s.preferred=1) != 0)
                OR
                (p.preferred_scan_id IS NOT NULL AND (
-                  (SELECT COUNT(*) FROM scans s WHERE s.page_id = p.id AND s.preferred = 1) != 1
+                  (SELECT COUNT(*) FROM scans s WHERE s.page_id=p.id AND s.preferred=1) != 1
                   OR NOT EXISTS (
-                    SELECT 1 FROM scans selected
-                    WHERE selected.id = p.preferred_scan_id
-                      AND selected.page_id = p.id
-                      AND selected.preferred = 1
+                    SELECT 1 FROM scans s
+                    WHERE s.id=p.preferred_scan_id AND s.page_id=p.id AND s.preferred=1
                   )
-               ))";
-        let mut statement = self
-            .conn
-            .prepare(sql)
-            .map_err(|error| map_rusqlite_error("preparing preferred-scan integrity query", error))?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, i64>(2)?,
-                ))
-            })
-            .map_err(|error| map_rusqlite_error("checking preferred-scan integrity", error))?;
-        for row in rows {
-            bump_database_rows(report, options)?;
-            let (page_id, preferred_scan_id, preferred_count) = row.map_err(|error| {
-                map_rusqlite_error("decoding preferred-scan integrity row", error)
-            })?;
-            report.findings.push(
-                IntegrityFinding::new(
-                    "INTEGRITY_PREFERRED_SCAN_CONTRADICTION",
-                    IntegrityFindingSeverity::Critical,
-                )
-                .affected(page_id)
-                .detail(
-                    "preferred_scan_id",
-                    preferred_scan_id.unwrap_or_else(|| "none".to_string()),
-                )
-                .detail("preferred_scan_count", preferred_count.to_string()),
-            );
-        }
-        Ok(())
-    }
+               ))",
+            "INTEGRITY_PREFERRED_SCAN_CONTRADICTION",
+            report,
+            options,
+        )?;
+        self.query_id_findings(
+            "SELECT id FROM pages WHERE
+               (kind='notebook_page' AND (
+                  notebook_id IS NULL OR notebook_design_id IS NULL OR
+                  logical_page_number IS NULL OR smart_page_id IS NOT NULL OR
+                  page_set_id IS NOT NULL OR visible_page_number IS NOT NULL
+               )) OR
+               (kind='smart_page' AND (
+                  notebook_id IS NOT NULL OR notebook_design_id IS NOT NULL OR
+                  logical_page_number IS NOT NULL OR smart_page_id IS NULL
+               )) OR kind NOT IN ('notebook_page','smart_page')",
+            "INTEGRITY_PAGE_KIND_COLUMNS_INVALID",
+            report,
+            options,
+        )?;
+        self.query_id_findings(
+            "SELECT s.id FROM scans s LEFT JOIN assets a ON a.id=s.original_asset_id
+             WHERE a.id IS NULL OR a.kind!='Original' OR a.immutable!=1",
+            "INTEGRITY_SCAN_ORIGINAL_INVALID",
+            report,
+            options,
+        )?;
+        self.query_id_findings(
+            "SELECT p.id FROM pages p LEFT JOIN assets a ON a.id=p.generated_pdf_asset_id
+             WHERE p.generated_pdf_asset_id IS NOT NULL
+               AND (a.id IS NULL OR a.kind!='Export')",
+            "INTEGRITY_GENERATED_PDF_REFERENCE_INVALID",
+            report,
+            options,
+        )?;
 
-    fn check_active_notebook_count(
-        &self,
-        report: &mut IntegrityReport,
-        options: IntegrityCheckOptions,
-    ) -> Result<(), A2dError> {
-        bump_database_rows(report, options)?;
-        let count = self
+        bump_db(report, options)?;
+        let active_count = self
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM notebooks WHERE active_scan_destination = 1",
+                "SELECT COUNT(*) FROM notebooks WHERE active_scan_destination=1",
                 [],
                 |row| row.get::<_, i64>(0),
             )
             .map_err(|error| map_rusqlite_error("counting active notebooks", error))?;
-        if count > 1 {
+        if active_count > 1 {
             report.findings.push(
                 IntegrityFinding::new(
                     "INTEGRITY_MULTIPLE_ACTIVE_NOTEBOOKS",
                     IntegrityFindingSeverity::Critical,
                 )
-                .detail("active_notebook_count", count.to_string()),
+                .detail("active_notebook_count", active_count.to_string()),
             );
         }
-        Ok(())
-    }
 
-    fn check_page_kind_columns(
-        &self,
-        report: &mut IntegrityReport,
-        options: IntegrityCheckOptions,
-    ) -> Result<(), A2dError> {
-        let sql =
-            "SELECT id, kind FROM pages WHERE
-               (kind = 'notebook_page' AND (
-                    notebook_id IS NULL OR notebook_design_id IS NULL OR
-                    logical_page_number IS NULL OR smart_page_id IS NOT NULL OR
-                    page_set_id IS NOT NULL OR visible_page_number IS NOT NULL
-               )) OR
-               (kind = 'smart_page' AND (
-                    notebook_id IS NOT NULL OR notebook_design_id IS NOT NULL OR
-                    logical_page_number IS NOT NULL OR smart_page_id IS NULL
-               )) OR
-               kind NOT IN ('notebook_page', 'smart_page')";
-        let mut statement = self
-            .conn
-            .prepare(sql)
-            .map_err(|error| map_rusqlite_error("preparing page-kind integrity query", error))?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(|error| map_rusqlite_error("checking page-kind columns", error))?;
-        for row in rows {
-            bump_database_rows(report, options)?;
-            let (page_id, kind) = row
-                .map_err(|error| map_rusqlite_error("decoding page-kind finding", error))?;
-            report.findings.push(
-                IntegrityFinding::new(
-                    "INTEGRITY_PAGE_KIND_COLUMNS_INVALID",
-                    IntegrityFindingSeverity::Critical,
-                )
-                .affected(page_id)
-                .detail("kind", kind),
-            );
-        }
-        Ok(())
-    }
-
-    fn check_scan_originals(
-        &self,
-        report: &mut IntegrityReport,
-        options: IntegrityCheckOptions,
-    ) -> Result<(), A2dError> {
-        let sql =
-            "SELECT s.id, s.original_asset_id, a.kind, a.immutable
-             FROM scans s LEFT JOIN assets a ON a.id = s.original_asset_id
-             WHERE a.id IS NULL OR a.kind != 'Original' OR a.immutable != 1";
-        let mut statement = self
-            .conn
-            .prepare(sql)
-            .map_err(|error| map_rusqlite_error("preparing scan-original integrity query", error))?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, Option<bool>>(3)?,
-                ))
-            })
-            .map_err(|error| map_rusqlite_error("checking scan originals", error))?;
-        for row in rows {
-            bump_database_rows(report, options)?;
-            let (scan_id, asset_id, kind, immutable) = row.map_err(|error| {
-                map_rusqlite_error("decoding scan-original finding", error)
-            })?;
-            report.findings.push(
-                IntegrityFinding::new(
-                    "INTEGRITY_SCAN_ORIGINAL_INVALID",
-                    IntegrityFindingSeverity::Critical,
-                )
-                .affected(scan_id)
-                .detail("original_asset_id", asset_id)
-                .detail("asset_kind", kind.unwrap_or_else(|| "missing".to_string()))
-                .detail(
-                    "immutable",
-                    immutable.map_or_else(|| "missing".to_string(), |value| value.to_string()),
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    fn check_scan_fingerprints(
-        &self,
-        report: &mut IntegrityReport,
-        options: IntegrityCheckOptions,
-    ) -> Result<(), A2dError> {
         let mut statement = self
             .conn
             .prepare("SELECT id, content_fingerprint FROM scans")
-            .map_err(|error| map_rusqlite_error("preparing fingerprint integrity query", error))?;
+            .map_err(|error| map_rusqlite_error("preparing fingerprint check", error))?;
         let rows = statement
             .query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })
-            .map_err(|error| map_rusqlite_error("checking fingerprint formats", error))?;
+            .map_err(|error| map_rusqlite_error("reading fingerprints", error))?;
         for row in rows {
-            bump_database_rows(report, options)?;
-            let (scan_id, fingerprint) = row
-                .map_err(|error| map_rusqlite_error("decoding fingerprint row", error))?;
+            bump_db(report, options)?;
+            let (scan_id, fingerprint) =
+                row.map_err(|error| map_rusqlite_error("decoding fingerprint row", error))?;
             if !valid_scan_fingerprint(&fingerprint) {
                 report.findings.push(
                     IntegrityFinding::new(
@@ -566,55 +441,38 @@ impl Storage {
                         IntegrityFindingSeverity::Critical,
                     )
                     .affected(scan_id)
-                    .detail("format", fingerprint_format_hint(&fingerprint)),
+                    .detail("format", fingerprint_hint(&fingerprint)),
                 );
             }
         }
         Ok(())
     }
 
-    fn check_generated_pdf_references(
+    fn query_id_findings(
         &self,
+        sql: &str,
+        code: &'static str,
         report: &mut IntegrityReport,
         options: IntegrityCheckOptions,
     ) -> Result<(), A2dError> {
-        let sql =
-            "SELECT p.id, p.generated_pdf_asset_id, a.kind
-             FROM pages p LEFT JOIN assets a ON a.id = p.generated_pdf_asset_id
-             WHERE p.generated_pdf_asset_id IS NOT NULL
-               AND (a.id IS NULL OR a.kind != 'Export')";
         let mut statement = self
             .conn
             .prepare(sql)
-            .map_err(|error| map_rusqlite_error("preparing generated-PDF integrity query", error))?;
+            .map_err(|error| map_rusqlite_error("preparing integrity query", error))?;
         let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
-            })
-            .map_err(|error| map_rusqlite_error("checking generated-PDF references", error))?;
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| map_rusqlite_error("running integrity query", error))?;
         for row in rows {
-            bump_database_rows(report, options)?;
-            let (page_id, asset_id, kind) = row.map_err(|error| {
-                map_rusqlite_error("decoding generated-PDF finding", error)
-            })?;
+            bump_db(report, options)?;
+            let id = row.map_err(|error| map_rusqlite_error("decoding integrity row", error))?;
             report.findings.push(
-                IntegrityFinding::new(
-                    "INTEGRITY_GENERATED_PDF_REFERENCE_INVALID",
-                    IntegrityFindingSeverity::Critical,
-                )
-                .affected(page_id)
-                .detail("generated_pdf_asset_id", asset_id)
-                .detail("asset_kind", kind.unwrap_or_else(|| "missing".to_string())),
+                IntegrityFinding::new(code, IntegrityFindingSeverity::Critical).affected(id),
             );
         }
         Ok(())
     }
 
-    fn load_asset_rows(
+    fn load_assets(
         &self,
         report: &mut IntegrityReport,
         options: IntegrityCheckOptions,
@@ -622,38 +480,36 @@ impl Storage {
         let mut statement = self
             .conn
             .prepare("SELECT id, relative_path, byte_length, sha256 FROM assets ORDER BY id")
-            .map_err(|error| map_rusqlite_error("preparing asset integrity query", error))?;
+            .map_err(|error| map_rusqlite_error("preparing asset check", error))?;
         let rows = statement
             .query_map([], |row| {
-                let byte_length = row.get::<_, i64>(2)?;
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
-                    byte_length,
+                    row.get::<_, i64>(2)?,
                     row.get::<_, String>(3)?,
                 ))
             })
-            .map_err(|error| map_rusqlite_error("reading asset integrity rows", error))?;
+            .map_err(|error| map_rusqlite_error("reading asset rows", error))?;
         let mut assets = Vec::new();
         for row in rows {
-            bump_database_rows(report, options)?;
-            let (id, relative_path, byte_length, sha256) = row
-                .map_err(|error| map_rusqlite_error("decoding asset integrity row", error))?;
-            if byte_length < 0 {
+            bump_db(report, options)?;
+            let (id, relative_path, byte_length, sha256) =
+                row.map_err(|error| map_rusqlite_error("decoding asset row", error))?;
+            let Ok(byte_length) = u64::try_from(byte_length) else {
                 report.findings.push(
                     IntegrityFinding::new(
                         "INTEGRITY_ASSET_LENGTH_INVALID",
                         IntegrityFindingSeverity::Critical,
                     )
-                    .affected(id.clone())
-                    .detail("byte_length", byte_length.to_string()),
+                    .affected(id),
                 );
                 continue;
-            }
+            };
             assets.push(AssetRow {
                 id,
                 relative_path,
-                byte_length: byte_length as u64,
+                byte_length,
                 sha256,
             });
         }
@@ -661,23 +517,16 @@ impl Storage {
     }
 }
 
-fn cancelled(cancellation: &IntegrityCancellation, _report: &IntegrityReport) -> bool {
-    cancellation.is_cancelled()
-}
-
-fn bump_database_rows(
+fn bump_db(
     report: &mut IntegrityReport,
     options: IntegrityCheckOptions,
 ) -> Result<(), A2dError> {
     report.database_rows_examined = report
         .database_rows_examined
         .checked_add(1)
-        .ok_or_else(|| integrity_limit_error("database row counter overflowed"))?;
+        .ok_or_else(|| limit_error("database row counter overflowed"))?;
     if report.database_rows_examined > options.maximum_database_rows {
-        return Err(integrity_limit_error(
-            "integrity check exceeded maximum_database_rows",
-        )
-        .with_detail(
+        return Err(limit_error("integrity check exceeded maximum_database_rows").with_detail(
             "maximum_database_rows",
             options.maximum_database_rows.to_string(),
         ));
@@ -685,28 +534,27 @@ fn bump_database_rows(
     Ok(())
 }
 
-fn bump_filesystem_entries(
+fn bump_fs(
     report: &mut IntegrityReport,
     options: IntegrityCheckOptions,
 ) -> Result<(), A2dError> {
     report.filesystem_entries_examined = report
         .filesystem_entries_examined
         .checked_add(1)
-        .ok_or_else(|| integrity_limit_error("filesystem entry counter overflowed"))?;
+        .ok_or_else(|| limit_error("filesystem entry counter overflowed"))?;
     if report.filesystem_entries_examined > options.maximum_filesystem_entries {
-        return Err(integrity_limit_error(
-            "integrity check exceeded maximum_filesystem_entries",
-        )
-        .with_detail(
-            "maximum_filesystem_entries",
-            options.maximum_filesystem_entries.to_string(),
-        ));
+        return Err(
+            limit_error("integrity check exceeded maximum_filesystem_entries").with_detail(
+                "maximum_filesystem_entries",
+                options.maximum_filesystem_entries.to_string(),
+            ),
+        );
     }
     Ok(())
 }
 
-fn check_asset_files(
-    canonical_root: &Path,
+fn check_asset_rows(
+    root: &Path,
     assets: &[AssetRow],
     options: IntegrityCheckOptions,
     cancellation: &IntegrityCancellation,
@@ -714,10 +562,10 @@ fn check_asset_files(
 ) -> Result<(), A2dError> {
     for asset in assets {
         if cancellation.is_cancelled() {
-            return Ok(());
+            break;
         }
-        bump_filesystem_entries(report, options)?;
-        let candidate = canonical_root.join(&asset.relative_path);
+        bump_fs(report, options)?;
+        let candidate = root.join(&asset.relative_path);
         let metadata = match std::fs::symlink_metadata(&candidate) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -726,7 +574,7 @@ fn check_asset_files(
                         "INTEGRITY_ASSET_FILE_MISSING",
                         IntegrityFindingSeverity::Critical,
                     )
-                    .affected(asset.id.clone())
+                    .affected(&asset.id)
                     .detail("relative_path", &asset.relative_path),
                 );
                 continue;
@@ -737,8 +585,7 @@ fn check_asset_files(
                         "INTEGRITY_ASSET_METADATA_UNREADABLE",
                         IntegrityFindingSeverity::Error,
                     )
-                    .affected(asset.id.clone())
-                    .detail("relative_path", &asset.relative_path)
+                    .affected(&asset.id)
                     .detail("io_error", error.to_string()),
                 );
                 continue;
@@ -750,35 +597,24 @@ fn check_asset_files(
                     "INTEGRITY_ASSET_PATH_NOT_REGULAR_FILE",
                     IntegrityFindingSeverity::Critical,
                 )
-                .affected(asset.id.clone())
-                .detail("relative_path", &asset.relative_path),
+                .affected(&asset.id),
             );
             continue;
         }
-        let canonical_candidate = match candidate.canonicalize() {
-            Ok(path) => path,
-            Err(error) => {
-                report.findings.push(
-                    IntegrityFinding::new(
-                        "INTEGRITY_ASSET_PATH_UNRESOLVABLE",
-                        IntegrityFindingSeverity::Critical,
-                    )
-                    .affected(asset.id.clone())
-                    .detail("relative_path", &asset.relative_path)
-                    .detail("io_error", error.to_string()),
-                );
-                continue;
-            }
-        };
-        if !canonical_candidate.starts_with(canonical_root) {
+        let canonical = candidate.canonicalize().map_err(|error| {
+            request_error(
+                "STORAGE_INTEGRITY_ASSET_PATH_UNRESOLVABLE",
+                format!("failed to canonicalize asset path: {error}"),
+            )
+            .with_detail("asset_id", &asset.id)
+        })?;
+        if !canonical.starts_with(root) {
             report.findings.push(
                 IntegrityFinding::new(
                     "INTEGRITY_ASSET_PATH_ESCAPES_LIBRARY",
                     IntegrityFindingSeverity::Critical,
                 )
-                .affected(asset.id.clone())
-                .detail("relative_path", &asset.relative_path)
-                .detail("canonical_path", canonical_candidate.to_string_lossy()),
+                .affected(&asset.id),
             );
             continue;
         }
@@ -788,33 +624,24 @@ fn check_asset_files(
                     "INTEGRITY_ASSET_LENGTH_MISMATCH",
                     IntegrityFindingSeverity::Critical,
                 )
-                .affected(asset.id.clone())
-                .detail("relative_path", &asset.relative_path)
+                .affected(&asset.id)
                 .detail("recorded_bytes", asset.byte_length.to_string())
                 .detail("actual_bytes", metadata.len().to_string()),
             );
         }
-        if options.verify_asset_hashes {
-            let actual = hash_file(
-                &canonical_candidate,
-                options,
-                cancellation,
-                report,
-            )?;
-            if let Some(actual) = actual
-                && !actual.eq_ignore_ascii_case(&asset.sha256)
-            {
-                report.findings.push(
-                    IntegrityFinding::new(
-                        "INTEGRITY_ASSET_HASH_MISMATCH",
-                        IntegrityFindingSeverity::Critical,
-                    )
-                    .affected(asset.id.clone())
-                    .detail("relative_path", &asset.relative_path)
-                    .detail("recorded_sha256", &asset.sha256)
-                    .detail("actual_sha256", actual),
-                );
-            }
+        if options.verify_asset_hashes
+            && let Some(actual) = hash_file(&canonical, options, cancellation, report)?
+            && !actual.eq_ignore_ascii_case(&asset.sha256)
+        {
+            report.findings.push(
+                IntegrityFinding::new(
+                    "INTEGRITY_ASSET_HASH_MISMATCH",
+                    IntegrityFindingSeverity::Critical,
+                )
+                .affected(&asset.id)
+                .detail("recorded_sha256", &asset.sha256)
+                .detail("actual_sha256", actual),
+            );
         }
     }
     Ok(())
@@ -827,11 +654,10 @@ fn hash_file(
     report: &mut IntegrityReport,
 ) -> Result<Option<String>, A2dError> {
     let mut file = File::open(path).map_err(|error| {
-        integrity_request_error(
+        request_error(
             "STORAGE_INTEGRITY_HASH_OPEN_FAILED",
             format!("failed to open asset for hashing: {error}"),
         )
-        .with_detail("path", path.to_string_lossy())
     })?;
     let mut digest = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
@@ -840,26 +666,20 @@ fn hash_file(
             return Ok(None);
         }
         let read = file.read(&mut buffer).map_err(|error| {
-            integrity_request_error(
+            request_error(
                 "STORAGE_INTEGRITY_HASH_READ_FAILED",
                 format!("failed to read asset for hashing: {error}"),
             )
-            .with_detail("path", path.to_string_lossy())
         })?;
         if read == 0 {
             break;
         }
-        let read_u64 = u64::try_from(read)
-            .map_err(|_| integrity_limit_error("hash read size did not fit u64"))?;
         report.bytes_hashed = report
             .bytes_hashed
-            .checked_add(read_u64)
-            .ok_or_else(|| integrity_limit_error("hash byte counter overflowed"))?;
+            .checked_add(u64::try_from(read).map_err(|_| limit_error("hash size overflowed"))?)
+            .ok_or_else(|| limit_error("hash byte counter overflowed"))?;
         if report.bytes_hashed > options.maximum_hash_bytes {
-            return Err(integrity_limit_error(
-                "integrity check exceeded maximum_hash_bytes",
-            )
-            .with_detail(
+            return Err(limit_error("integrity check exceeded maximum_hash_bytes").with_detail(
                 "maximum_hash_bytes",
                 options.maximum_hash_bytes.to_string(),
             ));
@@ -869,85 +689,19 @@ fn hash_file(
     Ok(Some(format!("{:x}", digest.finalize())))
 }
 
-fn check_orphan_final_files(
-    canonical_root: &Path,
-    known_asset_paths: &BTreeSet<String>,
+fn check_tree(
+    library_root: &Path,
+    tree_root: &Path,
+    known_assets: Option<&BTreeSet<String>>,
     options: IntegrityCheckOptions,
     cancellation: &IntegrityCancellation,
     report: &mut IntegrityReport,
 ) -> Result<(), A2dError> {
-    let assets_root = canonical_root.join("assets");
-    for file in bounded_files(&assets_root, options, cancellation, report)? {
-        if cancellation.is_cancelled() {
-            return Ok(());
-        }
-        let relative = file.strip_prefix(canonical_root).map_err(|_| {
-            integrity_request_error(
-                "STORAGE_INTEGRITY_PATH_RELATIVIZE_FAILED",
-                "asset path could not be made relative to the library root",
-            )
-            .with_detail("path", file.to_string_lossy())
-        })?;
-        let normalized = normalize_path(relative);
-        if !known_asset_paths.contains(&normalized) {
-            report.findings.push(
-                IntegrityFinding::new(
-                    "INTEGRITY_ORPHAN_FINAL_ASSET",
-                    IntegrityFindingSeverity::Warning,
-                )
-                .detail("relative_path", normalized),
-            );
-        }
+    if !tree_root.exists() {
+        return Ok(());
     }
-    Ok(())
-}
-
-fn check_temp_files(
-    canonical_root: &Path,
-    options: IntegrityCheckOptions,
-    cancellation: &IntegrityCancellation,
-    report: &mut IntegrityReport,
-) -> Result<(), A2dError> {
-    let tmp_root = canonical_root.join("tmp");
-    for file in bounded_files(&tmp_root, options, cancellation, report)? {
-        if cancellation.is_cancelled() {
-            return Ok(());
-        }
-        let relative = file.strip_prefix(canonical_root).map_err(|_| {
-            integrity_request_error(
-                "STORAGE_INTEGRITY_PATH_RELATIVIZE_FAILED",
-                "temp path could not be made relative to the library root",
-            )
-            .with_detail("path", file.to_string_lossy())
-        })?;
-        let normalized = normalize_path(relative);
-        let code = if normalized.starts_with("tmp/scanner-staging/") {
-            "INTEGRITY_RECOVERABLE_SCANNER_STAGING_FILE"
-        } else if normalized.starts_with("tmp/asset-commit-journals/") {
-            "INTEGRITY_INCOMPLETE_ASSET_COMMIT_JOURNAL"
-        } else {
-            "INTEGRITY_ORPHAN_TEMP_FILE"
-        };
-        report.findings.push(
-            IntegrityFinding::new(code, IntegrityFindingSeverity::Warning)
-                .detail("relative_path", normalized),
-        );
-    }
-    Ok(())
-}
-
-fn bounded_files(
-    root: &Path,
-    options: IntegrityCheckOptions,
-    cancellation: &IntegrityCancellation,
-    report: &mut IntegrityReport,
-) -> Result<Vec<PathBuf>, A2dError> {
-    if !root.exists() {
-        return Ok(Vec::new());
-    }
-    let mut stack = vec![root.to_path_buf()];
-    let mut files = Vec::new();
-    while let Some(directory) = stack.pop() {
+    let mut queue = VecDeque::from([tree_root.to_path_buf()]);
+    while let Some(directory) = queue.pop_front() {
         if cancellation.is_cancelled() {
             break;
         }
@@ -969,36 +723,20 @@ fn bounded_files(
             if cancellation.is_cancelled() {
                 break;
             }
-            bump_filesystem_entries(report, options)?;
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(error) => {
-                    report.findings.push(
-                        IntegrityFinding::new(
-                            "INTEGRITY_FILESYSTEM_ENTRY_UNREADABLE",
-                            IntegrityFindingSeverity::Error,
-                        )
-                        .detail("directory", directory.to_string_lossy())
-                        .detail("io_error", error.to_string()),
-                    );
-                    continue;
-                }
-            };
+            bump_fs(report, options)?;
+            let entry = entry.map_err(|error| {
+                request_error(
+                    "STORAGE_INTEGRITY_READ_DIRECTORY_FAILED",
+                    format!("failed to read filesystem entry: {error}"),
+                )
+            })?;
             let path = entry.path();
-            let metadata = match std::fs::symlink_metadata(&path) {
-                Ok(metadata) => metadata,
-                Err(error) => {
-                    report.findings.push(
-                        IntegrityFinding::new(
-                            "INTEGRITY_FILESYSTEM_METADATA_UNREADABLE",
-                            IntegrityFindingSeverity::Error,
-                        )
-                        .detail("path", path.to_string_lossy())
-                        .detail("io_error", error.to_string()),
-                    );
-                    continue;
-                }
-            };
+            let metadata = std::fs::symlink_metadata(&path).map_err(|error| {
+                request_error(
+                    "STORAGE_INTEGRITY_METADATA_FAILED",
+                    format!("failed to read filesystem metadata: {error}"),
+                )
+            })?;
             if metadata.file_type().is_symlink() {
                 report.findings.push(
                     IntegrityFinding::new(
@@ -1008,9 +746,37 @@ fn bounded_files(
                     .detail("path", path.to_string_lossy()),
                 );
             } else if metadata.is_dir() {
-                stack.push(path);
+                queue.push_back(path);
             } else if metadata.is_file() {
-                files.push(path);
+                let relative = normalize_path(path.strip_prefix(library_root).map_err(|_| {
+                    request_error(
+                        "STORAGE_INTEGRITY_PATH_RELATIVIZE_FAILED",
+                        "filesystem path escaped the library root",
+                    )
+                })?);
+                if let Some(known_assets) = known_assets {
+                    if !known_assets.contains(&relative) {
+                        report.findings.push(
+                            IntegrityFinding::new(
+                                "INTEGRITY_ORPHAN_FINAL_ASSET",
+                                IntegrityFindingSeverity::Warning,
+                            )
+                            .detail("relative_path", relative),
+                        );
+                    }
+                } else {
+                    let code = if relative.starts_with("tmp/scanner-staging/") {
+                        "INTEGRITY_RECOVERABLE_SCANNER_STAGING_FILE"
+                    } else if relative.starts_with("tmp/asset-commit-journals/") {
+                        "INTEGRITY_INCOMPLETE_ASSET_COMMIT_JOURNAL"
+                    } else {
+                        "INTEGRITY_ORPHAN_TEMP_FILE"
+                    };
+                    report.findings.push(
+                        IntegrityFinding::new(code, IntegrityFindingSeverity::Warning)
+                            .detail("relative_path", relative),
+                    );
+                }
             } else {
                 report.findings.push(
                     IntegrityFinding::new(
@@ -1022,7 +788,7 @@ fn bounded_files(
             }
         }
     }
-    Ok(files)
+    Ok(())
 }
 
 fn valid_scan_fingerprint(value: &str) -> bool {
@@ -1038,17 +804,18 @@ fn valid_scan_fingerprint(value: &str) -> bool {
         && perceptual.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-fn fingerprint_format_hint(value: &str) -> String {
+fn fingerprint_hint(value: &str) -> String {
     if value.is_empty() {
         "empty".to_string()
-    } else if value.len() > 128 {
-        format!("prefix={:?};length={}", &value[..64], value.len())
+    } else if value.chars().count() > 128 {
+        let prefix = value.chars().take(64).collect::<String>();
+        format!("prefix={prefix:?};chars={}", value.chars().count())
     } else {
         value.to_string()
     }
 }
 
-fn normalize_relative_path(value: &str) -> String {
+fn normalize_relative(value: &str) -> String {
     value.replace('\\', "/")
 }
 
@@ -1066,7 +833,7 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     format!("{:x}", digest.finalize())
 }
 
-fn integrity_request_error(code: &'static str, message: impl Into<String>) -> A2dError {
+fn request_error(code: &'static str, message: impl Into<String>) -> A2dError {
     A2dError::new(
         ErrorCode::new(code),
         ErrorCategory::Validation,
@@ -1077,7 +844,7 @@ fn integrity_request_error(code: &'static str, message: impl Into<String>) -> A2
     )
 }
 
-fn integrity_limit_error(message: impl Into<String>) -> A2dError {
+fn limit_error(message: impl Into<String>) -> A2dError {
     A2dError::new(
         ErrorCode::new("STORAGE_INTEGRITY_LIMIT_EXCEEDED"),
         ErrorCategory::Validation,
@@ -1090,51 +857,22 @@ fn integrity_limit_error(message: impl Into<String>) -> A2dError {
 
 #[cfg(test)]
 mod tests {
-    use a2d_domain::{
-        Asset, AssetId, AssetKind, EncryptionState, PageId, system_now_ms,
-    };
+    use a2d_domain::{Asset, AssetId, AssetKind, EncryptionState, PageId, system_now_ms};
 
     use super::*;
     use crate::AssetRepository;
 
-    fn test_root(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
+    fn open_storage(name: &str) -> (Storage, PathBuf) {
+        let root = std::env::temp_dir().join(format!(
             "a2d-integrity-{name}-{}",
             PageId::generate()
-        ))
-    }
-
-    fn open_storage(name: &str) -> (Storage, PathBuf) {
-        let root = test_root(name);
+        ));
         std::fs::create_dir_all(&root).unwrap();
         let storage = Storage::open(&root.join("library.sqlite")).unwrap();
         (storage, root)
     }
 
-    fn asset_row(root: &Path, bytes: &[u8], recorded_hash: String) -> Asset {
-        let id = AssetId::generate();
-        let relative_path = format!("assets/originals/{id}");
-        let path = root.join(&relative_path);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, bytes).unwrap();
-        Asset::new(
-            id,
-            AssetKind::Original,
-            relative_path,
-            "image/jpeg".to_string(),
-            bytes.len() as u64,
-            recorded_hash,
-            system_now_ms().unwrap(),
-            true,
-            EncryptionState::Plaintext,
-        )
-    }
-
-    fn run(
-        storage: &Storage,
-        root: &Path,
-        verify_hashes: bool,
-    ) -> IntegrityCheckOutcome {
+    fn run(storage: &Storage, root: &Path, verify_hashes: bool) -> IntegrityCheckOutcome {
         storage
             .check_integrity(
                 root,
@@ -1145,6 +883,25 @@ mod tests {
                 &IntegrityCancellation::active(),
             )
             .unwrap()
+    }
+
+    fn asset(root: &Path, bytes: &[u8], hash: String) -> Asset {
+        let id = AssetId::generate();
+        let relative_path = format!("assets/originals/{id}");
+        let path = root.join(&relative_path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, bytes).unwrap();
+        Asset::new(
+            id,
+            AssetKind::Original,
+            relative_path,
+            "image/jpeg".to_string(),
+            bytes.len() as u64,
+            hash,
+            system_now_ms().unwrap(),
+            true,
+            EncryptionState::Plaintext,
+        )
     }
 
     #[test]
@@ -1161,11 +918,12 @@ mod tests {
     fn missing_asset_file_is_reported() {
         let (storage, root) = open_storage("missing");
         let id = AssetId::generate();
+        let expected_id = id.to_string();
         storage
             .insert_asset(&Asset::new(
-                id.clone(),
+                id,
                 AssetKind::Original,
-                format!("assets/originals/{id}"),
+                format!("assets/originals/{expected_id}"),
                 "image/jpeg".to_string(),
                 1,
                 sha256_bytes(b"x"),
@@ -1179,7 +937,7 @@ mod tests {
         };
         assert!(report.findings.iter().any(|finding| {
             finding.code == "INTEGRITY_ASSET_FILE_MISSING"
-                && finding.affected_id.as_deref() == Some(id.to_string().as_str())
+                && finding.affected_id.as_deref() == Some(expected_id.as_str())
         }));
         std::fs::remove_dir_all(root).ok();
     }
@@ -1187,7 +945,7 @@ mod tests {
     #[test]
     fn hash_mismatch_is_reported_only_when_requested() {
         let (storage, root) = open_storage("hash");
-        let asset = asset_row(&root, b"actual", sha256_bytes(b"different"));
+        let asset = asset(&root, b"actual", sha256_bytes(b"different"));
         storage.insert_asset(&asset).unwrap();
         let IntegrityCheckOutcome::Completed(report) = run(&storage, &root, true) else {
             panic!("check was unexpectedly cancelled")
@@ -1203,7 +961,7 @@ mod tests {
 
     #[test]
     fn orphan_final_asset_is_reported_without_deletion() {
-        let (storage, root) = open_storage("orphan-final");
+        let (storage, root) = open_storage("orphan");
         let path = root.join("assets/originals/orphan");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, b"orphan").unwrap();
@@ -1221,18 +979,21 @@ mod tests {
     }
 
     #[test]
-    fn foreign_key_violation_fixture_is_reported() {
+    fn foreign_key_violation_is_reported() {
         let (storage, root) = open_storage("foreign-key");
-        storage.conn.pragma_update(None, "foreign_keys", false).unwrap();
+        storage
+            .conn
+            .pragma_update(None, "foreign_keys", false)
+            .unwrap();
         storage
             .conn
             .execute(
                 "INSERT INTO pages (
-                    id, kind, notebook_id, notebook_design_id, logical_page_number,
-                    smart_page_id, page_set_id, visible_page_number, layout_id, title,
-                    state, preferred_scan_id, generated_pdf_asset_id, created_at_ms, updated_at_ms
-                 ) VALUES (?1, 'notebook_page', ?2, ?3, 1, NULL, NULL, NULL,
-                           'USLETTER-LINED', NULL, 'Unscanned', NULL, NULL, 1, 1)",
+                    id,kind,notebook_id,notebook_design_id,logical_page_number,
+                    smart_page_id,page_set_id,visible_page_number,layout_id,title,state,
+                    preferred_scan_id,generated_pdf_asset_id,created_at_ms,updated_at_ms
+                 ) VALUES (?1,'notebook_page',?2,?3,1,NULL,NULL,NULL,
+                           'USLETTER-LINED',NULL,'Unscanned',NULL,NULL,1,1)",
                 rusqlite::params![
                     PageId::generate().to_string(),
                     "00000000000000000000000000",
@@ -1240,7 +1001,10 @@ mod tests {
                 ],
             )
             .unwrap();
-        storage.conn.pragma_update(None, "foreign_keys", true).unwrap();
+        storage
+            .conn
+            .pragma_update(None, "foreign_keys", true)
+            .unwrap();
         let IntegrityCheckOutcome::Completed(report) = run(&storage, &root, false) else {
             panic!("check was unexpectedly cancelled")
         };
@@ -1254,16 +1018,12 @@ mod tests {
     }
 
     #[test]
-    fn cancellation_is_a_distinct_outcome() {
+    fn cancellation_is_distinct() {
         let (storage, root) = open_storage("cancel");
         let cancellation = IntegrityCancellation::active();
         cancellation.cancel();
         let outcome = storage
-            .check_integrity(
-                &root,
-                IntegrityCheckOptions::default(),
-                &cancellation,
-            )
+            .check_integrity(&root, IntegrityCheckOptions::default(), &cancellation)
             .unwrap();
         assert!(matches!(outcome, IntegrityCheckOutcome::Cancelled(_)));
         std::fs::remove_dir_all(root).ok();
