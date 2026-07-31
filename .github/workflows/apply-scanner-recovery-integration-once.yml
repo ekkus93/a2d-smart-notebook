@@ -1,0 +1,379 @@
+name: Apply scanner recovery integration once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-scanner-recovery-integration-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-scanner-recovery-integration-once
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply bounded recovery integration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:100]!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          # Storage: exact recovery-token lookup through normally decoded scan rows.
+          replace_once(
+              'crates/a2d-storage/src/repository/capture.rs',
+              '''pub trait ScanRepository {
+              fn insert_scan(&self, scan: &Scan) -> Result<(), A2dError>;
+              fn get_scan(&self, id: &ScanId) -> Result<Option<Scan>, A2dError>;
+          }
+          ''',
+              '''pub trait ScanRepository {
+              fn insert_scan(&self, scan: &Scan) -> Result<(), A2dError>;
+              fn get_scan(&self, id: &ScanId) -> Result<Option<Scan>, A2dError>;
+              fn find_scan_by_recovery_token(
+                  &self,
+                  page_id: &PageId,
+                  token: &str,
+              ) -> Result<Option<Scan>, A2dError>;
+          }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-storage/src/repository/capture.rs',
+              '''        .transpose()
+              }
+          }
+
+          fn capture_source_to_str''',
+              '''        .transpose()
+              }
+
+              fn find_scan_by_recovery_token(
+                  &self,
+                  page_id: &PageId,
+                  token: &str,
+              ) -> Result<Option<Scan>, A2dError> {
+                  let marker = format!("recovery-token={token}");
+                  let mut statement = self
+                      .prepare(
+                          "SELECT id, content_fingerprint FROM scans WHERE page_id = ?1 \
+                           ORDER BY captured_at_ms ASC, id ASC",
+                      )
+                      .map_err(|error| map_sql_error("find_scan_by_recovery_token.prepare", error))?;
+                  let rows = statement
+                      .query_map([page_id.to_string()], |row| {
+                          Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                      })
+                      .map_err(|error| map_sql_error("find_scan_by_recovery_token.query", error))?;
+                  let mut matching_ids = Vec::new();
+                  for row in rows {
+                      let (id, fingerprint) = row
+                          .map_err(|error| map_sql_error("find_scan_by_recovery_token.row", error))?;
+                      if fingerprint.split(';').any(|part| part == marker.as_str()) {
+                          matching_ids.push(ScanId::parse(&id)?);
+                      }
+                  }
+                  drop(statement);
+                  match matching_ids.as_slice() {
+                      [] => Ok(None),
+                      [id] => self.get_scan(id),
+                      _ => Err(A2dError::new(
+                          ErrorCode::new("STORAGE_SCANNER_RECOVERY_SCAN_DUPLICATE"),
+                          ErrorCategory::Integrity,
+                          ErrorSeverity::Critical,
+                          "error.storage.scanner_recovery_scan_duplicate",
+                          "multiple scans contain the same scanner recovery token",
+                          false,
+                      )
+                      .with_detail("page_id", page_id.to_string())
+                      .with_detail("recovery_token", token)
+                      .with_detail("matching_scan_count", matching_ids.len().to_string())),
+                  }
+              }
+          }
+
+          fn capture_source_to_str''',
+          )
+
+          # Core recovery: reconcile Registering by checking the committed scan fingerprint.
+          replace_once(
+              'crates/a2d-core/src/scanner_recovery.rs',
+              '''use serde_json::{Value, json};
+
+          use super::A2dCore;
+          ''',
+              '''use serde_json::{Value, json};
+
+          use a2d_storage::ScanRepository;
+
+          use super::A2dCore;
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/scanner_recovery.rs',
+              '''    pub fn discard_scanner_recovery(&self, token: &str) -> Result<(), A2dError> {
+          ''',
+              '''    pub fn reconcile_scanner_recovery(
+                  &self,
+                  token: &str,
+              ) -> Result<ScannerRecoveryRecord, A2dError> {
+                  let mut record = self.read_scanner_recovery(token)?;
+                  if record.phase != ScannerRecoveryPhase::Registering {
+                      return Ok(record);
+                  }
+                  let committed_scan = {
+                      let storage = self.lock_storage()?;
+                      storage.find_scan_by_recovery_token(&record.page_id, token)?
+                  };
+                  match committed_scan {
+                      Some(scan) => {
+                          record.phase = ScannerRecoveryPhase::Committed;
+                          record.registered_scan_id = Some(scan.id().clone());
+                      }
+                      None => {
+                          record.phase = ScannerRecoveryPhase::PreviewReady;
+                          record.registered_scan_id = None;
+                      }
+                  }
+                  record.updated_at_ms = system_now_ms()?;
+                  self.replace_scanner_recovery(&record)?;
+                  Ok(record)
+              }
+
+              pub fn discard_scanner_recovery(&self, token: &str) -> Result<(), A2dError> {
+          ''',
+          )
+
+          # Registration: bind a reviewed recovery token to the irreversible workflow.
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''    pub preview_warnings: Vec<String>,
+              pub user_approved: bool,
+          ''',
+              '''    pub preview_warnings: Vec<String>,
+              pub recovery_token: Option<String>,
+              pub user_approved: bool,
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''    StagingCleanupPending,
+          }
+          ''',
+              '''    StagingCleanupPending,
+              ScannerRecoveryReconciliationPending,
+          }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''            Self::StagingCleanupPending => "STAGING_CLEANUP_PENDING",
+          ''',
+              '''            Self::StagingCleanupPending => "STAGING_CLEANUP_PENDING",
+                      Self::ScannerRecoveryReconciliationPending => {
+                          "SCANNER_RECOVERY_RECONCILIATION_PENDING"
+                      }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''    RemoveStagingFile,
+          }
+          ''',
+              '''    RemoveStagingFile,
+              ReconcileScannerRecovery,
+          }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''        let scan_id = ScanId::try_generate()?;
+          ''',
+              '''        if let Some(token) = request.recovery_token.as_deref() {
+                  let notebook_id = request.active_notebook_id.as_ref().ok_or_else(|| {
+                      registration_error(
+                          "CORE_SCAN_RECOVERY_NOTEBOOK_REQUIRED",
+                          ErrorCategory::Identity,
+                          "scanner recovery is currently supported only for Notebook Page scans",
+                      )
+                  })?;
+                  self.mark_scanner_recovery_registering(
+                      token,
+                      &staged.canonical_path,
+                      &request.expected_page_id,
+                      notebook_id,
+                      &scan_policy.layout_id,
+                      scan_policy.policy_version,
+                  )?;
+              }
+
+              let scan_id = ScanId::try_generate()?;
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''        let scan = Scan::new(
+          ''',
+              '''        let mut content_fingerprint = format!(
+                  "scan-content-v1;corrected-sha256={};perceptual={}",
+                  corrected.sha256,
+                  processed.perceptual_fingerprint.encode()
+              );
+              if let Some(token) = request.recovery_token.as_deref() {
+                  content_fingerprint.push_str(";recovery-token=");
+                  content_fingerprint.push_str(token);
+              }
+
+              let scan = Scan::new(
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''            None,
+                      format!(
+                          "scan-content-v1;corrected-sha256={};perceptual={}",
+                          corrected.sha256,
+                          processed.perceptual_fingerprint.encode()
+                      ),
+                  );
+          ''',
+              '''            None,
+                      content_fingerprint,
+                  );
+          ''',
+          )
+          replace_once(
+              'crates/a2d-core/src/milestone9.rs',
+              '''        let mut required_actions = Vec::new();
+          ''',
+              '''        let recovery_reconciliation_pending = request
+                  .recovery_token
+                  .as_deref()
+                  .is_some_and(|token| self.mark_scanner_recovery_committed(token, scan.id()).is_err());
+
+              let mut required_actions = Vec::new();
+              if recovery_reconciliation_pending {
+                  warnings.insert(RegistrationWarning::ScannerRecoveryReconciliationPending);
+                  required_actions.push(RegistrationRequiredAction::ReconcileScannerRecovery);
+              }
+          ''',
+          )
+
+          # Existing core registration tests are intentionally non-recoverable unless they opt in.
+          tests = Path('crates/a2d-core/src/milestone9_tests.rs')
+          text = tests.read_text()
+          updated, count = re.subn(
+              r'(\n\s*)user_approved:',
+              r'\1recovery_token: None,\1user_approved:',
+              text,
+          )
+          if count == 0:
+              raise SystemExit('milestone9_tests.rs: no RegisterScanRequest initializers found')
+          tests.write_text(updated)
+
+          # FFI projection and result enums.
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '''    pub preview_warnings: Vec<String>,
+              pub user_approved: bool,
+          ''',
+              '''    pub preview_warnings: Vec<String>,
+              pub recovery_token: Option<String>,
+              pub user_approved: bool,
+          ''',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '''    StagingCleanupPending,
+          }
+          ''',
+              '''    StagingCleanupPending,
+              ScannerRecoveryReconciliationPending,
+          }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '''            core::RegistrationWarning::StagingCleanupPending => Self::StagingCleanupPending,
+          ''',
+              '''            core::RegistrationWarning::StagingCleanupPending => Self::StagingCleanupPending,
+                      core::RegistrationWarning::ScannerRecoveryReconciliationPending => {
+                          Self::ScannerRecoveryReconciliationPending
+                      }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '''    RemoveStagingFile,
+          }
+          ''',
+              '''    RemoveStagingFile,
+              ReconcileScannerRecovery,
+          }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '''            core::RegistrationRequiredAction::RemoveStagingFile => Self::RemoveStagingFile,
+          ''',
+              '''            core::RegistrationRequiredAction::RemoveStagingFile => Self::RemoveStagingFile,
+                      core::RegistrationRequiredAction::ReconcileScannerRecovery => {
+                          Self::ReconcileScannerRecovery
+                      }
+          ''',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/milestone9.rs',
+              '''                preview_warnings,
+                          user_approved: request.user_approved,
+          ''',
+              '''                preview_warnings,
+                          recovery_token: request.recovery_token,
+                          user_approved: request.user_approved,
+          ''',
+          )
+          replace_once(
+              'crates/a2d-ffi/src/scanner_recovery.rs',
+              '''    pub fn discard_scanner_recovery(&self, token: String) -> Result<(), A2dFfiError> {
+          ''',
+              '''    pub fn reconcile_scanner_recovery(
+                  &self,
+                  token: String,
+              ) -> Result<ScannerRecoveryRecord, A2dFfiError> {
+                  self.core
+                      .reconcile_scanner_recovery(&token)
+                      .map(Into::into)
+                      .map_err(Into::into)
+              }
+
+              pub fn discard_scanner_recovery(&self, token: String) -> Result<(), A2dFfiError> {
+          ''',
+          )
+
+          # Remove temporary formatting workflow after its canonical commit landed.
+          Path('.github/workflows/apply-rustfmt-once.yml').unlink(missing_ok=True)
+          PY
+          cargo fmt
+          git diff --check
+      - name: Commit integrated recovery protocol
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Integrate scanner recovery with durable registration'
+          git push origin HEAD:master
