@@ -170,7 +170,7 @@ mod tests {
         assert_eq!(created.page_id, page_id);
         assert_eq!(created.notebook_id, notebook_id);
         assert_eq!(created.phase, ScannerRecoveryPhase::Captured);
-        assert_eq!(client.list_scannerRecoveriesCompat(), vec![created]);
+        assert_eq!(client.list_scanner_recoveries().unwrap(), vec![created]);
         client
             .mark_scanner_recovery_preview_ready("ffi-recovery".to_string())
             .unwrap();
@@ -180,17 +180,5 @@ mod tests {
         assert!(!Path::new(&staging).exists());
         assert!(client.list_scanner_recoveries().unwrap().is_empty());
         std::fs::remove_dir_all(root).ok();
-    }
-}
-
-#[cfg(test)]
-trait ScannerRecoveryTestCompat {
-    fn list_scannerRecoveriesCompat(&self) -> Vec<ScannerRecoveryRecord>;
-}
-
-#[cfg(test)]
-impl ScannerRecoveryTestCompat for A2dClient {
-    fn list_scannerRecoveriesCompat(&self) -> Vec<ScannerRecoveryRecord> {
-        self.list_scanner_recoveries().unwrap()
     }
 }
