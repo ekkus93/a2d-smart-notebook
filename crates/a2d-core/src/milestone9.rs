@@ -359,8 +359,7 @@ impl A2dCore {
             ));
         }
 
-        let scan_policy =
-            self.resolve_stored_scan_processing_policy(&request.expected_page_id)?;
+        let scan_policy = self.resolve_stored_scan_processing_policy(&request.expected_page_id)?;
         let staged = self.read_staged_capture(
             &request.staging_path,
             request.image_format,
@@ -913,7 +912,7 @@ fn process_capture(
         &policy.page_layout,
         policy.rectified_image_size()?,
     )?;
-    let derived = DerivedImagePipeline::new(policy.derived_image_config()?)?.process(
+    let derived = DerivedImagePipeline::new(policy.derived_image_config()?).process(
         &source,
         &rectification,
         &ProcessingCancellation::active(),
