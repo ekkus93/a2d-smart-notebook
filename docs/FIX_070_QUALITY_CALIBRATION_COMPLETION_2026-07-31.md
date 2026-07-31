@@ -1,6 +1,6 @@
 # FIX-070 — Quality Calibration Contract Completion Record
 
-**Status:** Implementation complete; permanent CI validation is being executed on the exact candidate commit before release signoff  
+**Status:** Complete; the exact final commit is required to pass the repository's permanent CI and native-validation workflows before it reaches `master`  
 **Date:** 2026-07-31  
 **Target branch:** `master`  
 **Normative decision:** `docs/decisions/V01_QUALITY_CALIBRATION_CONTRACT.md`
@@ -83,11 +83,20 @@ Android V1 declares provisional synthetic-fixture evidence and keeps automatic c
   - the production calibration composable displays `PROVISIONAL`;
   - synthetic-fixture evidence and `QUALITY_THRESHOLDS_UNCALIBRATED` are visible;
   - production classification is explicitly unavailable;
-  - no calibrated presentation is rendered.
+  - the supported zero-node collection assertion proves that no calibrated presentation is rendered.
+
+## CI-discovered repairs
+
+Permanent CI found and closed two integration defects before signoff:
+
+1. `cargo fmt` identified canonical formatting drift in the four FIX-070 Rust files. The exact formatter output was committed.
+2. The Android emulator source set did not provide Compose's `assertDoesNotExist` extension. The test now uses the supported `onAllNodesWithText(...).assertCountEquals(0)` assertion with the same negative semantic guarantee.
+
+A temporary branch-only workflow helper was used to commit the exact rustfmt output. It was then removed, and `.github/workflows/ci.yml` was restored byte-for-byte before the final candidate was tested. No workflow change is part of FIX-070's final tree.
 
 ## Permanent validation contract
 
-The permanent `.github/workflows/ci.yml` workflow must pass on the exact final FIX-070 candidate commit:
+The exact final FIX-070 commit must pass all checks attached to that commit from the unchanged permanent workflows:
 
 ```text
 cargo fmt --check
@@ -96,7 +105,10 @@ cargo test --workspace --all-features
 cargo deny check
 ./gradlew lint test assembleDebug --no-daemon
 Kotlin UniFFI binding drift check
-Android emulator scanner/presentation suite
+Android emulator scanner/presentation/recovery/panic-containment suite
+Synthetic fixture regeneration and drift checks
+Official detector and Android native ABI validation
+Future iOS native compile feasibility
 ```
 
-Validation uses the repository's permanent pull-request workflow without modifying `.github/workflows/ci.yml`. The candidate may be fast-forwarded to `master` only after every required job passes on that exact commit.
+The validated commit may be fast-forwarded to `master` only after every required job succeeds. GitHub's checks attached to the final commit are the authoritative execution evidence; this document records the contract and repair history without embedding a stale self-referential commit SHA.
