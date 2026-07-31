@@ -12,7 +12,7 @@ import uniffi.a2d_ffi.A2dClient
  * from the stored-policy identity issued for the current scanner session.
  */
 @Suppress("UnusedReceiverParameter")
-fun A2dClient.processPagePreview(
+internal fun A2dClient.processPagePreview(
     request: PagePreviewProcessingRequest,
     cancellation: PagePreviewCancellation,
 ): PagePreviewProcessingOutcome {
