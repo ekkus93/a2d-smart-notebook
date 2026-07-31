@@ -7,7 +7,10 @@ use a2d_domain::{
     SmartPageId, TrimSizeMm, TrustState,
 };
 use a2d_identity::PageCode;
-use a2d_image::{AprilTagDetector, DetectorConfig};
+use a2d_image::{
+    AprilTagDetector, DetectorConfig, QualityCalibrationState, QualityThresholdEvidence,
+    QUALITY_THRESHOLDS_UNCALIBRATED,
+};
 use a2d_layout::{
     MarkerRole, PageLayout, PaperSize, SmartPageStyle, smart_page_layout, writable_page_layout,
 };
@@ -204,30 +207,89 @@ fn request(
 }
 
 #[test]
-fn first_registration_commits_assets_scan_and_preferred_page_atomically() {
+fn first_registration_preserves_assets_and_metrics_without_claiming_calibrated_acceptance() {
     let (core, root, page_id, notebook_id, payload) = test_core();
     let request = request(&root, page_id.clone(), notebook_id, payload, "first.png");
     let staging = PathBuf::from(&request.staging_path);
     let registered = core.register_scan(request).unwrap();
     assert!(registered.preferred);
+    assert_eq!(registered.quality_status, QualityStatus::NeedsReview);
     assert!(matches!(
-        registered.quality_status,
+        registered.quality.provisional_status,
         QualityStatus::Accepted | QualityStatus::AcceptedWithWarnings
     ));
+    assert_eq!(registered.quality.production_status, None);
+    assert_eq!(
+        registered.quality.calibration.calibration_state,
+        QualityCalibrationState::Provisional
+    );
+    assert_eq!(
+        registered.quality.calibration.threshold_evidence,
+        QualityThresholdEvidence::SyntheticFixtureRegression
+    );
+    assert_eq!(registered.quality.calibration.threshold_policy_version, 1);
+    assert_eq!(
+        registered.quality.calibration.physical_calibration_version,
+        None
+    );
+    assert_eq!(
+        registered.quality.warning_code.as_deref(),
+        Some(QUALITY_THRESHOLDS_UNCALIBRATED)
+    );
+    assert!(registered.quality.metrics.exposure.mean_luminance.is_finite());
+    assert!(
+        registered
+            .quality
+            .metrics
+            .exposure
+            .luminance_standard_deviation
+            .is_finite()
+    );
+    assert!(registered.quality.metrics.exposure.dark_fraction.is_finite());
+    assert!(
+        registered
+            .quality
+            .metrics
+            .exposure
+            .highlight_fraction
+            .is_finite()
+    );
+    assert!(
+        registered
+            .quality
+            .metrics
+            .glare
+            .max_tile_highlight_fraction
+            .is_finite()
+    );
     assert!(!staging.exists());
     let storage = core.lock_storage().unwrap();
     let page = storage.get_page(&page_id).unwrap().unwrap();
-    assert_eq!(page.state, PageState::Scanned);
+    assert_eq!(page.state, PageState::NeedsReview);
     assert_eq!(page.preferred_scan_id.as_ref(), Some(&registered.scan_id));
     let scan = storage.get_scan(&registered.scan_id).unwrap().unwrap();
     assert!(scan.preferred);
+    assert_eq!(scan.quality_status, QualityStatus::NeedsReview);
+    assert!(
+        scan.warnings
+            .iter()
+            .any(|warning| warning == QUALITY_THRESHOLDS_UNCALIBRATED)
+    );
     assert!(
         scan.pipeline_version
             .starts_with("image-pipeline-v1;scan-policy-v1;layout=notebook-design:")
     );
     assert!(
         scan.pipeline_version
-            .ends_with(";marker-family=tagStandard41h12")
+            .contains(";marker-family=tagStandard41h12")
+    );
+    assert!(
+        scan.pipeline_version
+            .contains(";quality-threshold-policy-v1;quality-calibration=Provisional")
+    );
+    assert!(
+        scan.pipeline_version
+            .contains(";quality-evidence=SyntheticFixtureRegression")
     );
     assert!(
         scan.content_fingerprint
@@ -312,7 +374,13 @@ fn a4_smart_page_registration_uses_a4_rectification_dimensions() {
         .unwrap();
     assert_eq!(
         scan.pipeline_version,
-        "image-pipeline-v1;scan-policy-v1;layout=SP-A4-BLANK-V1;marker-family=tagStandard41h12"
+        "image-pipeline-v1;scan-policy-v1;layout=SP-A4-BLANK-V1;marker-family=tagStandard41h12;quality-threshold-policy-v1;quality-calibration=Provisional;quality-evidence=SyntheticFixtureRegression"
+    );
+    assert_eq!(scan.quality_status, QualityStatus::NeedsReview);
+    assert!(
+        scan.warnings
+            .iter()
+            .any(|warning| warning == QUALITY_THRESHOLDS_UNCALIBRATED)
     );
 
     drop(core);
@@ -342,6 +410,11 @@ fn rescan_preserves_preferred_original_and_requires_review() {
         .unwrap();
     assert!(!second.preferred);
     assert_eq!(second.quality_status, QualityStatus::NeedsReview);
+    assert_eq!(second.quality.production_status, None);
+    assert_eq!(
+        second.quality.warning_code.as_deref(),
+        Some(QUALITY_THRESHOLDS_UNCALIBRATED)
+    );
     assert!(
         second
             .required_actions
