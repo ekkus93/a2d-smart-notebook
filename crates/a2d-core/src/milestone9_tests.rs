@@ -8,8 +8,8 @@ use a2d_domain::{
 };
 use a2d_identity::PageCode;
 use a2d_image::{
-    AprilTagDetector, DetectorConfig, QualityCalibrationState, QualityThresholdEvidence,
-    QUALITY_THRESHOLDS_UNCALIBRATED,
+    AprilTagDetector, DetectorConfig, QUALITY_THRESHOLDS_UNCALIBRATED, QualityCalibrationState,
+    QualityThresholdEvidence,
 };
 use a2d_layout::{
     MarkerRole, PageLayout, PaperSize, SmartPageStyle, smart_page_layout, writable_page_layout,
@@ -236,7 +236,14 @@ fn first_registration_preserves_assets_and_metrics_without_claiming_calibrated_a
         registered.quality.warning_code.as_deref(),
         Some(QUALITY_THRESHOLDS_UNCALIBRATED)
     );
-    assert!(registered.quality.metrics.exposure.mean_luminance.is_finite());
+    assert!(
+        registered
+            .quality
+            .metrics
+            .exposure
+            .mean_luminance
+            .is_finite()
+    );
     assert!(
         registered
             .quality
@@ -245,7 +252,14 @@ fn first_registration_preserves_assets_and_metrics_without_claiming_calibrated_a
             .luminance_standard_deviation
             .is_finite()
     );
-    assert!(registered.quality.metrics.exposure.dark_fraction.is_finite());
+    assert!(
+        registered
+            .quality
+            .metrics
+            .exposure
+            .dark_fraction
+            .is_finite()
+    );
     assert!(
         registered
             .quality

@@ -21,8 +21,8 @@ use a2d_identity::PageCode;
 use a2d_image::{
     AprilTagDetector, DerivedImagePipeline, EncodedImage, EncodedImageFormat, GrayQualityMetrics,
     ImageRotation, OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,
-    QualityCalibrationMetadata, RectificationPlan, ResolvedPageMarkers,
-    QUALITY_THRESHOLDS_UNCALIBRATED, measure_gray_quality, resolve_page_markers,
+    QUALITY_THRESHOLDS_UNCALIBRATED, QualityCalibrationMetadata, RectificationPlan,
+    ResolvedPageMarkers, measure_gray_quality, resolve_page_markers,
 };
 use a2d_storage::{
     AssetPersistenceFailureStage, AssetRepository, AuditEventRepository, PageRepository,
@@ -652,11 +652,7 @@ impl A2dCore {
             None,
             content_fingerprint,
         );
-        let audit = scan_audit_event(
-            &scan,
-            request.active_notebook_id.as_ref(),
-            &quality,
-        )?;
+        let audit = scan_audit_event(&scan, request.active_notebook_id.as_ref(), &quality)?;
 
         let transaction_result = storage.transaction(|tx| {
             let current_page = tx.get_page(&request.expected_page_id)?.ok_or_else(|| {
@@ -1275,7 +1271,11 @@ fn scan_audit_event(
     );
     details.insert(
         "quality_max_tile_highlight_fraction".to_string(),
-        quality.metrics.glare.max_tile_highlight_fraction.to_string(),
+        quality
+            .metrics
+            .glare
+            .max_tile_highlight_fraction
+            .to_string(),
     );
     details.insert(
         "quality_populated_tile_count".to_string(),
