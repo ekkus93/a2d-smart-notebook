@@ -216,14 +216,15 @@ mod tests {
     #[test]
     fn one_policy_constructs_all_portable_registration_configs() {
         let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-        let policy = resolve_bundled_scan_processing_policy(
-            &layout.id,
-            SCAN_PROCESSING_POLICY_VERSION,
-        )
-        .unwrap();
+        let policy =
+            resolve_bundled_scan_processing_policy(&layout.id, SCAN_PROCESSING_POLICY_VERSION)
+                .unwrap();
 
         assert_eq!(policy.layout_id, layout.id);
-        assert_eq!((policy.corrected_width, policy.corrected_height), (900, 1_273));
+        assert_eq!(
+            (policy.corrected_width, policy.corrected_height),
+            (900, 1_273)
+        );
         assert_eq!(policy.maximum_encoded_bytes(), 24 * 1024 * 1024);
         assert_eq!(policy.detector_config().thread_count, 1);
         assert_eq!(policy.pipeline_version(), 1);
