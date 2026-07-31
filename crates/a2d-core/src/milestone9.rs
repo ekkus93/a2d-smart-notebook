@@ -19,14 +19,10 @@ use a2d_domain::{
 };
 use a2d_identity::PageCode;
 use a2d_image::{
-    AprilTagDetector, ContrastNormalizationConfig, DerivedImageConfig, DerivedImageLimits,
-    DerivedImagePipeline, DetectorConfig, EncodedImage, EncodedImageFormat, EncodedImageLimits,
-    GrayQualityMetrics, ImageLimits, ImageRotation, LuminanceMeasurementConfig, MarkerFamily,
-    MarkerIdLayout, OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,
-    RectificationLimits, RectificationPlan, RectifiedImageSize, ResolvedPageMarkers,
-    ThumbnailConfig, measure_gray_quality, resolve_page_markers,
+    AprilTagDetector, DerivedImagePipeline, EncodedImage, EncodedImageFormat, GrayQualityMetrics,
+    ImageRotation, OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,
+    RectificationPlan, ResolvedPageMarkers, measure_gray_quality, resolve_page_markers,
 };
-use a2d_layout::ResolvedScanLayout;
 use a2d_storage::{
     AssetPersistenceFailureStage, AssetRepository, AuditEventRepository, PageRepository,
     ScanRepository,
@@ -34,12 +30,8 @@ use a2d_storage::{
 use image::{DynamicImage, GrayImage, ImageFormat, RgbImage};
 use serde_json::json;
 
-use super::{A2dCore, PageResolution};
+use super::{A2dCore, PageResolution, StoredScanProcessingPolicy};
 
-const MAX_ENCODED_BYTES: usize = 24 * 1024 * 1024;
-const MAX_DECODED_PIXELS: u64 = 32_000_000;
-const MAX_DECODED_BYTES: u64 = 96_000_000;
-const PIPELINE_VERSION: u32 = 1;
 const JOURNAL_DIRECTORY: &str = "asset-commit-journals";
 const SCANNER_STAGING_DIRECTORY: &str = "scanner-staging";
 
@@ -367,10 +359,13 @@ impl A2dCore {
             ));
         }
 
+        let scan_policy =
+            self.resolve_stored_scan_processing_policy(&request.expected_page_id)?;
         let staged = self.read_staged_capture(
             &request.staging_path,
             request.image_format,
             request.image_rotation,
+            &scan_policy,
         )?;
         let page_code = a2d_identity::qr::parse(&request.page_code_payload, |_| true)?;
         let resolution = self.resolve_page_code(
@@ -413,21 +408,20 @@ impl A2dCore {
             ));
         }
 
-        let scan_layout = self.resolve_stored_scan_layout(&request.expected_page_id)?;
         let processed = process_capture(
             &staged.bytes,
             request.image_format,
             request.image_rotation,
-            &scan_layout,
+            &scan_policy,
         )
         .map_err(|error| {
             error
-                .with_detail("layout_id", scan_layout.layout_id.to_string())
+                .with_detail("layout_id", scan_policy.layout_id.to_string())
                 .with_detail(
                     "scan_processing_policy_version",
-                    scan_layout.processing_policy_version.to_string(),
+                    scan_policy.policy_version.to_string(),
                 )
-                .with_detail("layout_version", &scan_layout.layout_version)
+                .with_detail("layout_version", &scan_policy.layout_version)
         })?;
         validate_observed_markers(&request.observed_markers, &processed.resolved_markers)?;
         let mut warnings = quality_warnings(&processed);
@@ -444,14 +438,14 @@ impl A2dCore {
                 )
             })?;
         validate_page_target(&page, &page_code, request.active_notebook_id.as_ref())?;
-        if page.layout_id != scan_layout.layout_id {
+        if page.layout_id != scan_policy.layout_id {
             return Err(registration_error(
                 "CORE_SCAN_LAYOUT_CHANGED_DURING_PROCESSING",
                 ErrorCategory::Integrity,
                 "the stored page layout changed while scan processing was in progress",
             )
             .with_detail("page_id", page.id().to_string())
-            .with_detail("processed_layout_id", scan_layout.layout_id.to_string())
+            .with_detail("processed_layout_id", scan_policy.layout_id.to_string())
             .with_detail("current_layout_id", page.layout_id.to_string()));
         }
         if matches!(page.state, PageState::Archived | PageState::Trashed) {
@@ -556,9 +550,9 @@ impl A2dCore {
         let pipeline_version = format!(
             "image-pipeline-v{};scan-policy-v{};layout={};marker-family={}",
             processed.pipeline_version,
-            scan_layout.processing_policy_version,
-            scan_layout.layout_version,
-            scan_layout.marker_family
+            scan_policy.policy_version,
+            scan_policy.layout_version,
+            scan_policy.marker_family
         );
 
         let scan = Scan::new(
@@ -600,14 +594,14 @@ impl A2dCore {
                 &page_code,
                 request.active_notebook_id.as_ref(),
             )?;
-            if current_page.layout_id != scan_layout.layout_id {
+            if current_page.layout_id != scan_policy.layout_id {
                 return Err(registration_error(
                     "CORE_SCAN_LAYOUT_CHANGED_BEFORE_COMMIT",
                     ErrorCategory::Integrity,
                     "the stored page layout changed before the registration transaction committed",
                 )
                 .with_detail("page_id", current_page.id().to_string())
-                .with_detail("processed_layout_id", scan_layout.layout_id.to_string())
+                .with_detail("processed_layout_id", scan_policy.layout_id.to_string())
                 .with_detail("current_layout_id", current_page.layout_id.to_string()));
             }
             if current_page.preferred_scan_id != existing_preferred {
@@ -694,6 +688,7 @@ impl A2dCore {
         staging_path: &str,
         format: ScanImageFormat,
         rotation: ScanImageRotation,
+        policy: &StoredScanProcessingPolicy,
     ) -> Result<StagedCapture, A2dError> {
         if staging_path.trim().is_empty() {
             return Err(registration_error(
@@ -767,12 +762,13 @@ impl A2dCore {
                 format!("failed to read staging metadata: {error}"),
             )
         })?;
-        if before.len() == 0 || before.len() > MAX_ENCODED_BYTES as u64 {
+        let maximum_encoded_bytes = policy.maximum_encoded_bytes();
+        if before.len() == 0 || before.len() > maximum_encoded_bytes as u64 {
             return Err(registration_error(
                 "CORE_SCAN_STAGING_SIZE_INVALID",
                 ErrorCategory::Validation,
                 format!(
-                    "staging image must contain 1..={MAX_ENCODED_BYTES} bytes, got {}",
+                    "staging image must contain 1..={maximum_encoded_bytes} bytes, got {}",
                     before.len()
                 ),
             ));
@@ -812,7 +808,7 @@ impl A2dCore {
             &bytes,
             format.encoded(),
             rotation.image(),
-            EncodedImageLimits::new(MAX_ENCODED_BYTES, MAX_DECODED_PIXELS, MAX_DECODED_BYTES)?,
+            policy.encoded_image_limits()?,
         )?;
         Ok(StagedCapture {
             canonical_path,
@@ -893,63 +889,35 @@ fn process_capture(
     encoded_bytes: &[u8],
     format: ScanImageFormat,
     rotation: ScanImageRotation,
-    scan_layout: &ResolvedScanLayout,
+    policy: &StoredScanProcessingPolicy,
 ) -> Result<ProcessedCapture, A2dError> {
-    if scan_layout.marker_family != MarkerFamily::TagStandard41h12.as_str() {
-        return Err(registration_error(
-            "CORE_SCAN_MARKER_FAMILY_UNSUPPORTED",
-            ErrorCategory::UnsupportedFormat,
-            "the resolved page layout requires a marker family this build cannot detect",
-        )
-        .with_detail("marker_family", &scan_layout.marker_family)
-        .with_detail("layout_id", scan_layout.layout_id.to_string()));
-    }
-    let image_limits = ImageLimits::new(MAX_DECODED_PIXELS)?;
+    let image_limits = policy.image_limits()?;
     let source = EncodedImage::new(
         encoded_bytes,
         format.encoded(),
         rotation.image(),
-        EncodedImageLimits::new(MAX_ENCODED_BYTES, MAX_DECODED_PIXELS, MAX_DECODED_BYTES)?,
+        policy.encoded_image_limits()?,
     )?
     .decode_rgb8()?;
     let gray = source.clone().into_gray8(image_limits)?;
     let frame = gray.as_frame(image_limits)?;
-    let quality = measure_gray_quality(frame, LuminanceMeasurementConfig::new(32, 245, 8, 8)?)?;
-    let mut detector = AprilTagDetector::new(DetectorConfig {
-        thread_count: 1,
-        quad_decimate: 2.0,
-        quad_sigma: 0.0,
-        refine_edges: true,
-        decode_sharpening: 0.25,
-        bits_corrected: 2,
-    })?;
+    let quality = measure_gray_quality(frame, policy.quality_measurement_config()?)?;
+    let mut detector = AprilTagDetector::new(policy.detector_config())?;
     let detections = detector.detect(frame)?;
-    let marker_layout = MarkerIdLayout::new(
-        scan_layout
-            .marker_roles
-            .iter()
-            .map(|marker| (marker.marker_id, marker.role)),
-    )?;
+    let marker_layout = policy.marker_id_layout()?;
     let resolved_markers = resolve_page_markers(&detections, &marker_layout)?;
     let rectification = RectificationPlan::from_page_markers(
         source.width(),
         source.height(),
         &resolved_markers,
-        &scan_layout.page_layout,
-        RectifiedImageSize::new(
-            scan_layout.corrected_width,
-            scan_layout.corrected_height,
-            RectificationLimits::new(2_000_000, 6_000_000)?,
-        )?,
+        &policy.page_layout,
+        policy.rectified_image_size()?,
     )?;
-    let derived = DerivedImagePipeline::new(DerivedImageConfig::new(
-        PIPELINE_VERSION,
-        ContrastNormalizationConfig::new(10_000, 990_000, 2.0)?,
-        None,
-        ThumbnailConfig::new(480, 480)?,
-        DerivedImageLimits::new(2_000_000, 6_000_000, 12_000_000, 96_000_000)?,
-    )?)
-    .process(&source, &rectification, &ProcessingCancellation::active())?;
+    let derived = DerivedImagePipeline::new(policy.derived_image_config()?)?.process(
+        &source,
+        &rectification,
+        &ProcessingCancellation::active(),
+    )?;
     let perceptual_fingerprint = PerceptualFingerprintV1::from_gray_image(&derived.ocr_optimized)?;
 
     Ok(ProcessedCapture {
