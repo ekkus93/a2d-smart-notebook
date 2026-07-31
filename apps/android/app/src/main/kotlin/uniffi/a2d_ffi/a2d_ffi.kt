@@ -673,6 +673,8 @@ internal object IntegrityCheckingUniffiLib {
         uniffiCheckContractApiVersion(this)
         uniffiCheckApiChecksums(this)
     }
+    external fun uniffi_a2d_ffi_checksum_func_smart_page_generation_policy(
+    ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_generate_example_notebook_page_qr_payload(
     ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_generate_example_notebook_setup_qr_payload(
@@ -710,6 +712,18 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_register_scan(
     ): Int
     external fun uniffi_a2d_ffi_checksum_method_a2dclient_compare_stored_scans(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_acknowledge_committed_scanner_recovery(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_begin_scanner_recovery(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_discard_scanner_recovery(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_list_scanner_recoveries(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_mark_scanner_recovery_preview_ready(
+    ): Int
+    external fun uniffi_a2d_ffi_checksum_method_a2dclient_reconcile_scanner_recovery(
     ): Int
     external fun uniffi_a2d_ffi_checksum_constructor_a2dclient_open(
     ): Int
@@ -774,6 +788,20 @@ internal object UniffiLib {
     external fun uniffi_a2d_ffi_fn_method_a2dclient_register_scan(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_a2d_ffi_fn_method_a2dclient_compare_stored_scans(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_acknowledge_committed_scanner_recovery(`ptr`: Long,`token`: RustBuffer.ByValue,`scanId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_begin_scanner_recovery(`ptr`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_discard_scanner_recovery(`ptr`: Long,`token`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_list_scanner_recoveries(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_mark_scanner_recovery_preview_ready(`ptr`: Long,`token`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_method_a2dclient_reconcile_scanner_recovery(`ptr`: Long,`token`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_a2d_ffi_fn_func_smart_page_generation_policy(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_a2d_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -894,6 +922,9 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if (lib.uniffi_a2d_ffi_checksum_func_smart_page_generation_policy() != 12008) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_generate_example_notebook_page_qr_payload() != 60115) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -949,6 +980,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_compare_stored_scans() != 44061) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_acknowledge_committed_scanner_recovery() != 28119) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_begin_scanner_recovery() != 62630) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_discard_scanner_recovery() != 30292) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_list_scanner_recoveries() != 36212) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_mark_scanner_recovery_preview_ready() != 21666) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_reconcile_scanner_recovery() != 36037) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_constructor_a2dclient_open() != 8661) {
@@ -1442,6 +1491,18 @@ public interface A2dClientInterface {
     
     fun `compareStoredScans`(`request`: CompareStoredScansRequest): StoredScanComparisonEvidence
     
+    fun `acknowledgeCommittedScannerRecovery`(`token`: kotlin.String, `scanId`: kotlin.String)
+    
+    fun `beginScannerRecovery`(`request`: BeginScannerRecoveryRequest): ScannerRecoveryRecord
+    
+    fun `discardScannerRecovery`(`token`: kotlin.String)
+    
+    fun `listScannerRecoveries`(): List<ScannerRecoveryRecord>
+    
+    fun `markScannerRecoveryPreviewReady`(`token`: kotlin.String): ScannerRecoveryRecord
+    
+    fun `reconcileScannerRecovery`(`token`: kotlin.String): ScannerRecoveryRecord
+    
     companion object
 }
 
@@ -1824,6 +1885,94 @@ open class A2dClient: Disposable, AutoCloseable, A2dClientInterface
         it,
         
         FfiConverterTypeCompareStoredScansRequest.lower(`request`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `acknowledgeCommittedScannerRecovery`(`token`: kotlin.String, `scanId`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_acknowledge_committed_scanner_recovery(
+        it,
+        
+        FfiConverterString.lower(`token`),
+        FfiConverterString.lower(`scanId`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `beginScannerRecovery`(`request`: BeginScannerRecoveryRequest): ScannerRecoveryRecord {
+            return FfiConverterTypeScannerRecoveryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_begin_scanner_recovery(
+        it,
+        
+        FfiConverterTypeBeginScannerRecoveryRequest.lower(`request`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `discardScannerRecovery`(`token`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_discard_scanner_recovery(
+        it,
+        
+        FfiConverterString.lower(`token`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `listScannerRecoveries`(): List<ScannerRecoveryRecord> {
+            return FfiConverterSequenceTypeScannerRecoveryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_list_scanner_recoveries(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `markScannerRecoveryPreviewReady`(`token`: kotlin.String): ScannerRecoveryRecord {
+            return FfiConverterTypeScannerRecoveryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_mark_scanner_recovery_preview_ready(
+        it,
+        
+        FfiConverterString.lower(`token`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(A2dFfiException::class)override fun `reconcileScannerRecovery`(`token`: kotlin.String): ScannerRecoveryRecord {
+            return FfiConverterTypeScannerRecoveryRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(A2dFfiException) { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_reconcile_scanner_recovery(
+        it,
+        
+        FfiConverterString.lower(`token`),_status)
 }
     }
     )
@@ -2298,6 +2447,69 @@ public object FfiConverterTypeAnalyzedMarker: FfiConverterRustBuffer<AnalyzedMar
 
 
 
+data class BeginScannerRecoveryRequest (
+    var `token`: kotlin.String
+    , 
+    var `stagingPath`: kotlin.String
+    , 
+    var `pageId`: kotlin.String
+    , 
+    var `notebookId`: kotlin.String
+    , 
+    var `capturedAtMs`: kotlin.Long
+    , 
+    var `layoutId`: kotlin.String
+    , 
+    var `processingPolicyVersion`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBeginScannerRecoveryRequest: FfiConverterRustBuffer<BeginScannerRecoveryRequest> {
+    override fun read(buf: ByteBuffer): BeginScannerRecoveryRequest {
+        return BeginScannerRecoveryRequest(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BeginScannerRecoveryRequest) = (
+            FfiConverterString.allocationSize(value.`token`) +
+            FfiConverterString.allocationSize(value.`stagingPath`) +
+            FfiConverterString.allocationSize(value.`pageId`) +
+            FfiConverterString.allocationSize(value.`notebookId`) +
+            FfiConverterLong.allocationSize(value.`capturedAtMs`) +
+            FfiConverterString.allocationSize(value.`layoutId`) +
+            FfiConverterUInt.allocationSize(value.`processingPolicyVersion`)
+    )
+
+    override fun write(value: BeginScannerRecoveryRequest, buf: ByteBuffer) {
+            FfiConverterString.write(value.`token`, buf)
+            FfiConverterString.write(value.`stagingPath`, buf)
+            FfiConverterString.write(value.`pageId`, buf)
+            FfiConverterString.write(value.`notebookId`, buf)
+            FfiConverterLong.write(value.`capturedAtMs`, buf)
+            FfiConverterString.write(value.`layoutId`, buf)
+            FfiConverterUInt.write(value.`processingPolicyVersion`, buf)
+    }
+}
+
+
+
 data class CompareStoredScansRequest (
     var `baselineScanId`: kotlin.String
     , 
@@ -2721,6 +2933,8 @@ data class RegisterScanRequest (
     , 
     var `previewWarnings`: List<kotlin.String>
     , 
+    var `recoveryToken`: kotlin.String?
+    , 
     var `userApproved`: kotlin.Boolean
     
 ){
@@ -2748,6 +2962,7 @@ public object FfiConverterTypeRegisterScanRequest: FfiConverterRustBuffer<Regist
             FfiConverterLong.read(buf),
             FfiConverterSequenceTypeRegistrationMarker.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
         )
     }
@@ -2763,6 +2978,7 @@ public object FfiConverterTypeRegisterScanRequest: FfiConverterRustBuffer<Regist
             FfiConverterLong.allocationSize(value.`capturedAtMs`) +
             FfiConverterSequenceTypeRegistrationMarker.allocationSize(value.`observedMarkers`) +
             FfiConverterSequenceString.allocationSize(value.`previewWarnings`) +
+            FfiConverterOptionalString.allocationSize(value.`recoveryToken`) +
             FfiConverterBoolean.allocationSize(value.`userApproved`)
     )
 
@@ -2777,6 +2993,7 @@ public object FfiConverterTypeRegisterScanRequest: FfiConverterRustBuffer<Regist
             FfiConverterLong.write(value.`capturedAtMs`, buf)
             FfiConverterSequenceTypeRegistrationMarker.write(value.`observedMarkers`, buf)
             FfiConverterSequenceString.write(value.`previewWarnings`, buf)
+            FfiConverterOptionalString.write(value.`recoveryToken`, buf)
             FfiConverterBoolean.write(value.`userApproved`, buf)
     }
 }
@@ -2914,6 +3131,135 @@ public object FfiConverterTypeRegistrationMarker: FfiConverterRustBuffer<Registr
     override fun write(value: RegistrationMarker, buf: ByteBuffer) {
             FfiConverterString.write(value.`role`, buf)
             FfiConverterUInt.write(value.`id`, buf)
+    }
+}
+
+
+
+data class ScannerRecoveryRecord (
+    var `token`: kotlin.String
+    , 
+    var `stagingPath`: kotlin.String
+    , 
+    var `pageId`: kotlin.String
+    , 
+    var `notebookId`: kotlin.String
+    , 
+    var `capturedAtMs`: kotlin.Long
+    , 
+    var `layoutId`: kotlin.String
+    , 
+    var `processingPolicyVersion`: kotlin.UInt
+    , 
+    var `phase`: ScannerRecoveryPhase
+    , 
+    var `registeredScanId`: kotlin.String?
+    , 
+    var `updatedAtMs`: kotlin.Long
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeScannerRecoveryRecord: FfiConverterRustBuffer<ScannerRecoveryRecord> {
+    override fun read(buf: ByteBuffer): ScannerRecoveryRecord {
+        return ScannerRecoveryRecord(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterTypeScannerRecoveryPhase.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ScannerRecoveryRecord) = (
+            FfiConverterString.allocationSize(value.`token`) +
+            FfiConverterString.allocationSize(value.`stagingPath`) +
+            FfiConverterString.allocationSize(value.`pageId`) +
+            FfiConverterString.allocationSize(value.`notebookId`) +
+            FfiConverterLong.allocationSize(value.`capturedAtMs`) +
+            FfiConverterString.allocationSize(value.`layoutId`) +
+            FfiConverterUInt.allocationSize(value.`processingPolicyVersion`) +
+            FfiConverterTypeScannerRecoveryPhase.allocationSize(value.`phase`) +
+            FfiConverterOptionalString.allocationSize(value.`registeredScanId`) +
+            FfiConverterLong.allocationSize(value.`updatedAtMs`)
+    )
+
+    override fun write(value: ScannerRecoveryRecord, buf: ByteBuffer) {
+            FfiConverterString.write(value.`token`, buf)
+            FfiConverterString.write(value.`stagingPath`, buf)
+            FfiConverterString.write(value.`pageId`, buf)
+            FfiConverterString.write(value.`notebookId`, buf)
+            FfiConverterLong.write(value.`capturedAtMs`, buf)
+            FfiConverterString.write(value.`layoutId`, buf)
+            FfiConverterUInt.write(value.`processingPolicyVersion`, buf)
+            FfiConverterTypeScannerRecoveryPhase.write(value.`phase`, buf)
+            FfiConverterOptionalString.write(value.`registeredScanId`, buf)
+            FfiConverterLong.write(value.`updatedAtMs`, buf)
+    }
+}
+
+
+
+/**
+ * Versioned projection of the resource and wire-format limits enforced by the Rust core.
+ */
+data class SmartPageGenerationPolicy (
+    var `policyVersion`: kotlin.UInt
+    , 
+    var `maximumPageCount`: kotlin.UInt
+    , 
+    var `maximumStartingVisiblePage`: kotlin.UInt
+    , 
+    var `maximumPdfOutputBytes`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSmartPageGenerationPolicy: FfiConverterRustBuffer<SmartPageGenerationPolicy> {
+    override fun read(buf: ByteBuffer): SmartPageGenerationPolicy {
+        return SmartPageGenerationPolicy(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SmartPageGenerationPolicy) = (
+            FfiConverterUInt.allocationSize(value.`policyVersion`) +
+            FfiConverterUInt.allocationSize(value.`maximumPageCount`) +
+            FfiConverterUInt.allocationSize(value.`maximumStartingVisiblePage`) +
+            FfiConverterULong.allocationSize(value.`maximumPdfOutputBytes`)
+    )
+
+    override fun write(value: SmartPageGenerationPolicy, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`policyVersion`, buf)
+            FfiConverterUInt.write(value.`maximumPageCount`, buf)
+            FfiConverterUInt.write(value.`maximumStartingVisiblePage`, buf)
+            FfiConverterULong.write(value.`maximumPdfOutputBytes`, buf)
     }
 }
 
@@ -3591,7 +3937,8 @@ enum class RegisteredScanRequiredAction {
     
     REVIEW_EXISTING_PAGE,
     INSPECT_INCOMPLETE_ASSET_COMMIT,
-    REMOVE_STAGING_FILE;
+    REMOVE_STAGING_FILE,
+    RECONCILE_SCANNER_RECOVERY;
 
     
 
@@ -3633,7 +3980,8 @@ enum class RegisteredScanWarning {
     LOCALIZED_GLARE,
     EXISTING_PAGE_SCAN_REQUIRES_REVIEW,
     ASSET_COMMIT_JOURNAL_CLEANUP_PENDING,
-    STAGING_CLEANUP_PENDING;
+    STAGING_CLEANUP_PENDING,
+    SCANNER_RECOVERY_RECONCILIATION_PENDING;
 
     
 
@@ -3759,6 +4107,42 @@ public object FfiConverterTypeScanCaptureSource: FfiConverterRustBuffer<ScanCapt
     override fun allocationSize(value: ScanCaptureSource) = 4UL
 
     override fun write(value: ScanCaptureSource, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class ScannerRecoveryPhase {
+    
+    CAPTURED,
+    PREVIEW_READY,
+    REGISTERING,
+    COMMITTED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeScannerRecoveryPhase: FfiConverterRustBuffer<ScannerRecoveryPhase> {
+    override fun read(buf: ByteBuffer) = try {
+        ScannerRecoveryPhase.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ScannerRecoveryPhase) = 4UL
+
+    override fun write(value: ScannerRecoveryPhase, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -4337,6 +4721,34 @@ public object FfiConverterSequenceTypeRegistrationMarker: FfiConverterRustBuffer
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeScannerRecoveryRecord: FfiConverterRustBuffer<List<ScannerRecoveryRecord>> {
+    override fun read(buf: ByteBuffer): List<ScannerRecoveryRecord> {
+        val len = buf.getInt()
+        return List<ScannerRecoveryRecord>(len) {
+            FfiConverterTypeScannerRecoveryRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ScannerRecoveryRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeScannerRecoveryRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ScannerRecoveryRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeScannerRecoveryRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeStoredScanChangeRegion: FfiConverterRustBuffer<List<StoredScanChangeRegion>> {
     override fun read(buf: ByteBuffer): List<StoredScanChangeRegion> {
         val len = buf.getInt()
@@ -4469,5 +4881,15 @@ public object FfiConverterSequenceTypeStoredScanComparisonReason: FfiConverterRu
             FfiConverterTypeStoredScanComparisonReason.write(it, buf)
         }
     }
+} fun `smartPageGenerationPolicy`(): SmartPageGenerationPolicy {
+            return FfiConverterTypeSmartPageGenerationPolicy.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_a2d_ffi_fn_func_smart_page_generation_policy(
+    
+        _status)
 }
+    )
+    }
+    
+
 
