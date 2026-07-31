@@ -39,6 +39,23 @@ const DERIVED_MAXIMUM_BYTES_PER_IMAGE: u64 = 6_000_000;
 const DERIVED_MAXIMUM_TOTAL_OUTPUT_BYTES: u64 = 12_000_000;
 const DERIVED_MAXIMUM_WORKING_BYTES: u64 = 96_000_000;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LiveAnalysisPolicyValues {
+    pub maximum_encoded_bytes: u64,
+    pub maximum_decoded_pixels: u64,
+    pub maximum_decoded_bytes: u64,
+    pub detector_thread_count: u32,
+    pub detector_quad_decimate: f64,
+    pub detector_quad_sigma: f64,
+    pub detector_refine_edges: bool,
+    pub detector_decode_sharpening: f64,
+    pub detector_bits_corrected: u32,
+    pub dark_luminance_cutoff: u32,
+    pub highlight_luminance_cutoff: u32,
+    pub quality_tile_columns: u32,
+    pub quality_tile_rows: u32,
+}
+
 #[derive(Clone, Debug)]
 pub struct StoredScanProcessingPolicy {
     pub layout: ResolvedScanLayout,
@@ -84,6 +101,24 @@ impl StoredScanProcessingPolicy {
             layout,
             policy_version: SCAN_PROCESSING_POLICY_VERSION,
         })
+    }
+
+    pub const fn live_analysis_values(&self) -> LiveAnalysisPolicyValues {
+        LiveAnalysisPolicyValues {
+            maximum_encoded_bytes: MAXIMUM_ENCODED_BYTES as u64,
+            maximum_decoded_pixels: MAXIMUM_DECODED_PIXELS,
+            maximum_decoded_bytes: MAXIMUM_DECODED_BYTES,
+            detector_thread_count: DETECTOR_THREAD_COUNT as u32,
+            detector_quad_decimate: DETECTOR_QUAD_DECIMATE as f64,
+            detector_quad_sigma: DETECTOR_QUAD_SIGMA as f64,
+            detector_refine_edges: DETECTOR_REFINE_EDGES,
+            detector_decode_sharpening: DETECTOR_DECODE_SHARPENING,
+            detector_bits_corrected: DETECTOR_BITS_CORRECTED as u32,
+            dark_luminance_cutoff: DARK_LUMINANCE_CUTOFF as u32,
+            highlight_luminance_cutoff: HIGHLIGHT_LUMINANCE_CUTOFF as u32,
+            quality_tile_columns: QUALITY_TILE_COLUMNS as u32,
+            quality_tile_rows: QUALITY_TILE_ROWS as u32,
+        }
     }
 
     pub fn encoded_image_limits(&self) -> Result<EncodedImageLimits, A2dError> {
@@ -228,6 +263,24 @@ mod tests {
         assert_eq!(policy.maximum_encoded_bytes(), 24 * 1024 * 1024);
         assert_eq!(policy.detector_config().thread_count, 1);
         assert_eq!(policy.pipeline_version(), 1);
+        assert_eq!(
+            policy.live_analysis_values(),
+            LiveAnalysisPolicyValues {
+                maximum_encoded_bytes: 24 * 1024 * 1024,
+                maximum_decoded_pixels: 32_000_000,
+                maximum_decoded_bytes: 96_000_000,
+                detector_thread_count: 1,
+                detector_quad_decimate: 2.0,
+                detector_quad_sigma: 0.0,
+                detector_refine_edges: true,
+                detector_decode_sharpening: 0.25,
+                detector_bits_corrected: 2,
+                dark_luminance_cutoff: 32,
+                highlight_luminance_cutoff: 245,
+                quality_tile_columns: 8,
+                quality_tile_rows: 8,
+            }
+        );
         policy.encoded_image_limits().unwrap();
         policy.image_limits().unwrap();
         policy.quality_measurement_config().unwrap();
