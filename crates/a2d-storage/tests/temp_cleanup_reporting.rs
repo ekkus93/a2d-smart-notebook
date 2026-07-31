@@ -45,7 +45,9 @@ fn primary_commit_error_is_preserved_while_cleanup_evidence_is_attached() {
 
     assert!(
         helper.contains("Ok(()) => error")
-            && helper.contains("Err(cleanup_error) if cleanup_error.kind() == io::ErrorKind::NotFound => error")
+            && helper.contains(
+                "Err(cleanup_error) if cleanup_error.kind() == io::ErrorKind::NotFound => error",
+            )
             && helper.contains("Err(cleanup_error) => error"),
         "all cleanup outcomes must augment and return the original primary A2dError",
     );
