@@ -10,6 +10,30 @@ import com.a2d.notebook.rustbridge.EncodedPageRotation
 import uniffi.a2d_ffi.NotebookSummary
 import uniffi.a2d_ffi.PageResolution
 import uniffi.a2d_ffi.RegisteredScan
+import uniffi.a2d_ffi.ScannerRecoveryRecord
+
+enum class ScannerRecoveryPrimaryAction {
+    REVIEW,
+    RECONCILE,
+    ACKNOWLEDGE,
+}
+
+internal fun ScannerRecoveryRecord.primaryAction(): ScannerRecoveryPrimaryAction =
+    when (phase) {
+        uniffi.a2d_ffi.ScannerRecoveryPhase.CAPTURED,
+        uniffi.a2d_ffi.ScannerRecoveryPhase.PREVIEW_READY,
+        -> ScannerRecoveryPrimaryAction.REVIEW
+
+        uniffi.a2d_ffi.ScannerRecoveryPhase.REGISTERING ->
+            ScannerRecoveryPrimaryAction.RECONCILE
+
+        uniffi.a2d_ffi.ScannerRecoveryPhase.COMMITTED ->
+            ScannerRecoveryPrimaryAction.ACKNOWLEDGE
+    }
+
+internal fun ScannerRecoveryRecord.canDiscard(): Boolean =
+    phase == uniffi.a2d_ffi.ScannerRecoveryPhase.CAPTURED ||
+        phase == uniffi.a2d_ffi.ScannerRecoveryPhase.PREVIEW_READY
 
 sealed interface PageCodeUiStatus {
     data object Searching : PageCodeUiStatus
@@ -42,6 +66,7 @@ data class ScannerRgbImage(
 data class SinglePageReviewArtifact(
     val captureRequest: AutoCaptureRequest,
     val stagingPath: String,
+    val recoveryToken: String,
     val pageCodePayload: String?,
     val imageRotation: EncodedPageRotation,
     val capturedAtMs: Long,
@@ -57,6 +82,7 @@ data class SinglePageReviewArtifact(
 ) {
     init {
         require(stagingPath.isNotBlank())
+        require(recoveryToken.isNotBlank())
         require(capturedAtMs > 0L)
         require(!approvalAllowed || !pageCodePayload.isNullOrBlank()) {
             "an approvable review artifact must retain its validated Page Code payload"
@@ -85,6 +111,10 @@ data class SinglePageScannerUiState(
     val reviewArtifact: SinglePageReviewArtifact? = null,
     val registrationInProgress: Boolean = false,
     val registeredScan: RegisteredScan? = null,
+    val scannerRecoveries: List<ScannerRecoveryRecord> = emptyList(),
+    val recoveryLoading: Boolean = true,
+    val recoveryOperationInProgress: Boolean = false,
+    val recoveryMode: Boolean = false,
     val detailsVisible: Boolean = false,
     val cameraGeneration: Long = 0,
     val error: String? = null,
@@ -100,7 +130,9 @@ data class SinglePageScannerUiState(
             activeNotebook != null &&
                 cameraState is CameraAdapterState.Bound &&
                 !processing &&
-                reviewArtifact == null
+                reviewArtifact == null &&
+                scannerRecoveries.isEmpty() &&
+                !recoveryOperationInProgress
 
     val canApprove: Boolean
         get() =
