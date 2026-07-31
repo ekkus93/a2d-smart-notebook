@@ -50,13 +50,6 @@ impl std::fmt::Debug for A2dCore {
     }
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
-
 impl A2dCore {
     /// Opens (creating if necessary) the local library directory, its SQLite database
     /// (`library.sqlite`), and its asset store (`assets/`, `tmp/`).
@@ -97,8 +90,8 @@ impl A2dCore {
         self.library_path.to_string_lossy().into_owned()
     }
 
-    pub fn generate_page_id(&self) -> String {
-        PageId::generate().to_string()
+    pub fn generate_page_id(&self) -> Result<String, A2dError> {
+        PageId::try_generate().map(|id| id.to_string())
     }
 
     pub fn parse_page_id(&self, candidate: &str) -> Result<String, A2dError> {
@@ -181,7 +174,28 @@ impl A2dCore {
         let mut pages = Vec::with_capacity(generated.smart_page_ids.len());
         let mut registered_pages = Vec::with_capacity(generated.smart_page_ids.len());
         for (offset, smart_page_id) in generated.smart_page_ids.into_iter().enumerate() {
-            let visible_number = starting_visible_page + offset as u32;
+            let offset = u32::try_from(offset).map_err(|_| {
+                A2dError::new(
+                    ErrorCode::new("CORE_SMART_PAGE_OFFSET_OVERFLOW"),
+                    ErrorCategory::Validation,
+                    ErrorSeverity::Error,
+                    "error.core.smart_page_request_invalid",
+                    "generated Smart Page offset exceeds the portable u32 representation",
+                    false,
+                )
+            })?;
+            let visible_number = starting_visible_page.checked_add(offset).ok_or_else(|| {
+                A2dError::new(
+                    ErrorCode::new("CORE_SMART_PAGE_VISIBLE_NUMBER_OVERFLOW"),
+                    ErrorCategory::Validation,
+                    ErrorSeverity::Error,
+                    "error.core.smart_page_request_invalid",
+                    "starting visible page plus generated page offset overflowed",
+                    false,
+                )
+                .with_detail("starting_visible_page", starting_visible_page.to_string())
+                .with_detail("offset", offset.to_string())
+            })?;
             let page_id = PageId::try_generate()?;
             let mut page = Page::new(
                 page_id.clone(),
@@ -299,7 +313,7 @@ mod tests {
             library_path: dir.to_string_lossy().into_owned(),
         })
         .unwrap();
-        let generated = core.generate_page_id();
+        let generated = core.generate_page_id().unwrap();
         let parsed = core
             .parse_page_id(&generated)
             .expect("must parse its own output");
