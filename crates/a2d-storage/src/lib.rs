@@ -19,6 +19,7 @@ use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
 mod asset_recovery;
 mod assets;
+mod integrity;
 mod json_columns;
 mod migration_history;
 mod migrations;
@@ -29,6 +30,10 @@ mod workflow;
 
 pub use asset_recovery::{AssetPersistenceFailureStage, OrphanedFinalAsset};
 pub use assets::AssetStore;
+pub use integrity::{
+    IntegrityCancellation, IntegrityCheckOptions, IntegrityCheckOutcome, IntegrityFinding,
+    IntegrityFindingSeverity, IntegrityReport,
+};
 pub use migrations::{MIGRATIONS, Migration};
 pub use preferred_scan::{ChangePreferredScanRequest, ChangePreferredScanResult};
 pub use repository::{
