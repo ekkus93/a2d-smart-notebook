@@ -8,6 +8,10 @@ use a2d_storage::{NotebookDesignRepository, PageRepository};
 
 use super::A2dCore;
 
+#[path = "scan_processing_policy.rs"]
+mod scan_processing_policy;
+pub use scan_processing_policy::*;
+
 /// Core-facing name for the canonical layout and processing policy resolved from stored state.
 pub type StoredScanLayout = ResolvedScanLayout;
 
@@ -30,6 +34,16 @@ impl A2dCore {
         })?;
         let design = load_notebook_design(&storage, &page.kind, page_id)?;
         resolve_scan_layout_for_page(&page, design.as_ref())
+    }
+
+    /// Resolves the complete portable processing policy used by both preview and registration.
+    pub fn resolve_stored_scan_processing_policy(
+        &self,
+        page_id: &PageId,
+    ) -> Result<StoredScanProcessingPolicy, A2dError> {
+        StoredScanProcessingPolicy::from_resolved_layout(
+            self.resolve_stored_scan_layout(page_id)?,
+        )
     }
 }
 
@@ -146,6 +160,11 @@ mod tests {
         assert_eq!(resolved.layout_id, design.page_layout_id);
         assert_eq!(resolved.corrected_width, 900);
         assert_eq!(resolved.corrected_height, 1_356);
+        let processing = core
+            .resolve_stored_scan_processing_policy(&page_id)
+            .unwrap();
+        assert_eq!(processing.policy_version, SCAN_PROCESSING_POLICY_VERSION);
+        assert_eq!(processing.pipeline_version(), 1);
 
         drop(core);
         std::fs::remove_dir_all(root).ok();
@@ -174,6 +193,10 @@ mod tests {
         assert_eq!(resolved.layout_id, layout.id);
         assert_eq!(resolved.corrected_width, 900);
         assert_eq!(resolved.corrected_height, 1_273);
+        let processing = core
+            .resolve_stored_scan_processing_policy(&page_id)
+            .unwrap();
+        assert_eq!(processing.policy_version, SCAN_PROCESSING_POLICY_VERSION);
 
         drop(core);
         std::fs::remove_dir_all(root).ok();
