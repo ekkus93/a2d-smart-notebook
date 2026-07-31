@@ -103,6 +103,16 @@ impl A2dClient {
             .map_err(Into::into)
     }
 
+    pub fn reconcile_scanner_recovery(
+        &self,
+        token: String,
+    ) -> Result<ScannerRecoveryRecord, A2dFfiError> {
+        self.core
+            .reconcile_scanner_recovery(&token)
+            .map(Into::into)
+            .map_err(Into::into)
+    }
+
     pub fn discard_scanner_recovery(&self, token: String) -> Result<(), A2dFfiError> {
         self.core
             .discard_scanner_recovery(&token)

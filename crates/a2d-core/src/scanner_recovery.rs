@@ -16,6 +16,8 @@ use a2d_domain::{
 };
 use serde_json::{Value, json};
 
+use a2d_storage::ScanRepository;
+
 use super::A2dCore;
 
 const RECOVERY_DIRECTORY: &str = "scanner-recovery";
@@ -766,6 +768,33 @@ impl A2dCore {
         }
         record.phase = next;
         record.registered_scan_id = registered_scan_id;
+        record.updated_at_ms = system_now_ms()?;
+        self.replace_scanner_recovery(&record)?;
+        Ok(record)
+    }
+
+    pub fn reconcile_scanner_recovery(
+        &self,
+        token: &str,
+    ) -> Result<ScannerRecoveryRecord, A2dError> {
+        let mut record = self.read_scanner_recovery(token)?;
+        if record.phase != ScannerRecoveryPhase::Registering {
+            return Ok(record);
+        }
+        let committed_scan = {
+            let storage = self.lock_storage()?;
+            storage.find_scan_by_recovery_token(&record.page_id, token)?
+        };
+        match committed_scan {
+            Some(scan) => {
+                record.phase = ScannerRecoveryPhase::Committed;
+                record.registered_scan_id = Some(scan.id().clone());
+            }
+            None => {
+                record.phase = ScannerRecoveryPhase::PreviewReady;
+                record.registered_scan_id = None;
+            }
+        }
         record.updated_at_ms = system_now_ms()?;
         self.replace_scanner_recovery(&record)?;
         Ok(record)

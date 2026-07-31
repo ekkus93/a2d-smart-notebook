@@ -198,6 +198,7 @@ fn request(
         captured_at_ms: 1_000,
         observed_markers: approved_markers(),
         preview_warnings: Vec::new(),
+        recovery_token: None,
         user_approved: true,
     }
 }
@@ -296,6 +297,7 @@ fn a4_smart_page_registration_uses_a4_rectification_dimensions() {
             captured_at_ms: 1_000,
             observed_markers: approved_markers(),
             preview_warnings: Vec::new(),
+            recovery_token: None,
             user_approved: true,
         })
         .unwrap();

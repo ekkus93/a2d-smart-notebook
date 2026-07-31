@@ -77,6 +77,7 @@ pub struct RegisterScanRequest {
     pub captured_at_ms: i64,
     pub observed_markers: Vec<RegistrationMarker>,
     pub preview_warnings: Vec<String>,
+    pub recovery_token: Option<String>,
     pub user_approved: bool,
 }
 
@@ -111,6 +112,7 @@ pub enum RegisteredScanWarning {
     ExistingPageScanRequiresReview,
     AssetCommitJournalCleanupPending,
     StagingCleanupPending,
+    ScannerRecoveryReconciliationPending,
 }
 
 impl From<core::RegistrationWarning> for RegisteredScanWarning {
@@ -130,6 +132,9 @@ impl From<core::RegistrationWarning> for RegisteredScanWarning {
                 Self::AssetCommitJournalCleanupPending
             }
             core::RegistrationWarning::StagingCleanupPending => Self::StagingCleanupPending,
+            core::RegistrationWarning::ScannerRecoveryReconciliationPending => {
+                Self::ScannerRecoveryReconciliationPending
+            }
         }
     }
 }
@@ -139,6 +144,7 @@ pub enum RegisteredScanRequiredAction {
     ReviewExistingPage,
     InspectIncompleteAssetCommit,
     RemoveStagingFile,
+    ReconcileScannerRecovery,
 }
 
 impl From<core::RegistrationRequiredAction> for RegisteredScanRequiredAction {
@@ -149,6 +155,9 @@ impl From<core::RegistrationRequiredAction> for RegisteredScanRequiredAction {
                 Self::InspectIncompleteAssetCommit
             }
             core::RegistrationRequiredAction::RemoveStagingFile => Self::RemoveStagingFile,
+            core::RegistrationRequiredAction::ReconcileScannerRecovery => {
+                Self::ReconcileScannerRecovery
+            }
         }
     }
 }
@@ -228,6 +237,7 @@ impl A2dClient {
                     })
                     .collect(),
                 preview_warnings,
+                recovery_token: request.recovery_token,
                 user_approved: request.user_approved,
             })
             .map(Into::into)

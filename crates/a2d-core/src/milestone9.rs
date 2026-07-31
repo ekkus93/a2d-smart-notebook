@@ -94,6 +94,7 @@ pub struct RegisterScanRequest {
     pub captured_at_ms: i64,
     pub observed_markers: Vec<RegistrationMarker>,
     pub preview_warnings: Vec<String>,
+    pub recovery_token: Option<String>,
     pub user_approved: bool,
 }
 
@@ -109,6 +110,7 @@ pub enum RegistrationWarning {
     ExistingPageScanRequiresReview,
     AssetCommitJournalCleanupPending,
     StagingCleanupPending,
+    ScannerRecoveryReconciliationPending,
 }
 
 impl RegistrationWarning {
@@ -124,6 +126,7 @@ impl RegistrationWarning {
             Self::ExistingPageScanRequiresReview => "EXISTING_PAGE_SCAN_REQUIRES_REVIEW",
             Self::AssetCommitJournalCleanupPending => "ASSET_COMMIT_JOURNAL_CLEANUP_PENDING",
             Self::StagingCleanupPending => "STAGING_CLEANUP_PENDING",
+            Self::ScannerRecoveryReconciliationPending => "SCANNER_RECOVERY_RECONCILIATION_PENDING",
         }
     }
 }
@@ -133,6 +136,7 @@ pub enum RegistrationRequiredAction {
     ReviewExistingPage,
     InspectIncompleteAssetCommit,
     RemoveStagingFile,
+    ReconcileScannerRecovery,
 }
 
 #[derive(Clone, Debug)]
@@ -493,6 +497,24 @@ impl A2dCore {
             QualityStatus::NeedsReview
         };
 
+        if let Some(token) = request.recovery_token.as_deref() {
+            let notebook_id = request.active_notebook_id.as_ref().ok_or_else(|| {
+                registration_error(
+                    "CORE_SCAN_RECOVERY_NOTEBOOK_REQUIRED",
+                    ErrorCategory::Identity,
+                    "scanner recovery is currently supported only for Notebook Page scans",
+                )
+            })?;
+            self.mark_scanner_recovery_registering(
+                token,
+                &staged.canonical_path,
+                &request.expected_page_id,
+                notebook_id,
+                &scan_policy.layout_id,
+                scan_policy.policy_version,
+            )?;
+        }
+
         let scan_id = ScanId::try_generate()?;
         let mut journal =
             RegistrationJournal::begin(&self.library_path, &scan_id, &staged.canonical_path)?;
@@ -554,6 +576,16 @@ impl A2dCore {
             scan_policy.marker_family
         );
 
+        let mut content_fingerprint = format!(
+            "scan-content-v1;corrected-sha256={};perceptual={}",
+            corrected.sha256,
+            processed.perceptual_fingerprint.encode()
+        );
+        if let Some(token) = request.recovery_token.as_deref() {
+            content_fingerprint.push_str(";recovery-token=");
+            content_fingerprint.push_str(token);
+        }
+
         let scan = Scan::new(
             scan_id.clone(),
             request.expected_page_id.clone(),
@@ -572,11 +604,7 @@ impl A2dCore {
                 .collect(),
             preferred,
             None,
-            format!(
-                "scan-content-v1;corrected-sha256={};perceptual={}",
-                corrected.sha256,
-                processed.perceptual_fingerprint.encode()
-            ),
+            content_fingerprint,
         );
         let audit = scan_audit_event(&scan, request.active_notebook_id.as_ref())?;
 
@@ -651,7 +679,17 @@ impl A2dCore {
         })?;
         drop(storage);
 
+        let recovery_reconciliation_pending =
+            request.recovery_token.as_deref().is_some_and(|token| {
+                self.mark_scanner_recovery_committed(token, scan.id())
+                    .is_err()
+            });
+
         let mut required_actions = Vec::new();
+        if recovery_reconciliation_pending {
+            warnings.insert(RegistrationWarning::ScannerRecoveryReconciliationPending);
+            required_actions.push(RegistrationRequiredAction::ReconcileScannerRecovery);
+        }
         if !preferred {
             required_actions.push(RegistrationRequiredAction::ReviewExistingPage);
         }

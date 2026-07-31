@@ -137,6 +137,11 @@ fn encryption_state_from_str(raw: &str) -> Result<a2d_domain::EncryptionState, A
 pub trait ScanRepository {
     fn insert_scan(&self, scan: &Scan) -> Result<(), A2dError>;
     fn get_scan(&self, id: &ScanId) -> Result<Option<Scan>, A2dError>;
+    fn find_scan_by_recovery_token(
+        &self,
+        page_id: &PageId,
+        token: &str,
+    ) -> Result<Option<Scan>, A2dError>;
 }
 
 impl ScanRepository for Connection {
@@ -277,6 +282,48 @@ impl ScanRepository for Connection {
             },
         )
         .transpose()
+    }
+
+    fn find_scan_by_recovery_token(
+        &self,
+        page_id: &PageId,
+        token: &str,
+    ) -> Result<Option<Scan>, A2dError> {
+        let marker = format!("recovery-token={token}");
+        let mut statement = self
+            .prepare(
+                "SELECT id, content_fingerprint FROM scans WHERE page_id = ?1                  ORDER BY captured_at_ms ASC, id ASC",
+            )
+            .map_err(|error| map_sql_error("find_scan_by_recovery_token.prepare", error))?;
+        let rows = statement
+            .query_map([page_id.to_string()], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| map_sql_error("find_scan_by_recovery_token.query", error))?;
+        let mut matching_ids = Vec::new();
+        for row in rows {
+            let (id, fingerprint) =
+                row.map_err(|error| map_sql_error("find_scan_by_recovery_token.row", error))?;
+            if fingerprint.split(';').any(|part| part == marker.as_str()) {
+                matching_ids.push(ScanId::parse(&id)?);
+            }
+        }
+        drop(statement);
+        match matching_ids.as_slice() {
+            [] => Ok(None),
+            [id] => self.get_scan(id),
+            _ => Err(A2dError::new(
+                ErrorCode::new("STORAGE_SCANNER_RECOVERY_SCAN_DUPLICATE"),
+                ErrorCategory::Integrity,
+                ErrorSeverity::Critical,
+                "error.storage.scanner_recovery_scan_duplicate",
+                "multiple scans contain the same scanner recovery token",
+                false,
+            )
+            .with_detail("page_id", page_id.to_string())
+            .with_detail("recovery_token", token)
+            .with_detail("matching_scan_count", matching_ids.len().to_string())),
+        }
     }
 }
 
