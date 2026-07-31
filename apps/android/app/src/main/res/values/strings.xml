@@ -112,6 +112,19 @@
     <string name="single_scanner_detail_page">Page: %1$s</string>
     <string name="single_scanner_detail_pipeline">Correction pipeline version: %1$d</string>
     <string name="single_scanner_detail_warning">Warning: %1$s</string>
+    <string name="single_scanner_recovery_title">Recover unfinished scan</string>
+    <string name="single_scanner_recovery_count">%1$d unfinished scan operation(s) are stored locally.</string>
+    <string name="single_scanner_recovery_page">Page: %1$s</string>
+    <string name="single_scanner_recovery_captured">The captured image was journaled before preview processing completed.</string>
+    <string name="single_scanner_recovery_preview_ready">A corrected preview was produced, but the scan was not durably registered.</string>
+    <string name="single_scanner_recovery_registering">Registration may have committed before the app was interrupted. Rust must reconcile the journal with SQLite.</string>
+    <string name="single_scanner_recovery_committed">Rust confirmed that this scan was committed. Acknowledge it to clear the recovery record.</string>
+    <string name="single_scanner_recovery_review">Review capture</string>
+    <string name="single_scanner_recovery_reconcile">Check save status</string>
+    <string name="single_scanner_recovery_acknowledge">Confirm saved scan</string>
+    <string name="single_scanner_recovery_discard">Discard captured file</string>
+    <string name="single_scanner_recovery_working">Checking the recovery journal…</string>
+    <string name="single_scanner_recovery_saved_id">Committed scan: %1$s</string>
 
     <string name="smart_pages_title">Create Smart Pages</string>
     <string name="smart_pages_single">Single Page</string>
