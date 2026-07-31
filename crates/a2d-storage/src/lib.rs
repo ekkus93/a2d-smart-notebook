@@ -19,6 +19,9 @@ use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
 
 mod asset_recovery;
 mod assets;
+#[macro_use]
+mod integrity_support;
+#[allow(unused_imports)]
 mod integrity;
 mod json_columns;
 mod migration_history;
