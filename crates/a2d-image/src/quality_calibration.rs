@@ -153,7 +153,10 @@ mod tests {
 
         assert_eq!(qualified.provisional_assessment, measured);
         assert_eq!(qualified.production_classification, None);
-        assert_eq!(qualified.warning_code, Some(QUALITY_THRESHOLDS_UNCALIBRATED));
+        assert_eq!(
+            qualified.warning_code,
+            Some(QUALITY_THRESHOLDS_UNCALIBRATED)
+        );
     }
 
     #[test]
@@ -172,8 +175,14 @@ mod tests {
         );
 
         assert!(qualified.calibration.allows_automatic_capture());
-        assert_eq!(qualified.production_classification, Some(QualityState::Accepted));
-        assert_eq!(qualified.provisional_assessment.measurements, measured.measurements);
+        assert_eq!(
+            qualified.production_classification,
+            Some(QualityState::Accepted)
+        );
+        assert_eq!(
+            qualified.provisional_assessment.measurements,
+            measured.measurements
+        );
         assert_eq!(qualified.warning_code, None);
     }
 }
