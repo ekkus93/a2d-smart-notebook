@@ -16,6 +16,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.PageResolution
 
+internal const val SMART_PAGE_SCANNER_DEFERRED_MESSAGE =
+    "Smart Page scanning is not available in the v0.1 Notebook Page scanner."
+
 @Composable
 internal fun rememberPolicyAwareQrEventHandler(
     viewModel: SinglePageScannerViewModel,
@@ -53,10 +56,22 @@ internal fun rememberPolicyAwareQrEventHandler(
                             try {
                                 val policy =
                                     withContext(Dispatchers.IO) {
-                                        val resolution = client.resolvePageCode(event.payload, notebookId)
-                                        val resolved = resolution as? PageResolution.Resolved
-                                            ?: return@withContext null
-                                        client.resolveStoredScanPolicy(resolved.pageId)
+                                        when (
+                                            val resolution =
+                                                client.resolvePageCode(event.payload, notebookId)
+                                        ) {
+                                            is PageResolution.Resolved -> {
+                                                if (resolution.notebookId == null) {
+                                                    throw SmartPageScannerDeferredException()
+                                                }
+                                                client.resolveStoredScanPolicy(resolution.pageId)
+                                            }
+
+                                            is PageResolution.ImportedUnknownSmartPage ->
+                                                throw SmartPageScannerDeferredException()
+
+                                            else -> null
+                                        }
                                     }
                                 if (
                                     requestSequence != sequence.get() ||
@@ -105,3 +120,7 @@ internal fun rememberPolicyAwareQrEventHandler(
         }
     }
 }
+
+private class SmartPageScannerDeferredException : IllegalStateException(
+    SMART_PAGE_SCANNER_DEFERRED_MESSAGE,
+)
