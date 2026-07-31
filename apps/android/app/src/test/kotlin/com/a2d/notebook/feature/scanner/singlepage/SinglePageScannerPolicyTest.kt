@@ -1,11 +1,15 @@
 package com.a2d.notebook.feature.scanner.singlepage
 
+import com.a2d.notebook.feature.scanner.capture.AutoCapturePolicy
+import com.a2d.notebook.feature.scanner.presentation.LiveScannerGuidancePolicy
 import com.a2d.notebook.rustbridge.AnalyzedPageMarker
 import com.a2d.notebook.rustbridge.AnalyzedPagePoint
 import com.a2d.notebook.rustbridge.AnalyzedPageQuality
 import com.a2d.notebook.rustbridge.EncodedPageAnalysisResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -13,10 +17,15 @@ class SinglePageScannerPolicyTest {
     private val thresholds = SinglePageScannerPolicies.V1.captureThresholds
 
     @Test
-    fun completeHighQualityAnalysisIsAccepted() {
+    fun completeHighQualityAnalysisIsAcceptedOnlyByProvisionalCaptureAssessment() {
         val assessment = assessCapturePolicy(goodAnalysis(), thresholds)
         assertTrue(assessment.accepted)
         assertTrue(assessment.warnings.isEmpty())
+        assertFalse(SinglePageScannerPolicies.V1.qualityCalibration.allowsProductionClassification)
+        assertEquals(
+            QUALITY_THRESHOLDS_UNCALIBRATED,
+            SinglePageScannerPolicies.V1.qualityWarningCode,
+        )
     }
 
     @Test
@@ -54,8 +63,80 @@ class SinglePageScannerPolicyTest {
 
     @Test
     fun productionAutoCaptureIsExplicitlyDisabledPendingPhysicalCalibration() {
-        assertFalse(SinglePageScannerPolicies.V1.autoCaptureEnabled)
+        val policy = SinglePageScannerPolicies.V1
+
+        assertEquals(QualityCalibrationState.PROVISIONAL, policy.qualityCalibration.state)
+        assertEquals(
+            QualityThresholdEvidence.SYNTHETIC_FIXTURE_REGRESSION,
+            policy.qualityCalibration.evidence,
+        )
+        assertFalse(policy.qualityCalibration.allowsAutomaticCapture)
+        assertFalse(policy.autoCaptureEnabled)
     }
+
+    @Test
+    fun policyRejectsAutomaticCaptureWithUncalibratedThresholds() {
+        assertThrows(IllegalArgumentException::class.java) {
+            scannerPolicy(
+                autoCaptureEnabled = true,
+                calibration =
+                    ScannerQualityCalibration(
+                        thresholdPolicyVersion = 1,
+                        state = QualityCalibrationState.PROVISIONAL,
+                        evidence = QualityThresholdEvidence.SYNTHETIC_FIXTURE_REGRESSION,
+                    ),
+            )
+        }
+    }
+
+    @Test
+    fun futureCalibratedPolicyCanEnableAutomaticCaptureWithVersionedEvidence() {
+        val policy =
+            scannerPolicy(
+                autoCaptureEnabled = true,
+                calibration =
+                    ScannerQualityCalibration(
+                        thresholdPolicyVersion = 2,
+                        state = QualityCalibrationState.CALIBRATED,
+                        evidence = QualityThresholdEvidence.PHYSICALLY_CALIBRATED_PRODUCTION,
+                        physicalCalibrationVersion = 1,
+                    ),
+            )
+
+        assertTrue(policy.qualityCalibration.allowsProductionClassification)
+        assertTrue(policy.qualityCalibration.allowsAutomaticCapture)
+        assertTrue(policy.autoCaptureEnabled)
+        assertNull(policy.qualityWarningCode)
+    }
+
+    private fun scannerPolicy(
+        autoCaptureEnabled: Boolean,
+        calibration: ScannerQualityCalibration,
+    ): SinglePageScannerPolicy =
+        SinglePageScannerPolicy(
+            version = 99,
+            guidance =
+                LiveScannerGuidancePolicy(
+                    minimumMarkerDecisionMargin = 20.0,
+                    minimumFocusLaplacianVariance = 40.0,
+                    minimumMeanLuminance = 50.0,
+                    maximumHighlightFraction = 0.15,
+                    maximumTileHighlightFraction = 0.35,
+                    minimumPageCoverageFraction = 0.20,
+                    maximumPageCoverageFraction = 0.85,
+                    minimumEdgeMarginFraction = 0.03,
+                ),
+            captureThresholds = thresholds,
+            autoCapture =
+                AutoCapturePolicy(
+                    stableIntervalNanos = 1_000_000_000,
+                    maximumInterFrameGapNanos = 500_000_000,
+                    repeatDebounceNanos = 5_000_000_000,
+                ),
+            autoCaptureEnabled = autoCaptureEnabled,
+            qualityCalibration = calibration,
+            pageCodeFreshnessNanos = 1_000_000_000,
+        )
 
     private fun goodAnalysis(): EncodedPageAnalysisResult =
         EncodedPageAnalysisResult(
