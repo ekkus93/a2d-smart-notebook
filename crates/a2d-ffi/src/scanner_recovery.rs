@@ -68,12 +68,6 @@ impl From<core::ScannerRecoveryRecord> for ScannerRecoveryRecord {
 
 #[uniffi::export]
 impl A2dClient {
-    pub fn stored_page_code_payload(&self, page_id: String) -> Result<String, A2dFfiError> {
-        self.core
-            .stored_page_code_payload(&PageId::parse(&page_id)?)
-            .map_err(Into::into)
-    }
-
     pub fn begin_scanner_recovery(
         &self,
         request: BeginScannerRecoveryRequest,
