@@ -423,7 +423,7 @@ pub fn render_smart_page_pdf_bytes(
     style: SmartPageStyle,
 ) -> Result<GeneratedSmartPageBytes, A2dError> {
     let layout = smart_page_layout(paper, style);
-    let smart_page_id = SmartPageId::generate();
+    let smart_page_id = SmartPageId::try_generate()?;
     let qr_payload = PageCode::SmartPage {
         smart_page_id: smart_page_id.clone(),
         layout_id: layout.id.clone(),
@@ -538,12 +538,12 @@ pub fn render_page_set_pdf_bytes(
 ) -> Result<GeneratedPageSetBytes, A2dError> {
     let (capacity, validated_last_page) = request.validated_capacity_and_last_page()?;
     let layout = smart_page_layout(request.paper_size, request.style);
-    let page_set_id = PageSetId::generate();
+    let page_set_id = PageSetId::try_generate()?;
     let mut smart_page_ids = Vec::with_capacity(capacity);
     let mut pdf_pages = Vec::with_capacity(capacity);
 
     for offset in 0..request.page_count {
-        let smart_page_id = SmartPageId::generate();
+        let smart_page_id = SmartPageId::try_generate()?;
         let visible_number = request
             .starting_visible_page
             .checked_add(offset)
