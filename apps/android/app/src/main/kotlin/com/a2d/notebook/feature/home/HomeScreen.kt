@@ -10,19 +10,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
-import com.a2d.notebook.rustbridge.A2dBridge
 
 object HomeScreenTestTags {
     const val TITLE = "home_title"
-    const val RUST_GENERATED_ID = "home_rust_generated_id"
     const val SCAN_PAGE = "home_scan_page"
     const val NOTEBOOKS = "home_notebooks"
     const val SMART_PAGES = "home_smart_pages"
@@ -34,9 +30,6 @@ fun HomeScreen(
     onOpenNotebooks: () -> Unit,
     onCreateSmartPages: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val rustGeneratedPageId = remember { A2dBridge.client(context).generatePageId() }
-
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -63,11 +56,5 @@ fun HomeScreen(
             onClick = onCreateSmartPages,
             modifier = Modifier.testTag(HomeScreenTestTags.SMART_PAGES),
         ) { Text(stringResource(R.string.home_smart_pages)) }
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = stringResource(R.string.home_rust_generated_id_prefix, rustGeneratedPageId),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.testTag(HomeScreenTestTags.RUST_GENERATED_ID),
-        )
     }
 }
