@@ -55,5 +55,5 @@ internal fun Set<CapturePolicyWarning>.toRegistrationWarningCodes(): List<String
     require(CapturePolicyWarning.MISSING_MARKERS !in this) {
         "a capture with missing markers cannot be approved for registration"
     }
-    return map { it.name }.sorted()
+    return map { it.name }.sorted() + RustScannerPolicySession.registrationEvidence()
 }
