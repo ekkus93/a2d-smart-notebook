@@ -15,9 +15,7 @@ internal fun PolicyAwareSinglePageScannerRoute(
 ) {
     val state by viewModel.state
     val permission = rememberCameraPermissionState()
-    BackHandler(
-        enabled = state.registrationInProgress || state.recoveryOperationInProgress,
-    ) {}
+    BackHandler(enabled = state.navigationBlocked) {}
 
     if (state.recoveryMode) {
         ScannerRecoveryContent(onBack = onBack, viewModel = viewModel)
