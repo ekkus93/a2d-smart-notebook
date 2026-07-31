@@ -8,6 +8,10 @@ import com.a2d.notebook.feature.scanner.presentation.LiveScannerGuidancePolicy
  *
  * Portable marker layouts, processing limits, corrected dimensions, and pipeline versions are
  * resolved from Rust per stored page and are not duplicated here.
+ *
+ * V1 threshold values are synthetic-fixture regression values. They support deterministic tests,
+ * live guidance, and explicit manual warnings, but they are not physically calibrated production
+ * acceptance thresholds. Automatic capture therefore remains disabled.
  */
 object SinglePageScannerPolicies {
     val V1 =
@@ -40,6 +44,12 @@ object SinglePageScannerPolicies {
                     repeatDebounceNanos = 5_000_000_000,
                 ),
             autoCaptureEnabled = false,
+            qualityCalibration =
+                ScannerQualityCalibration(
+                    thresholdPolicyVersion = 1,
+                    state = QualityCalibrationState.PROVISIONAL,
+                    evidence = QualityThresholdEvidence.SYNTHETIC_FIXTURE_REGRESSION,
+                ),
             pageCodeFreshnessNanos = 1_000_000_000,
         )
 }
