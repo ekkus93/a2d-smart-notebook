@@ -494,8 +494,8 @@ private fun QualityMetricSummary(quality: AnalyzedPageQuality) {
     Text(
         stringResource(
             R.string.single_scanner_quality_focus,
-            quality.focusLaplacianVariance,
-            quality.focusInteriorSampleCount,
+            quality.focusLaplacianVariance?.toString() ?: "unavailable",
+            quality.focusInteriorSampleCount?.toString() ?: "unavailable",
         ),
     )
     Text(
