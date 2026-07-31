@@ -38,6 +38,10 @@ jobs:
             crates/a2d-image/src/bin/a2d_fixture_measurements.rs
             crates/a2d-image/src/bin/a2d_fingerprint_calibration.rs
             crates/a2d-image/tests/synthetic_processing_expectations.rs
+            crates/a2d-core/src/milestone9.rs
+            crates/a2d-core/src/milestone9_tests.rs
+            crates/a2d-image/src/lib.rs
+            crates/a2d-image/src/quality_calibration.rs
           if-no-files-found: error
       - name: Fail if Rust formatting drifted
         run: git diff --exit-code -- '*.rs'
