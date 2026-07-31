@@ -903,7 +903,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_generate_example_smart_page_qr_payload() != 22648) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_generate_page_id() != 46112) {
+    if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_generate_page_id() != 28610) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_a2d_ffi_checksum_method_a2dclient_library_path() != 39889) {
@@ -1592,10 +1592,11 @@ open class A2dClient: Disposable, AutoCloseable, A2dClientInterface
     }
     
 
-    override fun `generatePageId`(): kotlin.String {
+    
+    @Throws(A2dFfiException::class)override fun `generatePageId`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(A2dFfiException) { _status ->
     UniffiLib.uniffi_a2d_ffi_fn_method_a2dclient_generate_page_id(
         it,
         _status)
