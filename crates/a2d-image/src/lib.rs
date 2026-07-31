@@ -16,6 +16,7 @@ mod error;
 mod fingerprint;
 mod input;
 mod quality;
+mod quality_calibration;
 mod rectification;
 
 pub use change_regions::{
@@ -53,6 +54,10 @@ pub use quality::{
     QualityThresholdSet, ResolutionMetrics, ResolutionPolicy, ScalarThresholds, ThresholdDirection,
     UnderexposurePolicy, measure_curvature, measure_effective_resolution, measure_framing,
     measure_gray_quality, measure_marker_confidence, measure_perspective,
+};
+pub use quality_calibration::{
+    CalibrationQualifiedQualityAssessment, QualityCalibrationMetadata, QualityCalibrationState,
+    QualityThresholdEvidence, QUALITY_THRESHOLDS_UNCALIBRATED, qualify_quality_assessment,
 };
 pub use rectification::{
     ImageQuad, ProjectiveTransform, RectificationLimits, RectificationPlan, RectifiedImageSize,
