@@ -3,16 +3,19 @@
 use a2d_domain::{
     A2dError, ErrorCategory, ErrorCode, ErrorSeverity, LayoutId, Notebook, NotebookDesign,
     NotebookDesignId, NotebookId, Page, PageId, PageKind, PageState, SmartPageId, TrustState,
+    system_now_ms,
 };
 use a2d_identity::PageCode;
 use a2d_layout::smart_page::{ALL_PAPER_SIZES, ALL_STYLES};
-use a2d_layout::{PaperSize, SmartPageStyle, bundled_placeholder_registry, smart_page_layout};
+use a2d_layout::{
+    ManifestRegistry, PaperSize, SmartPageStyle, bundled_placeholder_registry, smart_page_layout,
+};
 use a2d_storage::{
     AssetRepository, NotebookDesignRepository, NotebookRepository, NotebookWorkflowRepository,
     PageLookupRepository, PageRepository,
 };
 
-use super::{A2dCore, now_ms};
+use super::A2dCore;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NotebookSummary {
@@ -141,9 +144,8 @@ fn workflow_error(code: &'static str, message: impl Into<String>) -> A2dError {
     )
 }
 
-fn is_known_layout(layout_id: &LayoutId) -> bool {
-    if let Ok(registry) = bundled_placeholder_registry()
-        && let Ok(id) = NotebookDesignId::parse("6DE28E53DBKPXCWWNHPC8T7QJX")
+fn is_known_layout(registry: &ManifestRegistry, layout_id: &LayoutId) -> bool {
+    if let Ok(id) = NotebookDesignId::parse("6DE28E53DBKPXCWWNHPC8T7QJX")
         && let Some(design) = registry.resolve(&id)
         && (design.setup_layout_id == *layout_id || design.page_layout_id == *layout_id)
     {
@@ -157,33 +159,46 @@ fn is_known_layout(layout_id: &LayoutId) -> bool {
 }
 
 impl A2dCore {
-    fn available_design(&self, id: &NotebookDesignId) -> Result<Option<NotebookDesign>, A2dError> {
+    fn available_design_with_registry(
+        &self,
+        id: &NotebookDesignId,
+        registry: &ManifestRegistry,
+    ) -> Result<Option<NotebookDesign>, A2dError> {
         if let Some(stored) = self.lock_storage()?.get_notebook_design(id)? {
             return Ok(Some(stored));
         }
-        let registry = bundled_placeholder_registry()?;
         Ok(registry.resolve(id).cloned())
     }
 
+    fn available_design(&self, id: &NotebookDesignId) -> Result<Option<NotebookDesign>, A2dError> {
+        let registry = bundled_placeholder_registry()?;
+        self.available_design_with_registry(id, &registry)
+    }
+
     fn setup_design_from_payload(&self, payload: &str) -> Result<NotebookDesign, A2dError> {
-        let parsed = a2d_identity::qr::parse(payload, is_known_layout)?;
+        let registry = bundled_placeholder_registry()?;
+        let parsed = a2d_identity::qr::parse(payload, |layout_id| {
+            is_known_layout(&registry, layout_id)
+        })?;
         let PageCode::NotebookSetup { design_id } = parsed else {
             return Err(workflow_error(
                 "CORE_EXPECTED_NOTEBOOK_SETUP_CODE",
                 "the supplied payload is valid A2D data but is not a Notebook Setup Code",
             ));
         };
-        let design = self.available_design(&design_id)?.ok_or_else(|| {
-            A2dError::new(
-                ErrorCode::new("CORE_NOTEBOOK_DESIGN_UNAVAILABLE"),
-                ErrorCategory::UnsupportedFormat,
-                ErrorSeverity::Error,
-                "error.core.notebook_design_unavailable",
-                "this build cannot resolve the Notebook Design referenced by the Setup Code",
-                false,
-            )
-            .with_detail("design_id", design_id.to_string())
-        })?;
+        let design = self
+            .available_design_with_registry(&design_id, &registry)?
+            .ok_or_else(|| {
+                A2dError::new(
+                    ErrorCode::new("CORE_NOTEBOOK_DESIGN_UNAVAILABLE"),
+                    ErrorCategory::UnsupportedFormat,
+                    ErrorSeverity::Error,
+                    "error.core.notebook_design_unavailable",
+                    "this build cannot resolve the Notebook Design referenced by the Setup Code",
+                    false,
+                )
+                .with_detail("design_id", design_id.to_string())
+            })?;
         if design.trust_state == TrustState::Revoked {
             return Err(A2dError::new(
                 ErrorCode::new("CORE_NOTEBOOK_DESIGN_REVOKED"),
@@ -211,9 +226,9 @@ impl A2dCore {
         request: CreateNotebookRequest,
     ) -> Result<CreatedNotebook, A2dError> {
         let design = self.setup_design_from_payload(&request.setup_payload)?;
-        let created_at = now_ms();
+        let created_at = system_now_ms()?;
         let mut notebook = Notebook::new(
-            NotebookId::generate(),
+            NotebookId::try_generate()?,
             design.id().clone(),
             request.display_name,
             created_at,
@@ -226,10 +241,10 @@ impl A2dCore {
         );
         notebook.rename(notebook.display_name.clone(), created_at)?;
 
-        let pages: Vec<Page> = (1..=design.logical_page_count)
+        let pages = (1..=design.logical_page_count)
             .map(|logical_page_number| {
-                Page::new(
-                    PageId::generate(),
+                Ok(Page::new(
+                    PageId::try_generate()?,
                     PageKind::NotebookPage {
                         notebook_id: notebook.id().clone(),
                         design_id: design.id().clone(),
@@ -239,9 +254,9 @@ impl A2dCore {
                     None,
                     PageState::Unscanned,
                     created_at,
-                )
+                ))
             })
-            .collect();
+            .collect::<Result<Vec<_>, A2dError>>()?;
 
         let mut storage = self.lock_storage()?;
         storage.transaction(|tx| {
@@ -288,7 +303,7 @@ impl A2dCore {
         let mut notebook = storage
             .get_notebook(notebook_id)?
             .ok_or_else(|| workflow_error("CORE_NOTEBOOK_NOT_FOUND", "notebook was not found"))?;
-        notebook.rename(display_name, now_ms())?;
+        notebook.rename(display_name, system_now_ms()?)?;
         storage.update_notebook(&notebook)?;
         Ok(NotebookSummary::from(&notebook))
     }
@@ -298,7 +313,7 @@ impl A2dCore {
         let mut notebook = storage
             .get_notebook(notebook_id)?
             .ok_or_else(|| workflow_error("CORE_NOTEBOOK_NOT_FOUND", "notebook was not found"))?;
-        notebook.archive(now_ms());
+        notebook.archive(system_now_ms()?);
         storage.update_notebook(&notebook)?;
         Ok(NotebookSummary::from(&notebook))
     }
@@ -328,7 +343,7 @@ impl A2dCore {
         notebook_id: Option<&NotebookId>,
     ) -> Result<Option<NotebookSummary>, A2dError> {
         let storage = self.lock_storage()?;
-        storage.set_active_notebook(notebook_id, now_ms())?;
+        storage.set_active_notebook(notebook_id, system_now_ms()?)?;
         Ok(storage
             .get_active_notebook()?
             .as_ref()
@@ -348,7 +363,10 @@ impl A2dCore {
         payload: &str,
         confirmed_notebook_id: Option<&NotebookId>,
     ) -> Result<PageResolution, A2dError> {
-        let code = a2d_identity::qr::parse(payload, is_known_layout)?;
+        let registry = bundled_placeholder_registry()?;
+        let code = a2d_identity::qr::parse(payload, |layout_id| {
+            is_known_layout(&registry, layout_id)
+        })?;
         let storage = self.lock_storage()?;
         match code {
             PageCode::NotebookSetup { .. } => Ok(PageResolution::UnsupportedCode {
@@ -379,11 +397,9 @@ impl A2dCore {
                 logical_page_number,
                 layout_id,
             } => {
-                let design = storage.get_notebook_design(&design_id)?.or_else(|| {
-                    bundled_placeholder_registry()
-                        .ok()
-                        .and_then(|registry| registry.resolve(&design_id).cloned())
-                });
+                let design = storage
+                    .get_notebook_design(&design_id)?
+                    .or_else(|| registry.resolve(&design_id).cloned());
                 let Some(design) = design else {
                     return Ok(PageResolution::UnsupportedCode {
                         reason: format!(
