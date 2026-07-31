@@ -123,8 +123,8 @@ impl A2dClient {
         self.core.library_path()
     }
 
-    pub fn generate_page_id(&self) -> String {
-        self.core.generate_page_id()
+    pub fn generate_page_id(&self) -> Result<String, A2dFfiError> {
+        self.core.generate_page_id().map_err(Into::into)
     }
 
     pub fn parse_page_id(&self, candidate: String) -> Result<String, A2dFfiError> {
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn open_generate_and_parse_round_trip_through_the_ffi_types() {
         let client = open_test_client();
-        let generated = client.generate_page_id();
+        let generated = client.generate_page_id().unwrap();
         let parsed = client
             .parse_page_id(generated.clone())
             .expect("must parse its own output");
