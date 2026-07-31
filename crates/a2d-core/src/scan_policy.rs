@@ -12,6 +12,10 @@ use super::A2dCore;
 mod generation_policy;
 pub use generation_policy::*;
 
+#[path = "page_code_projection.rs"]
+mod page_code_projection;
+pub use page_code_projection::*;
+
 #[path = "scan_processing_policy.rs"]
 mod scan_processing_policy;
 pub use scan_processing_policy::*;
