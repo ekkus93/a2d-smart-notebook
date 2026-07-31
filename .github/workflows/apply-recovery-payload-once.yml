@@ -1,0 +1,76 @@
+name: Apply recovery payload once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-recovery-payload-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Persist Page Code payload in recovery records
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f'{path}: expected one match for {old[:60]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          core = 'crates/a2d-core/src/scanner_recovery.rs'
+          replace_once(core,
+              '    pub staging_path: String,\n    pub page_id: PageId,\n',
+              '    pub staging_path: String,\n    pub page_code_payload: String,\n    pub page_id: PageId,\n')
+          replace_once(core,
+              '            "staging_path": record.staging_path,\n            "page_id": record.page_id.to_string(),\n',
+              '            "staging_path": record.staging_path,\n            "page_code_payload": record.page_code_payload,\n            "page_id": record.page_id.to_string(),\n')
+          replace_once(core,
+              '        let staging_path = required_string(&value, "staging_path")?;\n        let page_id = PageId::parse',
+              '        let staging_path = required_string(&value, "staging_path")?;\n        let page_code_payload = required_string(&value, "page_code_payload")?;\n        let page_id = PageId::parse')
+          replace_once(core,
+              '            staging_path,\n            page_id,\n',
+              '            staging_path,\n            page_code_payload,\n            page_id,\n')
+          replace_once(core,
+              '            staging_path: staging.to_string_lossy().into_owned(),\n            page_id: request.page_id,\n',
+              '            staging_path: staging.to_string_lossy().into_owned(),\n            page_code_payload: request.page_code_payload,\n            page_id: request.page_id,\n')
+          replace_once(core,
+              '            staging_path: staging.to_string_lossy().into_owned(),\n            page_id: PageId::generate(),\n',
+              '            staging_path: staging.to_string_lossy().into_owned(),\n            page_code_payload: "a2d:page:test".to_string(),\n            page_id: PageId::generate(),\n')
+
+          ffi = 'crates/a2d-ffi/src/scanner_recovery.rs'
+          replace_once(ffi,
+              '    pub staging_path: String,\n    pub page_id: String,\n',
+              '    pub staging_path: String,\n    pub page_code_payload: String,\n    pub page_id: String,\n')
+          replace_once(ffi,
+              '            staging_path: value.staging_path,\n            page_id: value.page_id.to_string(),\n',
+              '            staging_path: value.staging_path,\n            page_code_payload: value.page_code_payload,\n            page_id: value.page_id.to_string(),\n')
+          replace_once(ffi,
+              '                staging_path: request.staging_path,\n                page_id: PageId::parse',
+              '                staging_path: request.staging_path,\n                page_code_payload: request.page_code_payload,\n                page_id: PageId::parse')
+          replace_once(ffi,
+              '                staging_path: staging.to_string_lossy().into_owned(),\n                page_id: page_id.clone(),\n',
+              '                staging_path: staging.to_string_lossy().into_owned(),\n                page_code_payload: "a2d:page:test".to_string(),\n                page_id: page_id.clone(),\n')
+
+          Path('.github/workflows/apply-recovery-payload-once.yml').unlink()
+          PY
+          cargo fmt
+          git diff --check
+      - name: Commit durable recovery payload
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Persist Page Code in scanner recovery'
+          git pull --rebase origin master
+          git push origin HEAD:master
