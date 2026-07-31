@@ -17,7 +17,7 @@ internal fun ScannerRecoveryContent(
     SinglePageScannerContent(
         state = state,
         onBack = {
-            if (!state.registrationInProgress && !state.recoveryOperationInProgress) {
+            if (!state.navigationBlocked) {
                 viewModel.leaveScanner()
                 onBack()
             }
