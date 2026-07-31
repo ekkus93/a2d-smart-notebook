@@ -20,36 +20,41 @@ pub struct StoredScanLayoutPolicy {
     pub corrected_height: u32,
     pub layout_version: String,
     pub processing_policy_version: u32,
+    pub pipeline_version: u32,
 }
 
-impl TryFrom<a2d_core::StoredScanLayout> for StoredScanLayoutPolicy {
+impl TryFrom<a2d_core::StoredScanProcessingPolicy> for StoredScanLayoutPolicy {
     type Error = A2dError;
 
-    fn try_from(value: a2d_core::StoredScanLayout) -> Result<Self, Self::Error> {
+    fn try_from(value: a2d_core::StoredScanProcessingPolicy) -> Result<Self, Self::Error> {
         let top_left_tag_id = marker_id(&value, MarkerRole::TopLeft)?;
         let top_right_tag_id = marker_id(&value, MarkerRole::TopRight)?;
         let bottom_right_tag_id = marker_id(&value, MarkerRole::BottomRight)?;
         let bottom_left_tag_id = marker_id(&value, MarkerRole::BottomLeft)?;
+        let processing_policy_version = value.policy_version;
+        let pipeline_version = value.pipeline_version();
+        let layout = value.layout;
         Ok(Self {
-            layout_id: value.layout_id.to_string(),
-            physical_width_mm: value.physical_width_mm,
-            physical_height_mm: value.physical_height_mm,
-            marker_family: value.marker_family,
-            declared_marker_family: value.declared_marker_family,
+            layout_id: layout.layout_id.to_string(),
+            physical_width_mm: layout.physical_width_mm,
+            physical_height_mm: layout.physical_height_mm,
+            marker_family: layout.marker_family,
+            declared_marker_family: layout.declared_marker_family,
             top_left_tag_id,
             top_right_tag_id,
             bottom_right_tag_id,
             bottom_left_tag_id,
-            corrected_width: value.corrected_width,
-            corrected_height: value.corrected_height,
-            layout_version: value.layout_version,
-            processing_policy_version: value.processing_policy_version,
+            corrected_width: layout.corrected_width,
+            corrected_height: layout.corrected_height,
+            layout_version: layout.layout_version,
+            processing_policy_version,
+            pipeline_version,
         })
     }
 }
 
 fn marker_id(
-    value: &a2d_core::StoredScanLayout,
+    value: &a2d_core::StoredScanProcessingPolicy,
     role: MarkerRole,
 ) -> Result<u32, A2dError> {
     value
@@ -80,7 +85,9 @@ impl A2dClient {
         page_id: String,
     ) -> Result<StoredScanLayoutPolicy, A2dFfiError> {
         let page_id = PageId::parse(&page_id)?;
-        let policy = self.core.resolve_stored_scan_layout(&page_id)?;
+        let policy = self
+            .core
+            .resolve_stored_scan_processing_policy(&page_id)?;
         policy.try_into().map_err(Into::into)
     }
 }
@@ -128,6 +135,7 @@ mod tests {
         );
         assert_eq!((policy.corrected_width, policy.corrected_height), (900, 1_273));
         assert_eq!(policy.processing_policy_version, 1);
+        assert_eq!(policy.pipeline_version, 1);
 
         drop(client);
         std::fs::remove_dir_all(dir).ok();
