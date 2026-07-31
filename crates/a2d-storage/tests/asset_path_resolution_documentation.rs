@@ -9,7 +9,7 @@ fn path_resolution_implementation_and_documented_limitations_stay_aligned() {
         "std::fs::symlink_metadata(&candidate)",
         "metadata.file_type().is_symlink()",
         "!metadata.is_file()",
-        "candidate.canonicalize()",
+        "let canonical_candidate = candidate",
         "!canonical_candidate.starts_with(&canonical_root)",
         "Ok(canonical_candidate)",
     ] {
