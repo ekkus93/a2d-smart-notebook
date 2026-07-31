@@ -5,6 +5,45 @@ import com.a2d.notebook.feature.scanner.presentation.LiveScannerGuidancePolicy
 import com.a2d.notebook.rustbridge.LivePageAnalysisPolicy
 import com.a2d.notebook.rustbridge.StoredScanPolicy
 
+const val QUALITY_THRESHOLDS_UNCALIBRATED = "QUALITY_THRESHOLDS_UNCALIBRATED"
+
+enum class QualityCalibrationState {
+    CALIBRATED,
+    PROVISIONAL,
+    UNAVAILABLE,
+}
+
+enum class QualityThresholdEvidence {
+    PRESENTATION_ONLY_PROVISIONAL,
+    SYNTHETIC_FIXTURE_REGRESSION,
+    PHYSICALLY_CALIBRATED_PRODUCTION,
+    UNAVAILABLE,
+}
+
+data class ScannerQualityCalibration(
+    val thresholdPolicyVersion: Int,
+    val state: QualityCalibrationState,
+    val evidence: QualityThresholdEvidence,
+    val physicalCalibrationVersion: Int? = null,
+) {
+    init {
+        require(thresholdPolicyVersion > 0)
+        require(physicalCalibrationVersion == null || physicalCalibrationVersion > 0)
+    }
+
+    val allowsProductionClassification: Boolean
+        get() =
+            state == QualityCalibrationState.CALIBRATED &&
+                evidence == QualityThresholdEvidence.PHYSICALLY_CALIBRATED_PRODUCTION &&
+                physicalCalibrationVersion != null
+
+    val allowsAutomaticCapture: Boolean
+        get() = allowsProductionClassification
+
+    val warningCode: String?
+        get() = if (allowsProductionClassification) null else QUALITY_THRESHOLDS_UNCALIBRATED
+}
+
 /**
  * Transitional shape consumed by the existing ViewModel request builder.
  *
@@ -38,12 +77,19 @@ data class SinglePageScannerPolicy(
     val captureThresholds: SinglePageCaptureThresholds,
     val autoCapture: AutoCapturePolicy,
     val autoCaptureEnabled: Boolean,
+    val qualityCalibration: ScannerQualityCalibration,
     val pageCodeFreshnessNanos: Long,
 ) {
     init {
         require(version > 0)
         require(pageCodeFreshnessNanos > 0)
+        require(!autoCaptureEnabled || qualityCalibration.allowsAutomaticCapture) {
+            "automatic capture requires physically calibrated production thresholds"
+        }
     }
+
+    val qualityWarningCode: String?
+        get() = qualityCalibration.warningCode
 
     val liveAnalysis: LivePageAnalysisPolicy
         get() = RustScannerPolicySession.requireCurrentPolicy().liveAnalysisPolicy
