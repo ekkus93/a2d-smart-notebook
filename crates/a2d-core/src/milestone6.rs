@@ -170,6 +170,7 @@ impl A2dCore {
         Ok(registry.resolve(id).cloned())
     }
 
+    #[cfg(test)]
     fn available_design(&self, id: &NotebookDesignId) -> Result<Option<NotebookDesign>, A2dError> {
         let registry = bundled_placeholder_registry()?;
         self.available_design_with_registry(id, &registry)
