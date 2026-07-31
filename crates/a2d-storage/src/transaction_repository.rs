@@ -50,6 +50,14 @@ impl ScanRepository for Transaction<'_> {
     fn get_scan(&self, id: &ScanId) -> Result<Option<Scan>, A2dError> {
         ScanRepository::get_scan(&**self, id)
     }
+
+    fn find_scan_by_recovery_token(
+        &self,
+        page_id: &PageId,
+        token: &str,
+    ) -> Result<Option<Scan>, A2dError> {
+        ScanRepository::find_scan_by_recovery_token(&**self, page_id, token)
+    }
 }
 
 impl AuditEventRepository for Transaction<'_> {

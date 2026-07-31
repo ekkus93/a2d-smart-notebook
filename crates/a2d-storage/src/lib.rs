@@ -296,6 +296,14 @@ macro_rules! impl_scan_delegate {
             ) -> Result<Option<a2d_domain::Scan>, A2dError> {
                 ScanRepository::get_scan(&self.conn, id)
             }
+
+            fn find_scan_by_recovery_token(
+                &self,
+                page_id: &a2d_domain::PageId,
+                token: &str,
+            ) -> Result<Option<a2d_domain::Scan>, A2dError> {
+                ScanRepository::find_scan_by_recovery_token(&self.conn, page_id, token)
+            }
         }
     };
 }
