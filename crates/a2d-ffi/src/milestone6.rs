@@ -155,6 +155,25 @@ pub struct SmartPageGenerationRequest {
     pub starting_visible_page: u32,
 }
 
+/// Versioned projection of the resource and wire-format limits enforced by the Rust PDF generator.
+#[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
+pub struct SmartPageGenerationPolicy {
+    pub policy_version: u32,
+    pub maximum_page_count: u32,
+    pub maximum_starting_visible_page: u32,
+    pub maximum_pdf_output_bytes: u64,
+}
+
+#[uniffi::export]
+pub fn smart_page_generation_policy() -> SmartPageGenerationPolicy {
+    SmartPageGenerationPolicy {
+        policy_version: 1,
+        maximum_page_count: a2d_pdf::MAX_PAGE_SET_PAGE_COUNT,
+        maximum_starting_visible_page: 999_999,
+        maximum_pdf_output_bytes: a2d_pdf::MAX_PDF_OUTPUT_BYTES as u64,
+    }
+}
+
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct GeneratedSmartPages {
     pub page_set_id: String,
@@ -310,6 +329,18 @@ impl A2dClient {
 mod tests {
     use super::*;
     use crate::OpenLibraryRequest;
+
+    #[test]
+    fn generation_policy_matches_the_enforced_rust_limits() {
+        let policy = smart_page_generation_policy();
+        assert_eq!(policy.policy_version, 1);
+        assert_eq!(policy.maximum_page_count, a2d_pdf::MAX_PAGE_SET_PAGE_COUNT);
+        assert_eq!(policy.maximum_starting_visible_page, 999_999);
+        assert_eq!(
+            policy.maximum_pdf_output_bytes,
+            a2d_pdf::MAX_PDF_OUTPUT_BYTES as u64
+        );
+    }
 
     #[test]
     fn notebook_and_generation_workflows_delegate_through_the_ffi_boundary() {
