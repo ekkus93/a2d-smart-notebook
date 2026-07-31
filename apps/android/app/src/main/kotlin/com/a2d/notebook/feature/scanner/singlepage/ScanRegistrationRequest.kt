@@ -23,7 +23,9 @@ internal fun SinglePageReviewArtifact.toRegisterScanRequest(): RegisterScanReque
         imageRotation = imageRotation.toRegistrationImageRotation(),
         capturedAtMs = capturedAtMs,
         observedMarkers = analysis.markers.toRegistrationMarkers(),
-        previewWarnings = warnings.toRegistrationWarningCodes(),
+        previewWarnings =
+            warnings.toRegistrationWarningCodes() +
+                RustScannerPolicySession.registrationEvidence(),
         userApproved = true,
     )
 }
@@ -55,5 +57,5 @@ internal fun Set<CapturePolicyWarning>.toRegistrationWarningCodes(): List<String
     require(CapturePolicyWarning.MISSING_MARKERS !in this) {
         "a capture with missing markers cannot be approved for registration"
     }
-    return map { it.name }.sorted() + RustScannerPolicySession.registrationEvidence()
+    return map { it.name }.sorted()
 }
