@@ -19,11 +19,11 @@ class ScannerRecoveryBridgeTest {
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
-    fun scannerJournalSurvivesClientRecreationAndDiscardRemovesOnlyStagingFile() {
+    fun scannerJournalExistsBeforeCameraWriteAndSurvivesCallbackLoss() {
         val root = context.filesDir.resolve("scanner-recovery-test-${UUID.randomUUID()}")
         val staging = root.resolve("tmp/scanner-staging/capture.jpg")
         assertTrue(staging.parentFile?.mkdirs() == true)
-        staging.writeBytes(byteArrayOf(1, 2, 3, 4))
+        staging.writeText("A2D_CAMERA_CAPTURE_RESERVED_V1\n")
         val token = "android-${UUID.randomUUID()}"
 
         try {
@@ -44,17 +44,56 @@ class ScannerRecoveryBridgeTest {
             assertEquals(ScannerRecoveryPhase.CAPTURED, created.phase)
             assertTrue(staging.isFile)
 
-            val recreated = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
-            val restored = recreated.listScannerRecoveries().single { it.token == token }
-            assertEquals(pageId, restored.pageId)
+            val beforeCameraCallback =
+                A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
+            val reserved = beforeCameraCallback.listScannerRecoveries().single { it.token == token }
+            assertEquals(pageId, reserved.pageId)
+            assertEquals(ScannerRecoveryPhase.CAPTURED, reserved.phase)
+
+            // Simulate CameraX replacing the reservation and the process dying before its callback.
+            staging.writeBytes(byteArrayOf(1, 2, 3, 4))
+            val afterCallbackLoss =
+                A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
+            val restored = afterCallbackLoss.listScannerRecoveries().single { it.token == token }
             assertEquals(ScannerRecoveryPhase.CAPTURED, restored.phase)
 
-            val previewReady = recreated.markScannerRecoveryPreviewReady(token)
+            val previewReady = afterCallbackLoss.markScannerRecoveryPreviewReady(token)
             assertEquals(ScannerRecoveryPhase.PREVIEW_READY, previewReady.phase)
-            recreated.discardScannerRecovery(token)
+            afterCallbackLoss.discardScannerRecovery(token)
 
             assertFalse(staging.exists())
-            assertTrue(recreated.listScannerRecoveries().none { it.token == token })
+            assertTrue(afterCallbackLoss.listScannerRecoveries().none { it.token == token })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun cameraFailureDiscardsPreparedJournalAndReservation() {
+        val root = context.filesDir.resolve("scanner-recovery-abort-${UUID.randomUUID()}")
+        val staging = root.resolve("tmp/scanner-staging/capture.jpg")
+        assertTrue(staging.parentFile?.mkdirs() == true)
+        staging.writeText("A2D_CAMERA_CAPTURE_RESERVED_V1\n")
+        val token = "android-${UUID.randomUUID()}"
+
+        try {
+            val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
+            client.beginScannerRecovery(
+                BeginScannerRecoveryRequest(
+                    token = token,
+                    stagingPath = staging.canonicalPath,
+                    pageId = client.generatePageId(),
+                    notebookId = "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                    capturedAtMs = System.currentTimeMillis(),
+                    layoutId = "USLETTER-LINED",
+                    processingPolicyVersion = 1u,
+                ),
+            )
+
+            client.discardScannerRecovery(token)
+
+            assertFalse(staging.exists())
+            assertTrue(client.listScannerRecoveries().none { it.token == token })
         } finally {
             root.deleteRecursively()
         }
