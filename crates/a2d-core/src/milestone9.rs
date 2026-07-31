@@ -21,7 +21,8 @@ use a2d_identity::PageCode;
 use a2d_image::{
     AprilTagDetector, DerivedImagePipeline, EncodedImage, EncodedImageFormat, GrayQualityMetrics,
     ImageRotation, OwnedGrayImage, OwnedRgbImage, PerceptualFingerprintV1, ProcessingCancellation,
-    RectificationPlan, ResolvedPageMarkers, measure_gray_quality, resolve_page_markers,
+    QualityCalibrationMetadata, RectificationPlan, ResolvedPageMarkers,
+    QUALITY_THRESHOLDS_UNCALIBRATED, measure_gray_quality, resolve_page_markers,
 };
 use a2d_storage::{
     AssetPersistenceFailureStage, AssetRepository, AuditEventRepository, PageRepository,
@@ -34,6 +35,9 @@ use super::{A2dCore, PageResolution, StoredScanProcessingPolicy};
 
 const JOURNAL_DIRECTORY: &str = "asset-commit-journals";
 const SCANNER_STAGING_DIRECTORY: &str = "scanner-staging";
+const REGISTRATION_QUALITY_THRESHOLD_POLICY_VERSION: u32 = 1;
+const REGISTRATION_QUALITY_CALIBRATION: QualityCalibrationMetadata =
+    QualityCalibrationMetadata::provisional(REGISTRATION_QUALITY_THRESHOLD_POLICY_VERSION);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScanImageFormat {
@@ -139,6 +143,18 @@ pub enum RegistrationRequiredAction {
     ReconcileScannerRecovery,
 }
 
+/// Raw measured quality plus an explicit statement of what the current threshold evidence permits.
+/// `provisional_status` is never presented as a calibrated production claim unless
+/// `production_status` is populated.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegisteredScanQualityEvidence {
+    pub calibration: QualityCalibrationMetadata,
+    pub provisional_status: QualityStatus,
+    pub production_status: Option<QualityStatus>,
+    pub metrics: GrayQualityMetrics,
+    pub warning_code: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct RegisteredScan {
     pub scan_id: ScanId,
@@ -151,7 +167,10 @@ pub struct RegisteredScan {
     pub corrected_path: String,
     pub ocr_path: String,
     pub thumbnail_path: String,
+    /// Durable review-oriented status. This is `NeedsReview` while the applicable production
+    /// threshold calibration is provisional or unavailable.
     pub quality_status: QualityStatus,
+    pub quality: RegisteredScanQualityEvidence,
     pub preferred: bool,
     pub warnings: Vec<RegistrationWarning>,
     pub required_actions: Vec<RegistrationRequiredAction>,
@@ -430,6 +449,24 @@ impl A2dCore {
         let mut warnings = quality_warnings(&processed);
         merge_preview_warnings(&request.preview_warnings, &mut warnings)?;
 
+        let provisional_quality_status = if warnings.is_empty() {
+            QualityStatus::Accepted
+        } else {
+            QualityStatus::AcceptedWithWarnings
+        };
+        let production_quality_status = REGISTRATION_QUALITY_CALIBRATION
+            .allows_production_classification()
+            .then_some(provisional_quality_status);
+        let quality = RegisteredScanQualityEvidence {
+            calibration: REGISTRATION_QUALITY_CALIBRATION,
+            provisional_status: provisional_quality_status,
+            production_status: production_quality_status,
+            metrics: processed.quality,
+            warning_code: REGISTRATION_QUALITY_CALIBRATION
+                .warning_code()
+                .map(str::to_string),
+        };
+
         let mut storage = self.lock_storage()?;
         let page = storage
             .get_page(&request.expected_page_id)?
@@ -485,16 +522,18 @@ impl A2dCore {
             ));
         }
 
+        // The first explicitly user-approved scan may establish the page's initial preferred scan.
+        // This is an identity/workflow decision, not an automatic quality ranking. A later scan is
+        // never promoted over the existing preferred scan by provisional quality evidence.
         let preferred = existing_preferred.is_none();
-        let quality_status = if preferred {
-            if warnings.is_empty() {
-                QualityStatus::Accepted
-            } else {
-                QualityStatus::AcceptedWithWarnings
-            }
-        } else {
+        let quality_status = if !preferred {
             warnings.insert(RegistrationWarning::ExistingPageScanRequiresReview);
             QualityStatus::NeedsReview
+        } else {
+            match production_quality_status {
+                Some(status) => status,
+                None => QualityStatus::NeedsReview,
+            }
         };
 
         if let Some(token) = request.recovery_token.as_deref() {
@@ -569,11 +608,14 @@ impl A2dCore {
         let ocr_path = resolve_path(&ocr)?;
         let thumbnail_path = resolve_path(&thumbnail)?;
         let pipeline_version = format!(
-            "image-pipeline-v{};scan-policy-v{};layout={};marker-family={}",
+            "image-pipeline-v{};scan-policy-v{};layout={};marker-family={};quality-threshold-policy-v{};quality-calibration={:?};quality-evidence={:?}",
             processed.pipeline_version,
             scan_policy.policy_version,
             scan_policy.layout_version,
-            scan_policy.marker_family
+            scan_policy.marker_family,
+            quality.calibration.threshold_policy_version,
+            quality.calibration.calibration_state,
+            quality.calibration.threshold_evidence,
         );
 
         let mut content_fingerprint = format!(
@@ -584,6 +626,14 @@ impl A2dCore {
         if let Some(token) = request.recovery_token.as_deref() {
             content_fingerprint.push_str(";recovery-token=");
             content_fingerprint.push_str(token);
+        }
+
+        let mut persisted_warning_codes = warnings
+            .iter()
+            .map(|warning| warning.code().to_string())
+            .collect::<Vec<_>>();
+        if let Some(warning_code) = quality.warning_code.as_ref() {
+            persisted_warning_codes.push(warning_code.clone());
         }
 
         let scan = Scan::new(
@@ -598,15 +648,16 @@ impl A2dCore {
             Some(thumbnail.id().clone()),
             pipeline_version,
             quality_status,
-            warnings
-                .iter()
-                .map(|warning| warning.code().to_string())
-                .collect(),
+            persisted_warning_codes,
             preferred,
             None,
             content_fingerprint,
         );
-        let audit = scan_audit_event(&scan, request.active_notebook_id.as_ref())?;
+        let audit = scan_audit_event(
+            &scan,
+            request.active_notebook_id.as_ref(),
+            &quality,
+        )?;
 
         let transaction_result = storage.transaction(|tx| {
             let current_page = tx.get_page(&request.expected_page_id)?.ok_or_else(|| {
@@ -650,11 +701,16 @@ impl A2dCore {
                 A2dError::internal_unknown("scan registration trigger removed its owning page")
             })?;
             if preferred {
-                if updated_page.state != PageState::Scanned
+                let expected_page_state = if quality_status == QualityStatus::NeedsReview {
+                    PageState::NeedsReview
+                } else {
+                    PageState::Scanned
+                };
+                if updated_page.state != expected_page_state
                     || updated_page.preferred_scan_id.as_ref() != Some(scan.id())
                 {
                     return Err(A2dError::internal_unknown(
-                        "scan registration trigger did not establish the preferred scan",
+                        "scan registration trigger did not establish the calibrated page state and preferred scan",
                     ));
                 }
             } else if updated_page.state != PageState::NeedsReview
@@ -714,6 +770,7 @@ impl A2dCore {
             ocr_path,
             thumbnail_path,
             quality_status,
+            quality,
             preferred,
             warnings: warnings.into_iter().collect(),
             required_actions,
@@ -1118,7 +1175,11 @@ fn merge_preview_warnings(
     Ok(())
 }
 
-fn scan_audit_event(scan: &Scan, notebook_id: Option<&NotebookId>) -> Result<AuditEvent, A2dError> {
+fn scan_audit_event(
+    scan: &Scan,
+    notebook_id: Option<&NotebookId>,
+    quality: &RegisteredScanQualityEvidence,
+) -> Result<AuditEvent, A2dError> {
     let mut details = BTreeMap::new();
     details.insert("page_id".to_string(), scan.page_id.to_string());
     details.insert("scan_id".to_string(), scan.id().to_string());
@@ -1132,6 +1193,94 @@ fn scan_audit_event(scan: &Scan, notebook_id: Option<&NotebookId>) -> Result<Aud
     details.insert(
         "quality_status".to_string(),
         format!("{:?}", scan.quality_status),
+    );
+    details.insert(
+        "provisional_quality_status".to_string(),
+        format!("{:?}", quality.provisional_status),
+    );
+    details.insert(
+        "production_quality_status".to_string(),
+        quality
+            .production_status
+            .map(|status| format!("{status:?}"))
+            .unwrap_or_else(|| "unavailable".to_string()),
+    );
+    details.insert(
+        "quality_threshold_policy_version".to_string(),
+        quality.calibration.threshold_policy_version.to_string(),
+    );
+    details.insert(
+        "quality_calibration_state".to_string(),
+        format!("{:?}", quality.calibration.calibration_state),
+    );
+    details.insert(
+        "quality_threshold_evidence".to_string(),
+        format!("{:?}", quality.calibration.threshold_evidence),
+    );
+    details.insert(
+        "quality_physical_calibration_version".to_string(),
+        quality
+            .calibration
+            .physical_calibration_version
+            .map(|version| version.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+    );
+    details.insert(
+        "quality_warning_code".to_string(),
+        quality
+            .warning_code
+            .clone()
+            .unwrap_or_else(|| "none".to_string()),
+    );
+    match quality.metrics.focus {
+        Some(focus) => {
+            details.insert(
+                "quality_focus_laplacian_variance".to_string(),
+                focus.laplacian_variance.to_string(),
+            );
+            details.insert(
+                "quality_focus_interior_sample_count".to_string(),
+                focus.interior_sample_count.to_string(),
+            );
+        }
+        None => {
+            details.insert(
+                "quality_focus_laplacian_variance".to_string(),
+                "unavailable".to_string(),
+            );
+            details.insert(
+                "quality_focus_interior_sample_count".to_string(),
+                "0".to_string(),
+            );
+        }
+    }
+    details.insert(
+        "quality_mean_luminance".to_string(),
+        quality.metrics.exposure.mean_luminance.to_string(),
+    );
+    details.insert(
+        "quality_luminance_standard_deviation".to_string(),
+        quality
+            .metrics
+            .exposure
+            .luminance_standard_deviation
+            .to_string(),
+    );
+    details.insert(
+        "quality_dark_fraction".to_string(),
+        quality.metrics.exposure.dark_fraction.to_string(),
+    );
+    details.insert(
+        "quality_highlight_fraction".to_string(),
+        quality.metrics.exposure.highlight_fraction.to_string(),
+    );
+    details.insert(
+        "quality_max_tile_highlight_fraction".to_string(),
+        quality.metrics.glare.max_tile_highlight_fraction.to_string(),
+    );
+    details.insert(
+        "quality_populated_tile_count".to_string(),
+        quality.metrics.glare.populated_tile_count.to_string(),
     );
     details.insert(
         "pipeline_version".to_string(),
