@@ -52,8 +52,9 @@ class ScannerRecoveryUiPolicyTest {
     }
 
     @Test
-    fun stagingOwnershipBlocksNavigationUntilProcessingOrRegistrationFinishes() {
+    fun stagingOwnershipBlocksNavigationThroughCameraProcessingAndRegistration() {
         assertFalse(SinglePageScannerUiState().navigationBlocked)
+        assertTrue(SinglePageScannerUiState(captureInProgress = true).navigationBlocked)
         assertTrue(SinglePageScannerUiState(processing = true).navigationBlocked)
         assertTrue(SinglePageScannerUiState(registrationInProgress = true).navigationBlocked)
         assertTrue(SinglePageScannerUiState(recoveryOperationInProgress = true).navigationBlocked)
