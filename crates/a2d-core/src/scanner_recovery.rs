@@ -513,35 +513,54 @@ impl A2dCore {
                 true,
             ));
         }
-        if let Err(error) = std::fs::hard_link(&temp_path, &final_path) {
-            let _ = std::fs::remove_file(&temp_path);
-            let code = if error.kind() == std::io::ErrorKind::AlreadyExists {
-                "CORE_SCANNER_RECOVERY_ALREADY_EXISTS"
-            } else {
-                "CORE_SCANNER_RECOVERY_FINALIZE_FAILED"
-            };
-            return Err(recovery_error(
-                code,
-                if error.kind() == std::io::ErrorKind::AlreadyExists {
-                    ErrorCategory::Validation
+
+        // Android application filesystems may reject hard links even inside one private directory.
+        // Reserve the final name with create_new so duplicate tokens still cannot clobber an
+        // existing record, then atomically rename the fully-synchronized temp file over the empty
+        // reservation. A crash before the rename leaves either no final entry or a zero-length entry
+        // that the bounded reader reports as corrupt; it can never expose a partially encoded record.
+        let reservation = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&final_path)
+            .map_err(|error| {
+                let code = if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    "CORE_SCANNER_RECOVERY_ALREADY_EXISTS"
                 } else {
-                    ErrorCategory::Storage
-                },
-                format!("failed to finalize scanner recovery record: {error}"),
-                error.kind() != std::io::ErrorKind::AlreadyExists,
+                    "CORE_SCANNER_RECOVERY_FINALIZE_FAILED"
+                };
+                recovery_error(
+                    code,
+                    if error.kind() == std::io::ErrorKind::AlreadyExists {
+                        ErrorCategory::Validation
+                    } else {
+                        ErrorCategory::Storage
+                    },
+                    format!("failed to reserve scanner recovery record path: {error}"),
+                    error.kind() != std::io::ErrorKind::AlreadyExists,
+                )
+                .with_detail("token", &record.token)
+            });
+        let reservation = match reservation {
+            Ok(file) => file,
+            Err(error) => {
+                let _ = std::fs::remove_file(&temp_path);
+                return Err(error);
+            }
+        };
+        let finalize_result = std::fs::rename(&temp_path, &final_path);
+        drop(reservation);
+        if let Err(error) = finalize_result {
+            let _ = std::fs::remove_file(&temp_path);
+            let _ = std::fs::remove_file(&final_path);
+            return Err(recovery_error(
+                "CORE_SCANNER_RECOVERY_FINALIZE_FAILED",
+                ErrorCategory::Storage,
+                format!("failed to atomically finalize scanner recovery record: {error}"),
+                true,
             )
             .with_detail("token", &record.token));
         }
-        sync_directory(&root)?;
-        std::fs::remove_file(&temp_path).map_err(|error| {
-            recovery_error(
-                "CORE_SCANNER_RECOVERY_TEMP_CLEANUP_FAILED",
-                ErrorCategory::Storage,
-                format!("failed to remove finalized scanner recovery temp file: {error}"),
-                true,
-            )
-            .with_detail("temp_path", temp_path.to_string_lossy())
-        })?;
         sync_directory(&root)
     }
 
@@ -918,6 +937,34 @@ mod tests {
         reopened.discard_scanner_recovery("recover-one").unwrap();
         assert!(reopened.list_scanner_recoveries().unwrap().is_empty());
         assert!(!Path::new(&captured.staging_path).exists());
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn duplicate_token_never_replaces_the_existing_recovery_record() {
+        let (core, root) = open_core();
+        let first = begin(&core, &root, "recover-duplicate");
+        let second_staging = root
+            .join("tmp")
+            .join(STAGING_DIRECTORY)
+            .join("recover-duplicate-second.jpg");
+        std::fs::write(&second_staging, b"different capture").unwrap();
+        let error = core
+            .begin_scanner_recovery(BeginScannerRecoveryRequest {
+                token: first.token.clone(),
+                staging_path: second_staging.to_string_lossy().into_owned(),
+                page_id: PageId::generate(),
+                notebook_id: NotebookId::generate(),
+                captured_at_ms: 2,
+                layout_id: LayoutId::parse("USLETTER-LINED").unwrap(),
+                processing_policy_version: 1,
+            })
+            .unwrap_err();
+        assert_eq!(
+            error.code.to_string(),
+            "CORE_SCANNER_RECOVERY_ALREADY_EXISTS"
+        );
+        assert_eq!(core.list_scanner_recoveries().unwrap(), vec![first]);
         std::fs::remove_dir_all(root).ok();
     }
 
