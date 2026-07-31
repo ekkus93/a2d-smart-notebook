@@ -85,9 +85,7 @@ impl A2dClient {
         page_id: String,
     ) -> Result<StoredScanLayoutPolicy, A2dFfiError> {
         let page_id = PageId::parse(&page_id)?;
-        let policy = self
-            .core
-            .resolve_stored_scan_processing_policy(&page_id)?;
+        let policy = self.core.resolve_stored_scan_processing_policy(&page_id)?;
         policy.try_into().map_err(Into::into)
     }
 }
@@ -133,7 +131,10 @@ mod tests {
             ),
             (0, 1, 2, 3)
         );
-        assert_eq!((policy.corrected_width, policy.corrected_height), (900, 1_273));
+        assert_eq!(
+            (policy.corrected_width, policy.corrected_height),
+            (900, 1_273)
+        );
         assert_eq!(policy.processing_policy_version, 1);
         assert_eq!(policy.pipeline_version, 1);
 
