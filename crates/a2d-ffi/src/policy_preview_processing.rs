@@ -46,6 +46,7 @@ struct PreviewResult {
     source_to_corrected_matrix: [f64; 9],
 }
 
+#[derive(Debug)]
 enum PreviewOutcome {
     Completed(Box<PreviewResult>),
     Cancelled,
