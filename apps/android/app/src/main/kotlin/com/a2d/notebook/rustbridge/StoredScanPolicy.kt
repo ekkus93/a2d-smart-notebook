@@ -145,10 +145,10 @@ private fun decodeStoredScanPolicy(bytes: ByteArray): StoredScanPolicy {
             declaredMarkerFamily = reader.readOptionalString("declared marker family"),
             markerIds =
                 PageMarkerIds(
-                    topLeft = reader.readInt("top-left marker ID"),
-                    topRight = reader.readInt("top-right marker ID"),
-                    bottomRight = reader.readInt("bottom-right marker ID"),
-                    bottomLeft = reader.readInt("bottom-left marker ID"),
+                    topLeft = reader.readInt("top-left marker ID").toLong(),
+                    topRight = reader.readInt("top-right marker ID").toLong(),
+                    bottomRight = reader.readInt("bottom-right marker ID").toLong(),
+                    bottomLeft = reader.readInt("bottom-left marker ID").toLong(),
                 ),
             correctedWidth = reader.readInt("corrected width"),
             correctedHeight = reader.readInt("corrected height"),
