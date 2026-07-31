@@ -86,9 +86,7 @@ impl A2dClient {
             .map_err(Into::into)
     }
 
-    pub fn list_scanner_recoveries(
-        &self,
-    ) -> Result<Vec<ScannerRecoveryRecord>, A2dFfiError> {
+    pub fn list_scanner_recoveries(&self) -> Result<Vec<ScannerRecoveryRecord>, A2dFfiError> {
         self.core
             .list_scanner_recoveries()
             .map(|records| records.into_iter().map(Into::into).collect())
@@ -131,10 +129,8 @@ mod tests {
 
     #[test]
     fn ffi_recovery_records_round_trip_without_platform_business_rules() {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-ffi-scanner-recovery-{}",
-            PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-ffi-scanner-recovery-{}", PageId::generate()));
         let client = A2dClient::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })

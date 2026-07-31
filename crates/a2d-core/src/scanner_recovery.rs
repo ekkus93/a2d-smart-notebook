@@ -475,10 +475,7 @@ impl A2dCore {
         Ok(record)
     }
 
-    fn write_new_scanner_recovery(
-        &self,
-        record: &ScannerRecoveryRecord,
-    ) -> Result<(), A2dError> {
+    fn write_new_scanner_recovery(&self, record: &ScannerRecoveryRecord) -> Result<(), A2dError> {
         let root = self.scanner_recovery_root()?;
         let final_path = self.scanner_recovery_path(&record.token)?;
         let temp_path = root.join(format!(
@@ -546,10 +543,7 @@ impl A2dCore {
         sync_directory(&root)
     }
 
-    fn replace_scanner_recovery(
-        &self,
-        record: &ScannerRecoveryRecord,
-    ) -> Result<(), A2dError> {
+    fn replace_scanner_recovery(&self, record: &ScannerRecoveryRecord) -> Result<(), A2dError> {
         let root = self.scanner_recovery_root()?;
         let final_path = self.scanner_recovery_path(&record.token)?;
         if !final_path.is_file() {
@@ -694,7 +688,12 @@ impl A2dCore {
         &self,
         token: &str,
     ) -> Result<ScannerRecoveryRecord, A2dError> {
-        self.advance_scanner_recovery(token, ScannerRecoveryPhase::Captured, ScannerRecoveryPhase::PreviewReady, None)
+        self.advance_scanner_recovery(
+            token,
+            ScannerRecoveryPhase::Captured,
+            ScannerRecoveryPhase::PreviewReady,
+            None,
+        )
     }
 
     pub(crate) fn mark_scanner_recovery_registering(
@@ -843,10 +842,8 @@ mod tests {
     use crate::OpenLibraryRequest;
 
     fn open_core() -> (std::sync::Arc<A2dCore>, PathBuf) {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-scanner-recovery-{}",
-            PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-scanner-recovery-{}", PageId::generate()));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })
