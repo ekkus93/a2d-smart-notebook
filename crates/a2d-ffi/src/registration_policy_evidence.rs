@@ -67,15 +67,18 @@ pub fn validate_and_strip_registration_policy_evidence(
 }
 
 fn parse_version(raw: &str, field: &'static str) -> Result<u32, A2dError> {
-    raw.parse::<u32>().ok().filter(|value| *value > 0).ok_or_else(|| {
-        evidence_error(
-            "FFI_SCAN_PREVIEW_POLICY_EVIDENCE_INVALID",
-            ErrorCategory::Validation,
-            format!("reviewed preview {field} version is invalid"),
-        )
-        .with_detail("field", field)
-        .with_detail("value", raw)
-    })
+    raw.parse::<u32>()
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| {
+            evidence_error(
+                "FFI_SCAN_PREVIEW_POLICY_EVIDENCE_INVALID",
+                ErrorCategory::Validation,
+                format!("reviewed preview {field} version is invalid"),
+            )
+            .with_detail("field", field)
+            .with_detail("value", raw)
+        })
 }
 
 fn set_once<T>(slot: &mut Option<T>, value: T, field: &'static str) -> Result<(), A2dError> {
