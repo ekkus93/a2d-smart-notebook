@@ -12,6 +12,10 @@ use super::A2dCore;
 mod scan_processing_policy;
 pub use scan_processing_policy::*;
 
+#[path = "integrity.rs"]
+mod integrity;
+pub use integrity::*;
+
 /// Core-facing name for the canonical layout and processing policy resolved from stored state.
 pub type StoredScanLayout = ResolvedScanLayout;
 
