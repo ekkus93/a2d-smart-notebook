@@ -15,10 +15,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.GeneratedSmartPages
+import uniffi.a2d_ffi.SmartPageGenerationPolicy
 import uniffi.a2d_ffi.SmartPageGenerationRequest
-
-private const val PRESENTATION_MAX_PAGE_SET_PAGE_COUNT = 500
-private const val PRESENTATION_MAX_QR_VISIBLE_PAGE_NUMBER = 999_999
+import uniffi.a2d_ffi.smartPageGenerationPolicy
 
 private const val PENDING_SAVE_TOKEN_KEY = "smart_pages.pending_save.token"
 private const val PENDING_SAVE_ASSET_ID_KEY = "smart_pages.pending_save.asset_id"
@@ -111,6 +110,7 @@ class SmartPagesViewModel(
     savedStateHandle: SavedStateHandle,
 ) : AndroidViewModel(application) {
     private val client = A2dBridge.client(application)
+    val generationPolicy: SmartPageGenerationPolicy = smartPageGenerationPolicy()
     private val pendingSaveStore = PendingSmartPageSaveStore(savedStateHandle)
     private val mutableState = mutableStateOf(
         SmartPagesUiState(pendingSave = pendingSaveStore.current()),
@@ -161,27 +161,29 @@ data class ValidatedSmartPageForm(
 )
 
 /**
- * Presentation-only mirror of the Rust validation policy for immediate form feedback. Rust repeats
+ * Presentation validation consumes the versioned Rust policy for immediate feedback. Rust repeats
  * every check and remains authoritative for direct FFI and future platform callers.
  */
 fun validateSmartPageForm(
     pageCountText: String,
     startingVisiblePageText: String,
+    policy: SmartPageGenerationPolicy,
 ): Result<ValidatedSmartPageForm> {
+    require(policy.policyVersion > 0u) { "Smart Page generation policy version is invalid" }
     val pageCount = pageCountText.toUIntOrNull()
         ?: return Result.failure(IllegalArgumentException("page_count"))
-    if (pageCount == 0u || pageCount > PRESENTATION_MAX_PAGE_SET_PAGE_COUNT.toUInt()) {
+    if (pageCount == 0u || pageCount > policy.maximumPageCount) {
         return Result.failure(IllegalArgumentException("page_count"))
     }
 
     val startingPage = startingVisiblePageText.toUIntOrNull()
         ?: return Result.failure(IllegalArgumentException("starting_page"))
-    if (startingPage == 0u || startingPage > PRESENTATION_MAX_QR_VISIBLE_PAGE_NUMBER.toUInt()) {
+    if (startingPage == 0u || startingPage > policy.maximumStartingVisiblePage) {
         return Result.failure(IllegalArgumentException("starting_page"))
     }
 
-    val lastVisiblePage = startingPage.toLong() + pageCount.toLong() - 1L
-    if (lastVisiblePage > PRESENTATION_MAX_QR_VISIBLE_PAGE_NUMBER.toLong()) {
+    val lastVisiblePage = startingPage.toULong() + pageCount.toULong() - 1uL
+    if (lastVisiblePage > policy.maximumStartingVisiblePage.toULong()) {
         return Result.failure(IllegalArgumentException("visible_page_range"))
     }
     return Result.success(ValidatedSmartPageForm(pageCount, startingPage))
