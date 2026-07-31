@@ -47,6 +47,9 @@ import uniffi.a2d_ffi.PageResolution
 import uniffi.a2d_ffi.ScannerRecoveryPhase
 import uniffi.a2d_ffi.ScannerRecoveryRecord
 
+private val CAMERA_CAPTURE_RESERVATION_BYTES =
+    "A2D_CAMERA_CAPTURE_RESERVED_V1\n".encodeToByteArray()
+
 internal data class FinalCaptureIdentityAssessment(
     val approvalAllowed: Boolean,
     val warning: String?,
@@ -109,7 +112,8 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
     fun selectNotebook(notebook: NotebookSummary) {
         val current = mutableState.value
         if (
-            current.processing ||
+            current.captureInProgress ||
+                current.processing ||
                 current.registrationInProgress ||
                 current.recoveryOperationInProgress ||
                 current.scannerRecoveries.isNotEmpty() ||
@@ -160,7 +164,11 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
         viewModelScope.launch {
             when (event) {
                 is LiveFrameAnalysisEvent.Succeeded -> {
-                    if (mutableState.value.reviewArtifact != null || mutableState.value.processing) {
+                    if (
+                        mutableState.value.reviewArtifact != null ||
+                            mutableState.value.captureInProgress ||
+                            mutableState.value.processing
+                    ) {
                         return@launch
                     }
                     latestAnalysisTimestampNanos = event.metrics.frameTimestampNanos
@@ -252,10 +260,20 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
         applyTransition(captureMachine.dismissManualCapture(warning.token))
     }
 
-    /** Returns one new path and atomically consumes the matching UI request. */
-    fun consumePendingCapture(request: AutoCaptureRequest): File? {
+    /**
+     * Durably reserves and journals the exact staging file before CameraX is allowed to write it.
+     * A process death after this method returns is therefore visible through Rust recovery even when
+     * CameraX finishes the image but Android never receives its completion callback.
+     */
+    suspend fun consumePendingCapture(request: AutoCaptureRequest): File? {
         if (mutableState.value.pendingCaptureRequest != request) return null
-        update { it.copy(pendingCaptureRequest = null) }
+        update {
+            it.copy(
+                pendingCaptureRequest = null,
+                captureInProgress = true,
+                error = null,
+            )
+        }
         val directory = stagingDirectory()
         val file =
             File(
@@ -263,9 +281,64 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
                 "scan-${request.token.generation}-${request.token.sequence}-${UUID.randomUUID()}.jpg",
             )
         check(!file.exists()) { "new scanner staging path unexpectedly already exists" }
-        pendingStagingFile = file
-        pendingRecoveryToken = null
-        return file
+        var journalPersisted = false
+        return try {
+            val storedPolicy = RustScannerPolicySession.requireCurrentPolicy()
+            val token = UUID.randomUUID().toString()
+            val reservedAtMs = System.currentTimeMillis()
+            val record =
+                withContext(Dispatchers.IO) {
+                    writeCameraCaptureReservation(file)
+                    client.beginScannerRecovery(
+                        BeginScannerRecoveryRequest(
+                            token = token,
+                            stagingPath = file.canonicalPath,
+                            pageId = request.pageId,
+                            notebookId = request.activeNotebookId,
+                            capturedAtMs = reservedAtMs,
+                            layoutId = storedPolicy.layoutId,
+                            processingPolicyVersion =
+                                storedPolicy.processingPolicyVersion.toUInt(),
+                        ),
+                    ).also { journalPersisted = true }
+                }
+            val canonicalFile = File(record.stagingPath)
+            pendingStagingFile = canonicalFile
+            pendingCapturedAtMs = record.capturedAtMs
+            pendingRecoveryToken = record.token
+            replaceRecovery(record)
+            canonicalFile
+        } catch (failure: CancellationException) {
+            if (!journalPersisted) safeDelete(file)
+            throw failure
+        } catch (failure: Exception) {
+            if (!journalPersisted) {
+                safeDelete(file)
+            } else {
+                refreshScannerRecoveries()
+            }
+            clearPendingCaptureReferences()
+            applyTransition(
+                captureMachine.captureFailed(
+                    request.token,
+                    AutoCaptureFailure(
+                        failure.message ?: "Failed to prepare durable camera capture",
+                        retryable = true,
+                    ),
+                ),
+            )
+            val continued = captureMachine.continueScanning(System.nanoTime(), true)
+            update {
+                it.copy(
+                    captureInProgress = false,
+                    processing = false,
+                    capturePhase = continued.snapshot.phase,
+                    error = failure.message ?: "Failed to prepare durable camera capture",
+                    cameraGeneration = nextGeneration(it.cameraGeneration),
+                )
+            }
+            null
+        }
     }
 
     fun onCameraCaptureResult(
@@ -275,13 +348,31 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
         when (result) {
             is CameraCaptureResult.Captured -> {
                 val file = result.file
-                if (pendingStagingFile?.absolutePath != file.absolutePath) {
-                    safeDelete(file)
-                    update { it.copy(error = "A stale camera capture was discarded") }
+                val recoveryToken = pendingRecoveryToken
+                val capturedAtMs = pendingCapturedAtMs
+                if (
+                    pendingStagingFile?.absolutePath != file.absolutePath ||
+                        recoveryToken == null ||
+                        capturedAtMs == null
+                ) {
+                    if (recoveryToken == null) safeDelete(file)
+                    clearPendingCaptureReferences()
+                    update {
+                        it.copy(
+                            captureInProgress = false,
+                            error = "A stale camera capture was retained only when Rust owned it",
+                        )
+                    }
+                    refreshScannerRecoveries()
                     return
                 }
-                val capturedAtMs = System.currentTimeMillis()
-                pendingCapturedAtMs = capturedAtMs
+                if (isCameraCaptureReservation(file)) {
+                    handleCameraCaptureFailure(
+                        request,
+                        "Camera capture ended before the image file was finalized",
+                    )
+                    return
+                }
                 applyTransition(
                     captureMachine.captureSucceeded(
                         request.token,
@@ -291,23 +382,25 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
                         ),
                     ),
                 )
-                update { it.copy(processing = true, error = null) }
-                journalCaptureAndStartProcessing(request, file, capturedAtMs)
+                update {
+                    it.copy(
+                        captureInProgress = false,
+                        processing = true,
+                        error = null,
+                    )
+                }
+                startFullResolutionProcessing(
+                    request = request,
+                    file = file,
+                    capturedAtMs = capturedAtMs,
+                    recoveryToken = recoveryToken,
+                    markPreviewReady = true,
+                    recovered = false,
+                )
             }
 
-            is CameraCaptureResult.Failure -> {
-                pendingStagingFile?.let(::safeDelete)
-                pendingStagingFile = null
-                pendingCapturedAtMs = null
-                pendingRecoveryToken = null
-                applyTransition(
-                    captureMachine.captureFailed(
-                        request.token,
-                        AutoCaptureFailure(result.message, retryable = true),
-                    ),
-                )
-                update { it.copy(processing = false, error = result.message) }
-            }
+            is CameraCaptureResult.Failure ->
+                handleCameraCaptureFailure(request, result.message)
         }
     }
 
@@ -611,61 +704,54 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
         super.onCleared()
     }
 
-    private fun journalCaptureAndStartProcessing(
+    private fun handleCameraCaptureFailure(
         request: AutoCaptureRequest,
-        file: File,
-        capturedAtMs: Long,
+        message: String,
     ) {
+        val stagingFile = pendingStagingFile
+        val recoveryToken = pendingRecoveryToken
+        applyTransition(
+            captureMachine.captureFailed(
+                request.token,
+                AutoCaptureFailure(message, retryable = true),
+            ),
+        )
+        update {
+            it.copy(
+                captureInProgress = false,
+                processing = false,
+                recoveryOperationInProgress = recoveryToken != null,
+                error = message,
+            )
+        }
         viewModelScope.launch {
             try {
-                val storedPolicy = RustScannerPolicySession.requireCurrentPolicy()
-                val token = UUID.randomUUID().toString()
-                val record =
+                if (recoveryToken != null) {
                     withContext(Dispatchers.IO) {
-                        client.beginScannerRecovery(
-                            BeginScannerRecoveryRequest(
-                                token = token,
-                                stagingPath = file.absolutePath,
-                                pageId = request.pageId,
-                                notebookId = request.activeNotebookId,
-                                capturedAtMs = capturedAtMs,
-                                layoutId = storedPolicy.layoutId,
-                                processingPolicyVersion =
-                                    storedPolicy.processingPolicyVersion.toUInt(),
-                            ),
-                        )
+                        client.discardScannerRecovery(recoveryToken)
                     }
-                pendingRecoveryToken = record.token
-                replaceRecovery(record)
-                startFullResolutionProcessing(
-                    request = request,
-                    file = file,
-                    capturedAtMs = capturedAtMs,
-                    recoveryToken = record.token,
-                    markPreviewReady = true,
-                    recovered = false,
-                )
-            } catch (failure: CancellationException) {
-                if (pendingRecoveryToken == null) safeDelete(file)
-                throw failure
-            } catch (failure: Exception) {
-                if (pendingRecoveryToken == null) safeDelete(file)
+                    removeRecovery(recoveryToken)
+                } else {
+                    stagingFile?.let(::safeDelete)
+                }
                 clearPendingCaptureReferences()
-                applyTransition(
-                    captureMachine.processingCompleted(
-                        request.token,
-                        AutoCaptureProcessingOutcome.Rejected(
-                            failure.message ?: "Failed to create scanner recovery journal",
-                        ),
-                    ),
-                )
-                val continued = captureMachine.continueScanning(System.nanoTime(), true)
                 update {
                     it.copy(
-                        processing = false,
-                        capturePhase = continued.snapshot.phase,
-                        error = failure.message ?: "Failed to create scanner recovery journal",
-                        cameraGeneration = nextGeneration(it.cameraGeneration),
+                        recoveryOperationInProgress = false,
+                        error = message,
+                    )
+                }
+            } catch (failure: CancellationException) {
+                throw failure
+            } catch (failure: Exception) {
+                clearPendingCaptureReferences()
+                refreshScannerRecoveries()
+                update {
+                    it.copy(
+                        recoveryOperationInProgress = false,
+                        error =
+                            "Camera capture failed; its durable recovery record was retained: " +
+                                (failure.message ?: failure),
                     )
                 }
             }
@@ -836,6 +922,7 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
             it.copy(
                 capturePhase = captureMachine.snapshot().phase,
                 reviewArtifact = null,
+                captureInProgress = false,
                 processing = false,
                 registrationInProgress = false,
                 recoveryOperationInProgress = false,
@@ -1142,6 +1229,9 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
         cancellation: PagePreviewCancellation,
     ): PagePreviewProcessingOutcome {
         require(file.isFile) { "captured staging file does not exist" }
+        require(!isCameraCaptureReservation(file)) {
+            "Camera capture was interrupted before an image was finalized; discard it and retake"
+        }
         val size = file.length()
         require(size > 0L) { "captured staging file is empty" }
         require(size <= policy.fullResolution.maximumEncodedBytes) {
@@ -1320,6 +1410,7 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
                 update {
                     it.copy(
                         reviewArtifact = null,
+                        captureInProgress = false,
                         processing = false,
                         recoveryMode = false,
                     )
@@ -1379,6 +1470,20 @@ class SinglePageScannerViewModel(application: Application) : AndroidViewModel(ap
     private fun update(transform: (SinglePageScannerUiState) -> SinglePageScannerUiState) {
         mutableState.value = transform(mutableState.value)
     }
+}
+
+private fun writeCameraCaptureReservation(file: File) {
+    check(!file.exists()) { "scanner capture reservation path already exists" }
+    file.outputStream().use { stream ->
+        stream.write(CAMERA_CAPTURE_RESERVATION_BYTES)
+        stream.flush()
+        stream.fd.sync()
+    }
+}
+
+internal fun isCameraCaptureReservation(file: File): Boolean {
+    if (!file.isFile || file.length() != CAMERA_CAPTURE_RESERVATION_BYTES.size.toLong()) return false
+    return file.readBytes().contentEquals(CAMERA_CAPTURE_RESERVATION_BYTES)
 }
 
 private fun List<ScannerRecoveryRecord>.sortedRecoveries(): List<ScannerRecoveryRecord> =
