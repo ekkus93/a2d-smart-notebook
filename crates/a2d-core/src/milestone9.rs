@@ -462,9 +462,11 @@ impl A2dCore {
             provisional_status: provisional_quality_status,
             production_status: production_quality_status,
             metrics: processed.quality,
-            warning_code: REGISTRATION_QUALITY_CALIBRATION
-                .warning_code()
-                .map(str::to_string),
+            warning_code: if REGISTRATION_QUALITY_CALIBRATION.allows_production_classification() {
+                None
+            } else {
+                Some(QUALITY_THRESHOLDS_UNCALIBRATED.to_string())
+            },
         };
 
         let mut storage = self.lock_storage()?;
@@ -530,10 +532,7 @@ impl A2dCore {
             warnings.insert(RegistrationWarning::ExistingPageScanRequiresReview);
             QualityStatus::NeedsReview
         } else {
-            match production_quality_status {
-                Some(status) => status,
-                None => QualityStatus::NeedsReview,
-            }
+            production_quality_status.unwrap_or(QualityStatus::NeedsReview)
         };
 
         if let Some(token) = request.recovery_token.as_deref() {
