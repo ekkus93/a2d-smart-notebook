@@ -236,3 +236,7 @@ pub use scan_comparison::*;
 #[path = "policy_preview_processing.rs"]
 mod policy_preview_processing;
 pub use policy_preview_processing::*;
+
+#[path = "stored_scan_policy_abi.rs"]
+mod stored_scan_policy_abi;
+pub use stored_scan_policy_abi::*;
