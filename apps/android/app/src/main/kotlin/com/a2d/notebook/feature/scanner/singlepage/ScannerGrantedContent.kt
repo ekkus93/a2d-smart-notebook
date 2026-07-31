@@ -40,7 +40,7 @@ internal fun ScannerGrantedContent(
     SinglePageScannerContent(
         state = state,
         onBack = {
-            if (!state.registrationInProgress) {
+            if (!state.navigationBlocked) {
                 viewModel.leaveScanner()
                 onBack()
             }
