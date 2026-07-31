@@ -232,3 +232,7 @@ impl A2dClient {
 #[path = "scan_comparison.rs"]
 mod scan_comparison;
 pub use scan_comparison::*;
+
+#[path = "scan_policy.rs"]
+mod scan_policy;
+pub use scan_policy::*;
