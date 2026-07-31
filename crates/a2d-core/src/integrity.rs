@@ -30,10 +30,7 @@ mod tests {
 
     #[test]
     fn core_exposes_a_clean_read_only_report_for_a_fresh_library() {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-core-integrity-{}",
-            PageId::generate()
-        ));
+        let root = std::env::temp_dir().join(format!("a2d-core-integrity-{}", PageId::generate()));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })
