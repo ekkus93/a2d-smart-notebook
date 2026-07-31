@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
 import com.a2d.notebook.feature.scanner.capture.ManualCaptureWarningCode
 import com.a2d.notebook.feature.scanner.presentation.LiveScannerChrome
+import com.a2d.notebook.rustbridge.AnalyzedPageQuality
 import uniffi.a2d_ffi.NotebookSummary
 
 object SinglePageScannerTestTags {
@@ -49,6 +50,7 @@ object SinglePageScannerTestTags {
     const val PROCESSING = "single_scanner_processing"
     const val CORRECTED_PREVIEW = "single_scanner_corrected_preview"
     const val REGISTRATION_RESULT = "single_scanner_registration_result"
+    const val QUALITY_CALIBRATION = "single_scanner_quality_calibration"
     const val IDENTITY_WARNING = "single_scanner_identity_warning"
 }
 
@@ -333,6 +335,7 @@ private fun ReviewContent(
             )
         }
         state.registeredScan?.let { registered ->
+            val calibration = SinglePageScannerPolicies.V1.qualityCalibration
             Card(
                 modifier = Modifier.fillMaxWidth().testTag(SinglePageScannerTestTags.REGISTRATION_RESULT),
             ) {
@@ -348,6 +351,32 @@ private fun ReviewContent(
                             registered.qualityStatus.name,
                         ),
                     )
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.single_scanner_quality_calibration,
+                                calibration.state.name,
+                                calibration.evidence.name,
+                                calibration.thresholdPolicyVersion,
+                            ),
+                        modifier = Modifier.testTag(SinglePageScannerTestTags.QUALITY_CALIBRATION),
+                    )
+                    calibration.warningCode?.let { warningCode ->
+                        Text(
+                            text =
+                                stringResource(
+                                    R.string.single_scanner_quality_warning_code,
+                                    warningCode,
+                                ),
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    if (!calibration.allowsProductionClassification) {
+                        Text(
+                            text = stringResource(R.string.single_scanner_production_quality_unavailable),
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
                     registered.warnings.forEach { warning ->
                         Text(stringResource(R.string.single_scanner_detail_warning, warning.name))
                     }
@@ -419,6 +448,8 @@ private fun ScannerDetailsDialog(
                             ),
                         )
                     }
+                    CalibrationSummary()
+                    QualityMetricSummary(it.analysis.quality)
                     it.identityWarning?.let { warning ->
                         Text(warning, color = MaterialTheme.colorScheme.error)
                     }
@@ -436,6 +467,51 @@ private fun ScannerDetailsDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) }
         },
+    )
+}
+
+@Composable
+private fun CalibrationSummary() {
+    val calibration = SinglePageScannerPolicies.V1.qualityCalibration
+    Text(
+        stringResource(
+            R.string.single_scanner_quality_calibration,
+            calibration.state.name,
+            calibration.evidence.name,
+            calibration.thresholdPolicyVersion,
+        ),
+    )
+    calibration.warningCode?.let { warningCode ->
+        Text(stringResource(R.string.single_scanner_quality_warning_code, warningCode))
+    }
+    if (!calibration.allowsProductionClassification) {
+        Text(stringResource(R.string.single_scanner_production_quality_unavailable))
+    }
+}
+
+@Composable
+private fun QualityMetricSummary(quality: AnalyzedPageQuality) {
+    Text(
+        stringResource(
+            R.string.single_scanner_quality_focus,
+            quality.focusLaplacianVariance,
+            quality.focusInteriorSampleCount,
+        ),
+    )
+    Text(
+        stringResource(
+            R.string.single_scanner_quality_luminance,
+            quality.meanLuminance,
+            quality.luminanceStandardDeviation,
+        ),
+    )
+    Text(
+        stringResource(
+            R.string.single_scanner_quality_fractions,
+            quality.darkFraction,
+            quality.highlightFraction,
+            quality.maxTileHighlightFraction,
+        ),
     )
 }
 
