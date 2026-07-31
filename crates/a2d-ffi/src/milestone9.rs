@@ -8,6 +8,7 @@ use a2d_core as core;
 use a2d_domain::{CaptureSource, NotebookId, PageId, QualityStatus};
 
 use super::{A2dClient, A2dFfiError};
+use registration_policy_evidence::validate_and_strip_registration_policy_evidence;
 
 #[derive(Clone, Copy, Debug, uniffi::Enum)]
 pub enum ScanCaptureSource {
@@ -203,6 +204,11 @@ impl A2dClient {
             .as_deref()
             .map(NotebookId::parse)
             .transpose()?;
+        let preview_warnings = validate_and_strip_registration_policy_evidence(
+            &self.core,
+            &expected_page_id,
+            request.preview_warnings,
+        )?;
         self.core
             .register_scan(core::RegisterScanRequest {
                 staging_path: request.staging_path,
@@ -221,7 +227,7 @@ impl A2dClient {
                         id: marker.id,
                     })
                     .collect(),
-                preview_warnings: request.preview_warnings,
+                preview_warnings,
                 user_approved: request.user_approved,
             })
             .map(Into::into)
@@ -240,3 +246,6 @@ pub use policy_preview_processing::*;
 #[path = "stored_scan_policy_abi.rs"]
 mod stored_scan_policy_abi;
 pub use stored_scan_policy_abi::*;
+
+#[path = "registration_policy_evidence.rs"]
+mod registration_policy_evidence;
