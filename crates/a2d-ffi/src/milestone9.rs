@@ -233,10 +233,6 @@ impl A2dClient {
 mod scan_comparison;
 pub use scan_comparison::*;
 
-#[path = "scan_policy.rs"]
-mod scan_policy;
-pub use scan_policy::*;
-
 #[path = "policy_preview_processing.rs"]
 mod policy_preview_processing;
 pub use policy_preview_processing::*;
