@@ -107,6 +107,7 @@ data class SinglePageScannerUiState(
     val capturePhase: AutoCapturePhase = AutoCapturePhase.Idle,
     val pendingCaptureRequest: AutoCaptureRequest? = null,
     val pendingManualWarning: ManualCaptureWarning? = null,
+    val captureInProgress: Boolean = false,
     val processing: Boolean = false,
     val reviewArtifact: SinglePageReviewArtifact? = null,
     val registrationInProgress: Boolean = false,
@@ -126,17 +127,19 @@ data class SinglePageScannerUiState(
         get() = (cameraState as? CameraAdapterState.Bound)?.torchEnabled == true
 
     /**
-     * A captured staging file is owned by either preview processing, recovery journaling, or durable
-     * registration. Navigation is blocked until that boundary finishes so teardown cannot race a
-     * journal write or delete the file before Rust records it.
+     * The staging file is durably journaled before CameraX receives it. Navigation remains blocked
+     * while CameraX owns that destination, while preview processing owns it, or while registration
+     * crosses its durable commit boundary.
      */
     val navigationBlocked: Boolean
-        get() = processing || registrationInProgress || recoveryOperationInProgress
+        get() =
+            captureInProgress || processing || registrationInProgress || recoveryOperationInProgress
 
     val canCaptureManually: Boolean
         get() =
             activeNotebook != null &&
                 cameraState is CameraAdapterState.Bound &&
+                !captureInProgress &&
                 !processing &&
                 reviewArtifact == null &&
                 scannerRecoveries.isEmpty() &&
