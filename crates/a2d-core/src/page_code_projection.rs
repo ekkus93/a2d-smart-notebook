@@ -71,10 +71,8 @@ mod tests {
 
     #[test]
     fn stored_notebook_page_round_trips_through_the_identity_codec() {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-page-code-projection-{}",
-            PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-page-code-projection-{}", PageId::generate()));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })
