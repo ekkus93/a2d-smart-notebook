@@ -1,4 +1,4 @@
-//! Thin UniFFI projection for Rust-owned scanner recovery records.
+//! Typed UniFFI projection for Rust-owned scanner recovery records.
 
 use a2d_core as core;
 use a2d_domain::{LayoutId, NotebookId, PageId, ScanId};
