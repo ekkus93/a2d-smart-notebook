@@ -147,7 +147,7 @@ jobs:
           script: >-
             cd apps/android &&
             ./gradlew connectedDebugAndroidTest --no-daemon
-            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.GeneratedPdfAssetValidationTest,com.a2d.notebook.app.PanicPropagationTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.ScannerRecoveryBridgeTest,com.a2d.notebook.app.GeneratedPdfAssetValidationTest,com.a2d.notebook.app.PanicPropagationTest
       - name: Upload Android instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
