@@ -58,11 +58,7 @@ fn to_usize(value: u64, field: &'static str) -> Result<usize, A2dError> {
     })
 }
 
-fn parse_utf8<'a>(
-    bytes: *const u8,
-    len: u64,
-    field: &'static str,
-) -> Result<&'a str, A2dError> {
+fn parse_utf8(bytes: *const u8, len: u64, field: &'static str) -> Result<String, A2dError> {
     let byte_count = to_usize(len, field)?;
     if byte_count == 0 {
         return Err(request_error(
@@ -79,15 +75,17 @@ fn parse_utf8<'a>(
         .with_detail("field", field));
     }
     // SAFETY: the exported function requires the caller to keep this byte range readable until
-    // return. The returned string is used only within that call.
+    // return. Copying the validated UTF-8 keeps no borrowed pointer beyond this operation.
     let raw = unsafe { slice::from_raw_parts(bytes, byte_count) };
-    std::str::from_utf8(raw).map_err(|error| {
-        request_error(
-            "STORED_SCAN_POLICY_UTF8_INVALID",
-            format!("{field} is not valid UTF-8: {error}"),
-        )
-        .with_detail("field", field)
-    })
+    std::str::from_utf8(raw)
+        .map(str::to_owned)
+        .map_err(|error| {
+            request_error(
+                "STORED_SCAN_POLICY_UTF8_INVALID",
+                format!("{field} is not valid UTF-8: {error}"),
+            )
+            .with_detail("field", field)
+        })
 }
 
 fn marker_id(
@@ -279,7 +277,9 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
 
 unsafe fn set_status(status: *mut A2dPreviewStatus, code: i32, error: A2dPreviewBuffer) {
     // SAFETY: callers validate `status` before this helper and promise writable storage.
-    unsafe { ptr::write(status, A2dPreviewStatus { code, error }) };
+    unsafe {
+        ptr::write(status, A2dPreviewStatus { code, error })
+    };
 }
 
 /// Resolve one stored page's canonical layout and portable live-analysis policy.
@@ -302,14 +302,14 @@ pub unsafe extern "C" fn a2d_resolve_stored_scan_policy_v1(
         return A2dPreviewBuffer::default();
     }
     // SAFETY: status is non-null and writable by contract.
-    unsafe { set_status(status, PREVIEW_STATUS_SUCCESS, A2dPreviewBuffer::default()) };
+    unsafe {
+        set_status(status, PREVIEW_STATUS_SUCCESS, A2dPreviewBuffer::default())
+    };
 
     let execution = catch_unwind(AssertUnwindSafe(|| {
         let library_path = parse_utf8(library_path_bytes, library_path_len, "library_path")?;
-        let page_id = PageId::parse(parse_utf8(page_id_bytes, page_id_len, "page_id")?)?;
-        let core = A2dCore::open(OpenLibraryRequest {
-            library_path: library_path.to_string(),
-        })?;
+        let page_id = PageId::parse(&parse_utf8(page_id_bytes, page_id_len, "page_id")?)?;
+        let core = A2dCore::open(OpenLibraryRequest { library_path })?;
         let policy = core.resolve_stored_scan_processing_policy(&page_id)?;
         encode_policy(&policy)
     }));
@@ -338,13 +338,18 @@ pub unsafe extern "C" fn a2d_resolve_stored_scan_policy_v1(
 #[cfg(test)]
 mod tests {
     use a2d_domain::PageId;
-    use a2d_layout::{PaperSize, SmartPageStyle, smart_page_layout};
 
     use super::*;
+    use crate::{
+        A2dClient, SmartPageContentStyle, SmartPageGenerationRequest, SmartPagePaperSize,
+    };
 
     #[test]
     fn policy_codec_starts_with_stable_magic_and_version() {
-        let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
+        let layout = a2d_layout::smart_page_layout(
+            a2d_layout::PaperSize::A4,
+            a2d_layout::SmartPageStyle::Blank,
+        );
         let policy = a2d_core::resolve_bundled_scan_processing_policy(&layout.id, 1).unwrap();
         let encoded = encode_policy(&policy).unwrap();
         assert_eq!(&encoded[..4], b"A2DS");
@@ -357,40 +362,28 @@ mod tests {
             "a2d-stored-policy-abi-{}",
             PageId::generate()
         ));
-        let core = A2dCore::open(OpenLibraryRequest {
+        let client = A2dClient::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })
         .unwrap();
-        let page_id = PageId::generate();
-        let layout = smart_page_layout(PaperSize::A4, SmartPageStyle::Blank);
-        let page = a2d_domain::Page::new(
-            page_id.clone(),
-            a2d_domain::PageKind::SmartPage {
-                smart_page_id: a2d_domain::SmartPageId::generate(),
-                page_set_id: None,
-                visible_page_number: Some(1),
-            },
-            layout.id.clone(),
-            None,
-            a2d_domain::PageState::GeneratedNotScanned,
-            a2d_domain::system_now_ms().unwrap(),
-        );
-        use a2d_storage::PageRepository;
-        core.lock_storage().unwrap().insert_page(&page).unwrap();
-        drop(core);
-
-        let reopened = A2dCore::open(OpenLibraryRequest {
-            library_path: root.to_string_lossy().into_owned(),
-        })
-        .unwrap();
-        let policy = reopened
+        let generated = client
+            .generate_smart_pages(SmartPageGenerationRequest {
+                paper_size: SmartPagePaperSize::A4,
+                style: SmartPageContentStyle::Blank,
+                page_count: 1,
+                starting_visible_page: 1,
+            })
+            .unwrap();
+        let page_id = PageId::parse(&generated.page_ids[0]).unwrap();
+        let policy = client
+            .core
             .resolve_stored_scan_processing_policy(&page_id)
             .unwrap();
-        assert_eq!(policy.layout_id, layout.id);
+        assert_eq!(policy.layout_id.to_string(), "SP-A4-BLANK-V1");
         assert_eq!(policy.policy_version, 1);
         assert_eq!(policy.pipeline_version(), 1);
 
-        drop(reopened);
+        drop(client);
         std::fs::remove_dir_all(root).ok();
     }
 }
