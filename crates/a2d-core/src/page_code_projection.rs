@@ -62,7 +62,7 @@ fn projection_error(
 
 #[cfg(test)]
 mod tests {
-    use a2d_domain::{Notebook, NotebookId, Page, PageState, system_now_ms};
+    use a2d_domain::{Notebook, NotebookDesignId, NotebookId, Page, PageState, system_now_ms};
     use a2d_layout::bundled_placeholder_registry;
     use a2d_storage::{NotebookDesignRepository, NotebookRepository};
 
@@ -77,12 +77,9 @@ mod tests {
             library_path: root.to_string_lossy().into_owned(),
         })
         .unwrap();
-        let design = bundled_placeholder_registry()
-            .unwrap()
-            .designs()
-            .next()
-            .unwrap()
-            .clone();
+        let registry = bundled_placeholder_registry().unwrap();
+        let design_id = NotebookDesignId::parse("6DE28E53DBKPXCWWNHPC8T7QJX").unwrap();
+        let design = registry.resolve(&design_id).unwrap().clone();
         let notebook_id = NotebookId::generate();
         let page_id = PageId::generate();
         let now = system_now_ms().unwrap();
