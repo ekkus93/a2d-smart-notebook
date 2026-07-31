@@ -155,7 +155,7 @@ pub struct SmartPageGenerationRequest {
     pub starting_visible_page: u32,
 }
 
-/// Versioned projection of the resource and wire-format limits enforced by the Rust PDF generator.
+/// Versioned projection of the resource and wire-format limits enforced by the Rust core.
 #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
 pub struct SmartPageGenerationPolicy {
     pub policy_version: u32,
@@ -164,14 +164,20 @@ pub struct SmartPageGenerationPolicy {
     pub maximum_pdf_output_bytes: u64,
 }
 
+impl From<core::SmartPageGenerationPolicy> for SmartPageGenerationPolicy {
+    fn from(value: core::SmartPageGenerationPolicy) -> Self {
+        Self {
+            policy_version: value.policy_version,
+            maximum_page_count: value.maximum_page_count,
+            maximum_starting_visible_page: value.maximum_starting_visible_page,
+            maximum_pdf_output_bytes: value.maximum_pdf_output_bytes,
+        }
+    }
+}
+
 #[uniffi::export]
 pub fn smart_page_generation_policy() -> SmartPageGenerationPolicy {
-    SmartPageGenerationPolicy {
-        policy_version: 1,
-        maximum_page_count: a2d_pdf::MAX_PAGE_SET_PAGE_COUNT,
-        maximum_starting_visible_page: 999_999,
-        maximum_pdf_output_bytes: a2d_pdf::MAX_PDF_OUTPUT_BYTES as u64,
-    }
+    core::smart_page_generation_policy().into()
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -331,14 +337,18 @@ mod tests {
     use crate::OpenLibraryRequest;
 
     #[test]
-    fn generation_policy_matches_the_enforced_rust_limits() {
+    fn generation_policy_matches_the_core_projection() {
         let policy = smart_page_generation_policy();
-        assert_eq!(policy.policy_version, 1);
-        assert_eq!(policy.maximum_page_count, a2d_pdf::MAX_PAGE_SET_PAGE_COUNT);
-        assert_eq!(policy.maximum_starting_visible_page, 999_999);
+        let core_policy = core::smart_page_generation_policy();
+        assert_eq!(policy.policy_version, core_policy.policy_version);
+        assert_eq!(policy.maximum_page_count, core_policy.maximum_page_count);
+        assert_eq!(
+            policy.maximum_starting_visible_page,
+            core_policy.maximum_starting_visible_page
+        );
         assert_eq!(
             policy.maximum_pdf_output_bytes,
-            a2d_pdf::MAX_PDF_OUTPUT_BYTES as u64
+            core_policy.maximum_pdf_output_bytes
         );
     }
 
