@@ -26,7 +26,7 @@ internal fun SinglePageReviewArtifact.toRegisterScanRequest(): RegisterScanReque
         previewWarnings =
             warnings.toRegistrationWarningCodes() +
                 RustScannerPolicySession.registrationEvidence(),
-        recoveryToken = null,
+        recoveryToken = recoveryToken,
         userApproved = true,
     )
 }
