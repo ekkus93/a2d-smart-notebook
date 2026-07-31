@@ -12,7 +12,9 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
 use std::slice;
 
-use a2d_core::{A2dCore, OpenLibraryRequest, StoredScanProcessingPolicy};
+use a2d_core::{
+    A2dCore, OpenLibraryRequest as CoreOpenLibraryRequest, StoredScanProcessingPolicy,
+};
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity, PageId};
 use a2d_layout::MarkerRole;
 
@@ -302,7 +304,7 @@ pub unsafe extern "C" fn a2d_resolve_stored_scan_policy_v1(
     let execution = catch_unwind(AssertUnwindSafe(|| {
         let library_path = parse_utf8(library_path_bytes, library_path_len, "library_path")?;
         let page_id = PageId::parse(&parse_utf8(page_id_bytes, page_id_len, "page_id")?)?;
-        let core = A2dCore::open(OpenLibraryRequest { library_path })?;
+        let core = A2dCore::open(CoreOpenLibraryRequest { library_path })?;
         let policy = core.resolve_stored_scan_processing_policy(&page_id)?;
         encode_policy(&policy)
     }));
@@ -333,7 +335,10 @@ mod tests {
     use a2d_domain::PageId;
 
     use super::*;
-    use crate::{A2dClient, SmartPageContentStyle, SmartPageGenerationRequest, SmartPagePaperSize};
+    use crate::{
+        A2dClient, OpenLibraryRequest, SmartPageContentStyle, SmartPageGenerationRequest,
+        SmartPagePaperSize,
+    };
 
     #[test]
     fn policy_codec_starts_with_stable_magic_and_version() {
