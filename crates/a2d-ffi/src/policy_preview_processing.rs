@@ -130,10 +130,8 @@ fn process_preview(
     if cancellation.is_cancelled() {
         return Ok(PreviewOutcome::Cancelled);
     }
-    let policy = a2d_core::resolve_bundled_scan_processing_policy(
-        layout_id,
-        processing_policy_version,
-    )?;
+    let policy =
+        a2d_core::resolve_bundled_scan_processing_policy(layout_id, processing_policy_version)?;
     if encoded_bytes.len() > policy.maximum_encoded_bytes() {
         return Err(request_error(
             "IMAGE_ENCODED_BYTES_LIMIT_EXCEEDED",
@@ -141,10 +139,7 @@ fn process_preview(
         )
         .with_detail("layout_id", layout_id.to_string())
         .with_detail("actual_bytes", encoded_bytes.len().to_string())
-        .with_detail(
-            "maximum_bytes",
-            policy.maximum_encoded_bytes().to_string(),
-        ));
+        .with_detail("maximum_bytes", policy.maximum_encoded_bytes().to_string()));
     }
 
     let image_limits = policy.image_limits()?;
