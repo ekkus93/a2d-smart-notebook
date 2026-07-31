@@ -19,11 +19,7 @@ fn resolve_rejects_relative_traversal_to_an_existing_regular_file() {
         PageId::generate()
     ));
     std::fs::write(&outside, b"outside bytes must remain untouched").unwrap();
-    let outside_name = outside
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    let outside_name = outside.file_name().unwrap().to_string_lossy().into_owned();
     let relative_path = format!("../{outside_name}");
 
     let error = store.resolve(&relative_path).unwrap_err();
