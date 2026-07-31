@@ -12,9 +12,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
 use std::slice;
 
-use a2d_core::{
-    A2dCore, OpenLibraryRequest as CoreOpenLibraryRequest, StoredScanProcessingPolicy,
-};
+use a2d_core::{A2dCore, OpenLibraryRequest as CoreOpenLibraryRequest, StoredScanProcessingPolicy};
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity, PageId};
 use a2d_layout::MarkerRole;
 
