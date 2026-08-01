@@ -1,0 +1,67 @@
+name: Cleanup unused branches
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/cleanup-unused-branches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  delete-obsolete-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete verified obsolete branch refs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_API: ${{ github.api_url }}
+        run: |
+          set -euo pipefail
+
+          branches=(
+            "agent/reconcile-camerax-todo"
+            "agent/trigger-camerax-todo-reconciliation"
+            "agent/trigger-camerax-todo-reconciliation-2"
+            "automation/m9-fingerprint-ci-trigger"
+            "automation/m9-registration-lifecycle-trigger"
+            "automation/milestone9-registration-trigger"
+            "fix-070-ci-signoff"
+            "validation/milestone9-post-merge"
+          )
+
+          for branch in "${branches[@]}"; do
+            response_file="$(mktemp)"
+            status="$({
+              curl \
+                --silent \
+                --show-error \
+                --output "${response_file}" \
+                --write-out '%{http_code}' \
+                --request DELETE \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "Accept: application/vnd.github+json" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                "${GH_API}/repos/${GH_REPOSITORY}/git/refs/heads/${branch}"
+            })"
+
+            case "${status}" in
+              204)
+                echo "Deleted ${branch}"
+                ;;
+              404)
+                echo "Already absent: ${branch}"
+                ;;
+              *)
+                echo "Failed to delete ${branch}: HTTP ${status}" >&2
+                cat "${response_file}" >&2
+                exit 1
+                ;;
+            esac
+
+            rm -f "${response_file}"
+          done
