@@ -24,7 +24,7 @@ struct Fixture {
 fn fingerprint(corrected_sha256: &str, changed_cell: Option<(usize, u8)>) -> String {
     let mut cells = vec![180_u8; PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT];
     if let Some((index, value)) = changed_cell {
-        cellsindex] = value;
+        cells[index] = value;
     }
     let payload = cells
         .iter()
