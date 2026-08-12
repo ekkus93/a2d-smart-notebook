@@ -28,6 +28,8 @@ mod migration_history;
 mod migrations;
 mod preferred_scan;
 mod repository;
+mod revision;
+pub use revision::*;
 mod transaction_repository;
 mod workflow;
 

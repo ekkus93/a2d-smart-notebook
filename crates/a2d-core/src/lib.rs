@@ -24,6 +24,8 @@ mod milestone6;
 pub use milestone6::*;
 mod milestone9;
 pub use milestone9::*;
+mod revision;
+pub use revision::*;
 mod scan_comparison;
 pub use scan_comparison::*;
 mod scan_policy;
@@ -277,6 +279,9 @@ pub struct RegisteredPageSet {
 fn example_layout_id() -> LayoutId {
     LayoutId::parse("USLETTER-LINED").expect("static layout token is a valid LayoutId")
 }
+
+#[cfg(test)]
+mod revision_tests;
 
 #[cfg(test)]
 mod tests {

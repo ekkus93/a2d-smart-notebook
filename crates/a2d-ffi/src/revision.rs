@@ -59,7 +59,11 @@ impl From<core::ScanRevisionProposal> for ScanRevisionProposal {
             baseline_scan_id: value.baseline_scan_id.to_string(),
             candidate_scan_id: value.candidate_scan_id.to_string(),
             default_decision: value.default_decision.into(),
-            allowed_decisions: value.allowed_decisions.into_iter().map(Into::into).collect(),
+            allowed_decisions: value
+                .allowed_decisions
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             comparison: value.comparison.into(),
         }
     }
@@ -98,9 +102,7 @@ impl From<core::ResolvedScanRevision> for ResolvedScanRevision {
             candidate_scan_id: value.candidate_scan_id.to_string(),
             decision: value.decision.into(),
             preferred_scan_id: value.preferred_scan_id.to_string(),
-            candidate_physical_copy_id: value
-                .candidate_physical_copy_id
-                .map(|id| id.to_string()),
+            candidate_physical_copy_id: value.candidate_physical_copy_id.map(|id| id.to_string()),
             changed: value.changed,
             audit_event_id: value.audit_event_id.map(|id| id.to_string()),
             committed_data_deleted: value.committed_data_deleted,

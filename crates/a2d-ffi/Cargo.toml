@@ -7,7 +7,6 @@ repository.workspace = true
 publish.workspace = true
 
 [lib]
-path = "src/root.rs"
 crate-type = ["lib", "cdylib"]
 
 [features]

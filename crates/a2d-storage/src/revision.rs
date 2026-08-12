@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use a2d_domain::{
-    A2dError, AssetKind, AuditEvent, AuditEventId, ErrorCategory, ErrorCode, ErrorSeverity,
-    PageId, PageKind, PhysicalCopyId, QualityStatus, Scan, ScanId,
+    A2dError, AssetKind, AuditEvent, AuditEventId, ErrorCategory, ErrorCode, ErrorSeverity, PageId,
+    PageKind, PhysicalCopyId, QualityStatus, Scan, ScanId,
 };
 use rusqlite::params;
 
@@ -44,7 +44,7 @@ impl StoredScanRevisionDecision {
     }
 
     fn warning(self) -> String {
-        format!("{DECISION_WARNING_PREFIX}{}", self.code())
+        std::format!("{DECISION_WARNING_PREFIX}{}", self.code())
     }
 }
 
@@ -146,7 +146,7 @@ fn validate_original_asset(
         .with_detail("scan_id", scan.id().to_string())
         .with_detail("scan_role", role)
         .with_detail("original_asset_id", asset.id().to_string())
-        .with_detail("asset_kind", format!("{:?}", asset.kind))
+        .with_detail("asset_kind", std::format!("{:?}", asset.kind))
         .with_detail("asset_immutable", asset.immutable.to_string()));
     }
     Ok(())
@@ -239,7 +239,11 @@ fn update_page_review_state(
             |row| row.get::<_, bool>(0),
         )
         .map_err(|error| map_sql_error("checking unresolved scan review state", error))?;
-    let state_text = if needs_review { "NeedsReview" } else { "Scanned" };
+    let state_text = if needs_review {
+        "NeedsReview"
+    } else {
+        "Scanned"
+    };
     let changed = conn
         .execute(
             "UPDATE pages SET state = ?1, updated_at_ms = ?2 WHERE id = ?3",

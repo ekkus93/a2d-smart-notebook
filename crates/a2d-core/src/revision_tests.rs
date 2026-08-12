@@ -24,7 +24,7 @@ struct Fixture {
 fn fingerprint(corrected_sha256: &str, changed_cell: Option<(usize, u8)>) -> String {
     let mut cells = vec![180_u8; PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT];
     if let Some((index, value)) = changed_cell {
-        cells[index] = value;
+        cellsindex] = value;
     }
     let payload = cells
         .iter()
@@ -77,11 +77,7 @@ fn fixture(candidate_changed_cell: Option<(usize, u8)>) -> Fixture {
     };
     let candidate_corrected = core
         .asset_store
-        .commit(
-            candidate_corrected_bytes,
-            AssetKind::Corrected,
-            "image/png",
-        )
+        .commit(candidate_corrected_bytes, AssetKind::Corrected, "image/png")
         .unwrap();
     let baseline_id = ScanId::generate();
     let candidate_id = ScanId::generate();
