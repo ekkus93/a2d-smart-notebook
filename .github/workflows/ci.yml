@@ -44,7 +44,7 @@ jobs:
       - name: cargo clippy --workspace --all-targets --all-features -- -D warnings
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: cargo test --workspace --all-features
-        # Also exercises Kotlin and Swift UniFFI generation smoke checks.
+        # Also exercises Kotlin and Swift UniFFI generation contract checks.
         run: cargo test --workspace --all-features
 
   deny:
@@ -81,8 +81,8 @@ jobs:
             echo "ANDROID_NDK_ROOT=$ndk_home"
           } >> "$GITHUB_ENV"
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
-      - name: Build the shared Rust library for packaged Android ABIs
-        run: bash ./tools/build-android-native-libs.sh "arm64-v8a x86_64"
+      - name: Build shared Rust libraries and generate Kotlin UniFFI binding
+        run: bash ./tools/build-android-native.sh "arm64-v8a x86_64"
       - name: Gradle lint, unit tests, and debug APK
         working-directory: apps/android
         run: ./gradlew lint test assembleDebug --no-daemon
@@ -133,7 +133,7 @@ jobs:
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Prepare CI-only feature-enabled FFI panic test build
         run: bash ./tools/prepare-android-ffi-panic-test.sh
-      - name: Run scanner, recovery, and panic-containment tests
+      - name: Run scanner, recovery, panic-containment, and scan-revision tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -147,7 +147,7 @@ jobs:
           script: >-
             cd apps/android &&
             ./gradlew connectedDebugAndroidTest --no-daemon
-            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.ScannerRecoveryBridgeTest,com.a2d.notebook.app.GeneratedPdfAssetValidationTest,com.a2d.notebook.app.PanicPropagationTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.ScannerRecoveryBridgeTest,com.a2d.notebook.app.GeneratedPdfAssetValidationTest,com.a2d.notebook.app.PanicPropagationTest,com.a2d.notebook.app.ScanRevisionBridgeIntegrationTest
       - name: Upload Android instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
@@ -159,6 +159,9 @@ jobs:
           if-no-files-found: warn
 
   android-binding-drift:
+    # Keep this job id/name stable for existing required-check configuration. The binding is now
+    # generated build output, so the check proves generation + untracked policy instead of diffing
+    # a stale checked-in copy.
     name: Kotlin UniFFI binding generation drift check
     runs-on: ubuntu-latest
     env:
@@ -185,8 +188,20 @@ jobs:
             echo "ANDROID_NDK_ROOT=$ndk_home"
           } >> "$GITHUB_ENV"
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
-      - name: Regenerate the native library and Kotlin bindings
+      - name: Regenerate native library and Kotlin binding
         run: bash ./tools/build-android-native.sh "x86_64"
+      - name: Verify generated binding is complete and untracked
+        run: |
+          binding="apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt"
+          test -s "$binding"
+          grep -q 'getScanRevisionProposal' "$binding"
+          grep -q 'resolveScanRevision' "$binding"
+          git check-ignore -q "$binding"
+          if git ls-files --error-unmatch "$binding" >/dev/null 2>&1; then
+            echo "Generated Kotlin UniFFI binding must not be committed" >&2
+            exit 1
+          fi
+          git diff --exit-code -- Cargo.lock
       - name: Upload exact generated files for review
         if: always()
         uses: actions/upload-artifact@v4
@@ -196,8 +211,3 @@ jobs:
             apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
             Cargo.lock
           if-no-files-found: error
-      - name: Fail if generated files drifted from what is committed
-        run: >-
-          git diff --exit-code --
-          apps/android/app/src/main/kotlin/uniffi/
-          Cargo.lock

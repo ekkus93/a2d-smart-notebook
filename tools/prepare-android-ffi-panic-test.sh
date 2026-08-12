@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prepares a disposable Android instrumentation build that contains the intentional UniFFI panic
-# endpoint. This script is for the dedicated CI emulator job only. It overwrites generated files in
-# that ephemeral checkout; production builds and the committed Kotlin binding omit the feature.
+# endpoint. This script is for the dedicated CI emulator job only. Production builds omit the
+# feature; the generated Kotlin binding is untracked build output in both cases.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -28,7 +28,7 @@ cargo run -p a2d-ffi --features ffi-test-panic --bin uniffi-bindgen -- generate 
   --no-format
 
 generated_binding="$out_dir/uniffi/a2d_ffi/a2d_ffi.kt"
-committed_binding="apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt"
+android_binding="apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt"
 if [ ! -s "$generated_binding" ]; then
   echo "Feature-enabled Kotlin binding was not generated: $generated_binding" >&2
   exit 1
@@ -37,7 +37,7 @@ if ! grep -q 'triggerPanicForTesting' "$generated_binding"; then
   echo "Feature-enabled Kotlin binding does not expose triggerPanicForTesting" >&2
   exit 1
 fi
-install -D -m 0644 "$generated_binding" "$committed_binding"
+install -D -m 0644 "$generated_binding" "$android_binding"
 
 panic_test_source="tools/ffi-panic-test/PanicPropagationTest.kt"
 panic_test_destination="apps/android/app/src/androidTest/kotlin/com/a2d/notebook/app/PanicPropagationTest.kt"

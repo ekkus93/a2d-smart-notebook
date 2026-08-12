@@ -1,8 +1,7 @@
-//! Binding-generation drift test (TODO 2.4). Not a golden-file diff against checked-in bindings
-//! — codegen formatting/version changes would make that brittle. Instead this proves, on every test
-//! run, that the current FFI interface can still be turned into Kotlin and Swift bindings exposing
-//! the expected public API. If this stops passing, the interface has drifted into something UniFFI
-//! can no longer bind.
+//! Binding-generation contract test (TODO 2.4). Generated bindings are build output rather than
+//! checked-in source. This proves on every test run that the current FFI interface can still be
+//! turned into Kotlin and Swift bindings exposing the expected public API. If this stops passing,
+//! the interface has drifted into something UniFFI can no longer bind.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -81,7 +80,7 @@ fn temp_out_dir(label: &str) -> PathBuf {
     dir
 }
 
-const EXPECTED_API_SYMBOLS: [&str; 20] = [
+const EXPECTED_API_SYMBOLS: [&str; 27] = [
     "A2dClient",
     "OpenLibraryRequest",
     "A2dFfiErrorDetail",
@@ -102,6 +101,13 @@ const EXPECTED_API_SYMBOLS: [&str; 20] = [
     "StoredScanQualityStatus",
     "StoredScanChangeRegion",
     "StoredScanChangedCell",
+    "getScanRevisionProposal",
+    "GetScanRevisionProposalRequest",
+    "ScanRevisionProposal",
+    "ScanRevisionDecision",
+    "resolveScanRevision",
+    "ResolveScanRevisionRequest",
+    "ResolvedScanRevision",
 ];
 
 #[test]
