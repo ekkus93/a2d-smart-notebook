@@ -1,5 +1,6 @@
 package com.a2d.notebook.feature.home
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -20,13 +21,16 @@ import com.a2d.notebook.R
 object HomeScreenTestTags {
     const val TITLE = "home_title"
     const val SCAN_PAGE = "home_scan_page"
+    const val BATCH_SCAN = "home_batch_scan"
     const val NOTEBOOKS = "home_notebooks"
     const val SMART_PAGES = "home_smart_pages"
 }
 
+@SuppressLint("HardcodedText")
 @Composable
 fun HomeScreen(
     onScanPage: () -> Unit,
+    onBatchScan: () -> Unit,
     onOpenNotebooks: () -> Unit,
     onCreateSmartPages: () -> Unit,
 ) {
@@ -38,7 +42,7 @@ fun HomeScreen(
         Text(
             text = stringResource(R.string.home_title),
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.testTag(HomeScreenTestTags.TITLE),
+            modifier = Modifier.testTag(HomeScrenTestTags.TITLE),
         )
         Text(stringResource(R.string.home_placeholder), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(24.dp))
@@ -46,6 +50,11 @@ fun HomeScreen(
             onClick = onScanPage,
             modifier = Modifier.testTag(HomeScreenTestTags.SCAN_PAGE),
         ) { Text(stringResource(R.string.home_scan_page)) }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onBatchScan,
+            modifier = Modifier.testTag(HomeScreenTestTags.BATCH_SCAN),
+        ) { Text("Batch Scan") }
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = onOpenNotebooks,
