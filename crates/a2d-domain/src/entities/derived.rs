@@ -66,11 +66,12 @@ pub enum ReviewItemKind {
     RestoreConflict,
 }
 
-/// INFERRED — TODO 9.4 requires "list/filter/detail/resolve" APIs and audited resolutions,
-/// implying an open/resolved lifecycle, but doesn't name the states.
+/// INFERRED — TODO 9.4 requires list/filter/detail/resolve/defer APIs and audited resolutions,
+/// so `Deferred` is a persisted nonterminal queue state alongside open/resolved/dismissed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ReviewItemStatus {
     Open,
+    Deferred,
     Resolved,
     Dismissed,
 }
@@ -91,6 +92,33 @@ pub struct ReviewItem {
 }
 
 impl ReviewItem {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: ReviewItemId,
+        kind: ReviewItemKind,
+        page_id: Option<PageId>,
+        scan_id: Option<ScanId>,
+        severity: ErrorSeverity,
+        status: ReviewItemStatus,
+        details: BTreeMap<String, String>,
+        resolution: Option<String>,
+        created_at_ms: i64,
+        resolved_at_ms: Option<i64>,
+    ) -> Self {
+        Self {
+            id,
+            kind,
+            page_id,
+            scan_id,
+            severity,
+            status,
+            details,
+            resolution,
+            created_at_ms,
+            resolved_at_ms,
+        }
+    }
+
     pub fn id(&self) -> &ReviewItemId {
         &self.id
     }

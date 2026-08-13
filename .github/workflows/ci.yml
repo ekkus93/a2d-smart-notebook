@@ -133,7 +133,7 @@ jobs:
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Prepare CI-only feature-enabled FFI panic test build
         run: bash ./tools/prepare-android-ffi-panic-test.sh
-      - name: Run scanner, recovery, panic-containment, and scan-revision tests
+      - name: Run scanner, recovery, panic-containment, scan-revision, and Needs Review tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -147,7 +147,7 @@ jobs:
           script: >-
             cd apps/android &&
             ./gradlew connectedDebugAndroidTest --no-daemon
-            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.ScannerRecoveryBridgeTest,com.a2d.notebook.app.GeneratedPdfAssetValidationTest,com.a2d.notebook.app.PanicPropagationTest,com.a2d.notebook.app.ScanRevisionBridgeIntegrationTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.ScannerRecoveryBridgeTest,com.a2d.notebook.app.GeneratedPdfAssetValidationTest,com.a2d.notebook.app.PanicPropagationTest,com.a2d.notebook.app.ScanRevisionBridgeIntegrationTest,com.a2d.notebook.app.NeedsReviewBridgeIntegrationTest
       - name: Upload Android instrumentation results
         if: always()
         uses: actions/upload-artifact@v4
@@ -196,6 +196,9 @@ jobs:
           test -s "$binding"
           grep -q 'getScanRevisionProposal' "$binding"
           grep -q 'resolveScanRevision' "$binding"
+          grep -q 'listReviewItems' "$binding"
+          grep -q 'resolveReviewItem' "$binding"
+          grep -q 'deferReviewItem' "$binding"
           git check-ignore -q "$binding"
           if git ls-files --error-unmatch "$binding" >/dev/null 2>&1; then
             echo "Generated Kotlin UniFFI binding must not be committed" >&2

@@ -28,6 +28,12 @@ mod migration_history;
 mod migrations;
 mod preferred_scan;
 mod repository;
+mod review_repository;
+pub use review_repository::{
+    MAX_REVIEW_LIST_LIMIT, MAX_REVIEW_LIST_OFFSET, ReviewItemQuery, ReviewItemRepository,
+};
+mod review;
+pub use review::*;
 mod revision;
 pub use revision::*;
 mod transaction_repository;
@@ -327,6 +333,30 @@ macro_rules! impl_ocr_delegate {
     };
 }
 
+macro_rules! impl_review_delegate {
+    () => {
+        impl ReviewItemRepository for Storage {
+            fn insert_review_item(&self, value: &a2d_domain::ReviewItem) -> Result<(), A2dError> {
+                ReviewItemRepository::insert_review_item(&self.conn, value)
+            }
+
+            fn get_review_item(
+                &self,
+                id: &a2d_domain::ReviewItemId,
+            ) -> Result<Option<a2d_domain::ReviewItem>, A2dError> {
+                ReviewItemRepository::get_review_item(&self.conn, id)
+            }
+
+            fn list_review_items(
+                &self,
+                query: &ReviewItemQuery,
+            ) -> Result<Vec<a2d_domain::ReviewItem>, A2dError> {
+                ReviewItemRepository::list_review_items(&self.conn, query)
+            }
+        }
+    };
+}
+
 macro_rules! impl_audit_delegate {
     () => {
         impl AuditEventRepository for Storage {
@@ -351,6 +381,7 @@ impl_page_delegate!();
 impl_asset_delegate!();
 impl_scan_delegate!();
 impl_ocr_delegate!();
+impl_review_delegate!();
 impl_audit_delegate!();
 
 impl fmt::Debug for Storage {

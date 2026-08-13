@@ -80,7 +80,7 @@ fn temp_out_dir(label: &str) -> PathBuf {
     dir
 }
 
-const EXPECTED_API_SYMBOLS: [&str; 27] = [
+const EXPECTED_API_SYMBOLS: [&str; 41] = [
     "A2dClient",
     "OpenLibraryRequest",
     "A2dFfiErrorDetail",
@@ -108,6 +108,20 @@ const EXPECTED_API_SYMBOLS: [&str; 27] = [
     "resolveScanRevision",
     "ResolveScanRevisionRequest",
     "ResolvedScanRevision",
+    "listReviewItems",
+    "ListReviewItemsRequest",
+    "ReviewItemPage",
+    "ReviewItemRecord",
+    "ReviewItemDetail",
+    "ReviewItemKind",
+    "ReviewItemStatus",
+    "getReviewItem",
+    "GetReviewItemRequest",
+    "resolveReviewItem",
+    "ResolveReviewItemRequest",
+    "deferReviewItem",
+    "DeferReviewItemRequest",
+    "ReviewItemMutationResult",
 ];
 
 #[test]

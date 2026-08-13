@@ -5,10 +5,14 @@
 //! implemented for the transaction type itself. These adapters preserve the active transaction and
 //! delegate every operation to the underlying connection.
 
-use a2d_domain::{A2dError, Asset, AssetId, AuditEvent, AuditEventId, Page, PageId, Scan, ScanId};
+use a2d_domain::{
+    A2dError, Asset, AssetId, AuditEvent, AuditEventId, Page, PageId, ReviewItem, ReviewItemId,
+    Scan, ScanId,
+};
 use rusqlite::Transaction;
 
 use crate::repository::{AssetRepository, AuditEventRepository, PageRepository, ScanRepository};
+use crate::{ReviewItemQuery, ReviewItemRepository};
 
 impl PageRepository for Transaction<'_> {
     fn insert_page(&self, value: &Page) -> Result<(), A2dError> {
@@ -67,5 +71,19 @@ impl AuditEventRepository for Transaction<'_> {
 
     fn get_audit_event(&self, id: &AuditEventId) -> Result<Option<AuditEvent>, A2dError> {
         AuditEventRepository::get_audit_event(&**self, id)
+    }
+}
+
+impl ReviewItemRepository for Transaction<'_> {
+    fn insert_review_item(&self, value: &ReviewItem) -> Result<(), A2dError> {
+        ReviewItemRepository::insert_review_item(&**self, value)
+    }
+
+    fn get_review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, A2dError> {
+        ReviewItemRepository::get_review_item(&**self, id)
+    }
+
+    fn list_review_items(&self, query: &ReviewItemQuery) -> Result<Vec<ReviewItem>, A2dError> {
+        ReviewItemRepository::list_review_items(&**self, query)
     }
 }
