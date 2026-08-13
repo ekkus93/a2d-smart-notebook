@@ -47,7 +47,7 @@ class VersionHistoryUiTest {
         }
 
         composeRule.onNodeWithTag(VersionHistoryTestTags.TIMELINE).assertIsDisplayed()
-        composeRule.onNodeWithTag(VersionHistoryTestTags.PREFERRED).assertIsDisplayed()
+        composeRule.onNodeWithTag(VersionHistoryTestTags.PREFERRED).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(VersionHistoryTestTags.COMPARISON).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(VersionHistoryTestTags.CHANGED_REGIONS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(VersionHistoryTestTags.KEEP_BOTH).performScrollTo().assertIsDisplayed()
