@@ -140,6 +140,7 @@ class VersionHistoryViewModel(application: Application) : AndroidViewModel(appli
     fun moveSelectedToReview() {
         val current = mutableState.value
         val selected = current.selectedVersion ?: return
+        if (selected.decisionCode != null) return
         val currentPageId = pageId ?: return
         runMutation {
             val result =
@@ -186,6 +187,7 @@ class VersionHistoryViewModel(application: Application) : AndroidViewModel(appli
         val preferredScanId = timeline.preferredScanId ?: return
         val selected = selectedScanId ?: return
         if (selected == preferredScanId) return
+        val selectedVersion = timeline.items.firstOrNull { it.scanId == selected } ?: return
         val comparison =
             withContext(Dispatchers.IO) {
                 client.comparePageVersionsForDisplay(
@@ -195,11 +197,15 @@ class VersionHistoryViewModel(application: Application) : AndroidViewModel(appli
                 )
             }
         val proposal =
-            withContext(Dispatchers.IO) {
-                client.scanRevisionProposal(
-                    candidateScanId = selected,
-                    minimumCellAbsoluteDifference = VISUAL_DIFFERENCE_THRESHOLD,
-                )
+            if (selectedVersion.decisionCode == null) {
+                withContext(Dispatchers.IO) {
+                    client.scanRevisionProposal(
+                        candidateScanId = selected,
+                        minimumCellAbsoluteDifference = VISUAL_DIFFERENCE_THRESHOLD,
+                    )
+                }
+            } else {
+                null
             }
         currentCoroutineContext().ensureActive()
         update { it.copy(comparison = comparison, proposal = proposal) }
