@@ -28,6 +28,7 @@ internal fun PolicyAwareSinglePageScannerRoute(
             CameraPermissionStatus.Granted ->
                 ScannerGrantedContent(
                     onBack = onBack,
+                    onOpenVersions = onOpenVersions,
                     viewModel = viewModel,
                 )
             CameraPermissionStatus.NotRequested ->
