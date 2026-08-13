@@ -372,3 +372,7 @@ mod tests {
         assert_eq!(projected.item.status, ReviewItemStatus::Resolved);
     }
 }
+
+#[path = "version_history.rs"]
+mod version_history;
+pub use version_history::*;
