@@ -437,7 +437,7 @@ mod tests {
             )
             .unwrap();
         let scan_id = ScanId::generate();
-        let mut storage = core.lock_storage().unwrap();
+        let storage = core.lock_storage().unwrap();
         storage.insert_asset(&asset).unwrap();
         storage
             .insert_scan(&Scan::new(
