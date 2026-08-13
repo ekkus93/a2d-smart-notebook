@@ -44,6 +44,12 @@ pub struct ReviewItemMutationResult {
     pub committed_data_deleted: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ReviewStatusTransition {
+    previous: ReviewItemStatus,
+    next: ReviewItemStatus,
+}
+
 impl Storage {
     pub fn resolve_review_item(
         &mut self,
@@ -109,8 +115,10 @@ impl Storage {
                 "review_item.resolved",
                 request.actor.clone(),
                 &current,
-                previous_status,
-                ReviewItemStatus::Resolved,
+                ReviewStatusTransition {
+                    previous: previous_status,
+                    next: ReviewItemStatus::Resolved,
+                },
                 Some(request.resolution_code.clone()),
             );
             AuditEventRepository::insert_audit_event(tx, &event)?;
@@ -178,8 +186,10 @@ impl Storage {
                 "review_item.deferred",
                 request.actor.clone(),
                 &current,
-                ReviewItemStatus::Open,
-                ReviewItemStatus::Deferred,
+                ReviewStatusTransition {
+                    previous: ReviewItemStatus::Open,
+                    next: ReviewItemStatus::Deferred,
+                },
                 None,
             );
             AuditEventRepository::insert_audit_event(tx, &event)?;
@@ -215,8 +225,7 @@ fn review_audit_event(
     event_kind: &str,
     actor: String,
     item: &ReviewItem,
-    previous_status: ReviewItemStatus,
-    new_status: ReviewItemStatus,
+    transition: ReviewStatusTransition,
     resolution_code: Option<String>,
 ) -> AuditEvent {
     let mut details = BTreeMap::new();
@@ -224,9 +233,12 @@ fn review_audit_event(
     details.insert("kind".to_string(), std::format!("{:?}", item.kind));
     details.insert(
         "previous_status".to_string(),
-        std::format!("{:?}", previous_status),
+        std::format!("{:?}", transition.previous),
     );
-    details.insert("new_status".to_string(), std::format!("{:?}", new_status));
+    details.insert(
+        "new_status".to_string(),
+        std::format!("{:?}", transition.next),
+    );
     details.insert("committed_data_deleted".to_string(), "false".to_string());
     if let Some(page_id) = item.page_id.as_ref() {
         details.insert("page_id".to_string(), page_id.to_string());
