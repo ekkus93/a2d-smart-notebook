@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.a2d.notebook.app.MainActivity
@@ -48,19 +49,14 @@ class VersionHistoryUiTest {
 
         composeRule.onNodeWithTag(VersionHistoryTestTags.TIMELINE).assertIsDisplayed()
 
-        scrollTimelineTo(PREFERRED_ITEM_INDEX)
-        composeRule.onNodeWithTag(VersionHistoryTestTags.PREFERRED).assertIsDisplayed()
-
-        scrollTimelineTo(COMPARISON_ITEM_INDEX)
-        composeRule.onNodeWithTag(VersionHistoryTestTags.COMPARISON).assertIsDisplayed()
-        composeRule.onNodeWithTag(VersionHistoryTestTags.CHANGED_REGIONS).assertIsDisplayed()
-
-        scrollTimelineTo(ACTIONS_ITEM_INDEX)
-        composeRule.onNodeWithTag(VersionHistoryTestTags.KEEP_BOTH).assertIsDisplayed()
-        composeRule.onNodeWithTag(VersionHistoryTestTags.SET_PREFERRED).assertIsDisplayed()
-        composeRule.onNodeWithTag(VersionHistoryTestTags.PHYSICAL_COPY).assertIsDisplayed()
-        composeRule.onNodeWithTag(VersionHistoryTestTags.WRONG_SCAN).assertIsDisplayed()
-        composeRule.onNodeWithTag(VersionHistoryTestTags.MOVE_TO_REVIEW).assertIsDisplayed()
+        assertTimelineNodeIsDisplayed(PREFERRED_ITEM_INDEX, VersionHistoryTestTags.PREFERRED)
+        assertTimelineNodeIsDisplayed(COMPARISON_ITEM_INDEX, VersionHistoryTestTags.COMPARISON)
+        assertTimelineNodeIsDisplayed(COMPARISON_ITEM_INDEX, VersionHistoryTestTags.CHANGED_REGIONS)
+        assertTimelineNodeIsDisplayed(ACTIONS_ITEM_INDEX, VersionHistoryTestTags.KEEP_BOTH)
+        assertTimelineNodeIsDisplayed(ACTIONS_ITEM_INDEX, VersionHistoryTestTags.SET_PREFERRED)
+        assertTimelineNodeIsDisplayed(ACTIONS_ITEM_INDEX, VersionHistoryTestTags.PHYSICAL_COPY)
+        assertTimelineNodeIsDisplayed(ACTIONS_ITEM_INDEX, VersionHistoryTestTags.WRONG_SCAN)
+        assertTimelineNodeIsDisplayed(ACTIONS_ITEM_INDEX, VersionHistoryTestTags.MOVE_TO_REVIEW)
     }
 
     @Test
@@ -89,8 +85,7 @@ class VersionHistoryUiTest {
             }
         }
 
-        scrollTimelineTo(COMPARISON_ITEM_INDEX)
-        composeRule.onNodeWithTag(VersionHistoryTestTags.COMPARISON).assertIsDisplayed()
+        assertTimelineNodeIsDisplayed(COMPARISON_ITEM_INDEX, VersionHistoryTestTags.COMPARISON)
 
         scrollTimelineTo(ACTIONS_ITEM_INDEX)
         composeRule.onAllNodesWithTag(VersionHistoryTestTags.KEEP_BOTH).assertCountEquals(0)
@@ -98,6 +93,11 @@ class VersionHistoryUiTest {
         composeRule.onAllNodesWithTag(VersionHistoryTestTags.PHYSICAL_COPY).assertCountEquals(0)
         composeRule.onAllNodesWithTag(VersionHistoryTestTags.WRONG_SCAN).assertCountEquals(0)
         composeRule.onAllNodesWithTag(VersionHistoryTestTags.MOVE_TO_REVIEW).assertCountEquals(0)
+    }
+
+    private fun assertTimelineNodeIsDisplayed(index: Int, tag: String) {
+        scrollTimelineTo(index)
+        composeRule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
     }
 
     private fun scrollTimelineTo(index: Int) {
