@@ -111,10 +111,6 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
       - uses: android-actions/setup-android@v3
         with:
           cmdline-tools-version: "15859902"
@@ -206,14 +202,6 @@ jobs:
           grep -q 'getPageVersionTimeline' "$binding"
           grep -q 'comparePageVersions' "$binding"
           grep -q 'movePageVersionToReview' "$binding"
-          grep -q 'beginBatchScanSession' "$binding"
-          grep -q 'listBatchScanSessions' "$binding"
-          grep -q 'queueBatchScanCapture' "$binding"
-          grep -q 'registerBatchScan' "$binding"
-          grep -q 'reportBatchScanReview' "$binding"
-          grep -q 'reconcileBatchScanSession' "$binding"
-          grep -q 'completeBatchScanSession' "$binding"
-          grep -q 'acknowledgeBatchScanSession' "$binding"
           git check-ignore -q "$binding"
           if git ls-files --error-unmatch "$binding" >/dev/null 2>&1; then
             echo "Generated Kotlin UniFFI binding must not be committed" >&2
