@@ -50,12 +50,7 @@ internal fun ScannerGrantedContent(
             }
         }
     }
-    val savedPageId =
-        if (state.registeredScan != null) {
-            state.reviewArtifact?.captureRequest?.pageId
-        } else {
-            null
-        }
+    val savedPageId = state.registeredScan?.pageId
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f)) {
             SinglePageScannerContent(
