@@ -4,8 +4,7 @@ use a2d_core as core;
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity, PageId, ScanId};
 
 use crate::{
-    A2dClient, A2dFfiError, ReviewItemRecord, StoredScanComparisonEvidence,
-    StoredScanQualityStatus,
+    A2dClient, A2dFfiError, ReviewItemRecord, StoredScanComparisonEvidence, StoredScanQualityStatus,
 };
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -78,7 +77,7 @@ pub struct ComparePageVersionsRequest {
     pub minimum_cell_absolute_difference: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, uniffi::Record)]
 pub struct PageVersionComparison {
     pub grid_columns: u32,
     pub grid_rows: u32,
