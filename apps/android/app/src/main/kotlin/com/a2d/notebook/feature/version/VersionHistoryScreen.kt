@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -59,6 +58,7 @@ object VersionHistoryTestTags {
     const val KEEP_BOTH = "version_history_keep_both"
     const val SET_PREFERRED = "version_history_set_preferred"
     const val PHYSICAL_COPY = "version_history_physical_copy"
+    const val WRONG_SCAN = "version_history_wrong_scan"
     const val MOVE_TO_REVIEW = "version_history_move_to_review"
 }
 
@@ -272,7 +272,7 @@ private fun VersionComparisonPanel(
                 Text(
                     stringResource(
                         R.string.version_history_difference_summary,
-                        evidence.changedCellCount,
+                        evidence.changedCellCount.toInt(),
                         evidence.changeRegions.size,
                     ),
                     modifier = Modifier.testTag(VersionHistoryTestTags.CHANGED_REGIONS),
@@ -294,7 +294,8 @@ private fun VersionActions(
     onMoveToReview: () -> Unit,
 ) {
     val proposal = state.proposal
-    val decisionEnabled = !state.mutating && proposal != null
+    val selected = state.selectedVersion
+    val decisionEnabled = !state.loading && !state.mutating && proposal != null
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (proposal?.allowedDecisions?.contains(ScanRevisionDecision.SAVE_AS_NEW_VERSION) == true) {
             Button(
@@ -317,11 +318,20 @@ private fun VersionActions(
                 modifier = Modifier.fillMaxWidth().testTag(VersionHistoryTestTags.PHYSICAL_COPY),
             ) { Text(stringResource(R.string.version_history_mark_physical_copy)) }
         }
-        OutlinedButton(
-            onClick = onMoveToReview,
-            enabled = !state.mutating && state.selectedVersion != null,
-            modifier = Modifier.fillMaxWidth().testTag(VersionHistoryTestTags.MOVE_TO_REVIEW),
-        ) { Text(stringResource(R.string.version_history_move_to_review)) }
+        if (proposal?.allowedDecisions?.contains(ScanRevisionDecision.WRONG_SCAN) == true) {
+            OutlinedButton(
+                onClick = { onDecision(ScanRevisionDecision.WRONG_SCAN, null) },
+                enabled = decisionEnabled,
+                modifier = Modifier.fillMaxWidth().testTag(VersionHistoryTestTags.WRONG_SCAN),
+            ) { Text(stringResource(R.string.version_history_wrong_scan)) }
+        }
+        if (selected != null && selected.decisionCode == null) {
+            OutlinedButton(
+                onClick = onMoveToReview,
+                enabled = !state.loading && !state.mutating,
+                modifier = Modifier.fillMaxWidth().testTag(VersionHistoryTestTags.MOVE_TO_REVIEW),
+            ) { Text(stringResource(R.string.version_history_move_to_review)) }
+        }
     }
 }
 
