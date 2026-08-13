@@ -1,8 +1,8 @@
 # A2D Smart Notebook v0.1 — Authoritative Implementation Roadmap
 
-**Status:** Reconciled on 2026-07-31. Milestones 1–6 have substantial production implementation but are not blanket release-complete; Milestone 7 is software/synthetic-evidence complete with photographed and physical-device calibration evidence pending; Milestone 8.1–8.4 and scanner recovery are implemented; Milestone 8.5 and part of 8.6 remain open; Milestone 9.1–9.2 are implemented without calibrated duplicate/revision classification; Milestone 9.3–19 remain partial or open as stated below.  
+**Status:** Reconciled through Milestone 9.3 closeout on 2026-08-12. Milestones 1–6 have substantial production implementation but are not blanket release-complete; Milestone 7 is software/synthetic-evidence complete with photographed and physical-device calibration evidence pending; Milestone 8.1–8.4 and scanner recovery are implemented; Milestone 8.5 and part of 8.6 remain open; Milestone 9.1–9.3 are implemented without calibrated duplicate/revision classification; Milestone 9.4–19 remain partial or open as stated below.  
 **Version:** 0.1  
-**Date:** 2026-07-31  
+**Date:** 2026-08-12  
 **Repository:** `ekkus93/a2d-smart-notebook`  
 **Authoritative specification:** `docs/A2D_SMART_NOTEBOOK_V01_SPEC.md`  
 **Remediation plan:** `docs/A2D_SMART_NOTEBOOK_CODE_REVIEW_FIX_TODO_2026-07-28.md`  
@@ -10,7 +10,7 @@
 
 This file is the authoritative execution roadmap. A checked item means production code and focused evidence exist. A milestone marked **Partial** may contain many checked implementation items while still having explicit evidence, physical-validation, workflow, or product-scope gaps.
 
-The last code-bearing remediation candidate, `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`, passed permanent CI run `30673255456` and Milestone 7 native validation run `30673255457`. The later branch-cleanup commits changed no production files. Future code-bearing completion claims require permanent CI on the exact claimed source head.
+The last code-bearing remediation candidate, `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`, passed permanent CI run `30673255456` and Milestone 7 native validation run `30673255457`. Milestone 9.3's code-bearing closeout head, `e3984b8261de80c0c542c3dba5657c6914cef2bb`, passed permanent CI run `31652574271`, including Rust format/Clippy/tests, dependency policy, generated Kotlin UniFFI contract validation, Android lint/JVM tests/APK verification, and packaged-native emulator coverage of the revision boundary. Future code-bearing completion claims require permanent CI on the exact claimed source head.
 
 ---
 
@@ -48,7 +48,7 @@ Do not:
 
 | Milestone | Status | Implemented now | Explicitly outstanding |
 |---|---|---|---|
-| 1 — Repository, Android shell, CI | **Implementation complete** | Workspace, Android shell, permanent CI, checked-in Kotlin binding drift, Swift generation smoke | Release-wide exact-head signoff remains Milestone 19 work |
+| 1 — Repository, Android shell, CI | **Implementation complete** | Workspace, Android shell, permanent CI, generated-at-build Kotlin binding contract, Swift generation smoke | Release-wide exact-head signoff remains Milestone 19 work |
 | 2 — Domain, errors, UniFFI | **Partial** | Typed IDs/entities, structured FFI errors including details, fallible production ID generation, test-only panic injection | Diagnostic redaction enforcement, full failure-erasure audit, trash lifecycle |
 | 3 — SQLite and assets | **Partial** | Migrations with digests, atomic preferred-scan workflow, no-replace durable asset finalization, orphan discovery, integrity checker | Real ENOSPC testing, later reviewed repair UX, future restore workflows |
 | 4 — QR and designs | **Partial** | QR v1, permanent fixtures, strict parsing, development manifest registry | Initial official physical Notebook Design manifests |
@@ -56,7 +56,7 @@ Do not:
 | 6 — Notebook and Smart Pages | **Implementation complete / release evidence pending** | Rust workflows, Android UI, Rust-owned limits, cancellation and recreation hardening | Broader release walkthrough and physical workflows |
 | 7 — Detection and image processing | **Software and synthetic evidence complete** | AprilTag, image inputs, QR boundary, rectification, metrics, derived images, deterministic corpus | Photographed fixtures, physical `arm64-v8a` measurements, calibrated thresholds, ADR 0002 acceptance |
 | 8 — CameraX scanning | **Partial** | 8.1–8.4 and process-death recovery | Batch scanner and remaining 8.6 matrix cases |
-| 9 — Durable scans and revisions | **Partial** | 9.1 durable registration; 9.2 asset-backed fingerprints, changed regions, reasons and confidence availability | Calibrated thresholds, 9.3 revision decisions, 9.4 Needs Review, 9.5 version UI |
+| 9 — Durable scans and revisions | **Partial** | 9.1 durable registration; 9.2 asset-backed fingerprints, changed regions, reasons and confidence availability; 9.3 safe audited revision decisions with UniFFI/Android projection | Calibrated thresholds, 9.4 Needs Review, 9.5 version UI |
 | 10 — Library UI | **Not implemented** | — | Entire milestone |
 | 11 — OCR | **Not implemented** | Domain/storage scaffolding only | Provider, queue, persistence workflow, correction UI |
 | 12 — Search | **Not implemented** | Crate scaffolding only | FTS, API, UI, scale tests |
@@ -77,8 +77,8 @@ Do not:
 - [x] Rust workspace, pinned toolchain, metadata, lint policy, crate boundaries, and project documentation.
 - [x] Android Kotlin/Jetpack Compose shell with `minSdk = 26`, navigation, JVM tests, and instrumentation tests.
 - [x] No Room canonical database.
-- [x] Permanent CI runs Rust format, strict Clippy, workspace tests, dependency/license policy, Android lint/JVM tests/debug assembly, native ABI builds, binding drift, APK verification, and emulator integration.
-- [x] Kotlin UniFFI output is committed at `apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt`; it is generated, never hand-edited, and permanent CI fails on drift.
+- [x] Permanent CI runs Rust format, strict Clippy, workspace tests, dependency/license policy, Android lint/JVM tests/debug assembly, native ABI builds, generated-binding contract checks, APK verification, and emulator integration.
+- [x] Kotlin UniFFI output is generated by `tools/build-android-native.sh` before Android compilation, remains ignored/untracked build output, and is never hand-edited or treated as canonical source; permanent CI verifies generation and the required API contract.
 - [x] Swift bindings are generated as a smoke check by `crates/a2d-ffi/tests/binding_generation.rs` even though no SwiftUI client exists.
 - [x] Fixture compatibility and packaged shared-Rust execution are permanent CI gates.
 - [ ] Milestone 19 must still validate the eventual complete v0.1 product head and workflows.
@@ -119,7 +119,7 @@ Do not:
 
 - [x] Thin Rust façade with no SQL or canonical business rules in `a2d-ffi`.
 - [x] Kotlin and Swift generation.
-- [x] Checked-in Kotlin drift policy.
+- [x] Generated Kotlin binding policy: Rust is authoritative, Kotlin output is ignored/untracked build output, and permanent CI regenerates it before Android compilation and validates the API contract.
 - [x] Structured errors and details map across the boundary.
 - [x] Production ID APIs are fallible.
 - [x] Intentional panic injection exists only behind `ffi-test-panic`; production APK verification excludes it.
@@ -294,7 +294,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 # Milestone 9 — Durable scan registration and revisions
 
-**Status: Partial. Durable registration and evidence-only comparison are implemented; revision decisions, review workflows, and version UI remain open.**
+**Status: Partial. Durable registration, evidence-only comparison, and safe revision decisions are implemented; Needs Review workflows and version UI remain open.**
 
 ## 9.1 Final scan registration
 
@@ -319,12 +319,12 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 ## 9.3 Safe revision rules
 
-- [ ] Preserve every new original in durable or recoverable staging before prompting.
-- [ ] Default proposal: Save as New Version.
-- [ ] Replace Preferred changes only the preferred pointer through the atomic Rust workflow.
-- [ ] Never delete an older original automatically.
-- [ ] Another Physical Copy creates/assigns `PhysicalCopy` explicitly.
-- [ ] Wrong Scan moves to Needs Review or is explicitly discarded without deleting committed data.
+- [x] Preserve every new original in durable or recoverable staging before prompting.
+- [x] Default proposal: Save as New Version.
+- [x] Replace Preferred changes only the preferred pointer through the atomic Rust workflow.
+- [x] Never delete an older original automatically.
+- [x] Another Physical Copy creates/assigns `PhysicalCopy` explicitly.
+- [x] Wrong Scan moves to Needs Review or is explicitly discarded without deleting committed data.
 
 ## 9.4 Needs Review
 
@@ -506,7 +506,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 - [x] Rust format, strict Clippy, workspace tests, dependency/license policy.
 - [x] Android lint, JVM tests, debug APK, required native ABIs, symbol/notices verification, and emulator integration.
-- [x] Kotlin binding drift and Swift binding generation smoke.
+- [x] Kotlin generated-binding contract and Swift binding generation smoke.
 - [x] QR/layout/scan synthetic compatibility fixtures.
 - [ ] Backup compatibility fixtures.
 - [ ] Automated checks for future OCR/search/backup/model/skill workflows.
@@ -553,7 +553,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 # Recommended execution order from the reconciled state
 
-1. [ ] **Milestone 9.3 — Safe revision rules.** Build the audited decision workflow on the existing durable registration, comparison evidence, and preferred-scan transaction.
+1. [x] **Milestone 9.3 — Safe revision rules.** Audited decision workflow implemented on the existing durable registration, comparison evidence, and preferred-scan transaction.
 2. [ ] **Milestone 9.4 — Needs Review APIs**, followed by **9.5 version UI**.
 3. [ ] **Milestone 8.5 batch scanner** and finish the consolidated **8.6/FIX-111 camera failure matrix**.
 4. [ ] In parallel, collect **Milestone 7/17 photographed and physical-device evidence** and calibrate versioned capture/comparison thresholds.
