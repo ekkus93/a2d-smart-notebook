@@ -159,4 +159,32 @@
     <string name="smart_pages_preview_failed">PDF preview failed. The verified PDF can still be saved, shared, or printed.</string>
     <string name="smart_pages_preview_unavailable">PDF preview unavailable.</string>
     <string name="smart_pages_preview_description">Generated Smart Page preview</string>
+
+    <string name="single_scanner_versions">View page versions</string>
+
+    <string name="version_history_title">Version history</string>
+    <string name="version_history_page">Page: %1$s</string>
+    <string name="version_history_empty">No durable scan versions are available for this page.</string>
+    <string name="version_history_load_more">Load older versions</string>
+    <string name="version_history_preferred">Preferred</string>
+    <string name="version_history_captured_at">Captured %1$s</string>
+    <string name="version_history_quality">Quality: %1$s</string>
+    <string name="version_history_physical_copy_id">Physical copy: %1$s</string>
+    <string name="version_history_supersedes">Follows version: %1$s</string>
+    <string name="version_history_decision">Decision: %1$s</string>
+    <string name="version_history_selected">Selected for comparison</string>
+    <string name="version_history_selected_preferred">This is the preferred version.</string>
+    <string name="version_history_side_by_side">Side by side</string>
+    <string name="version_history_overlay">Changed-region overlay</string>
+    <string name="version_history_difference_summary">%1$d changed cells in %2$d regions</string>
+    <string name="version_history_confidence">Comparison confidence: %1$s</string>
+    <string name="version_history_calibration_warning">Changed regions are visual evidence only. Duplicate/revision classification remains unavailable until physical calibration is complete.</string>
+    <string name="version_history_keep_both">Keep both versions</string>
+    <string name="version_history_set_preferred">Set selected as preferred</string>
+    <string name="version_history_mark_physical_copy">Mark another physical copy</string>
+    <string name="version_history_move_to_review">Move unresolved version to Needs Review</string>
+    <string name="version_history_review_queued">Needs Review item: %1$s</string>
+    <string name="version_history_preview_unavailable">Preview unavailable</string>
+    <string name="version_history_preview_content_description">Stored page version preview</string>
+    <string name="version_history_overlay_content_description">Stored page version with changed-region overlay</string>
 </resources>
