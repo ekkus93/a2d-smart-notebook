@@ -250,11 +250,11 @@ private fun VersionComparisonPanel(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     VersionImage(
-                        path = preferred.correctedAssetPath ?: preferred.originalAssetPath,
+                        path = preferred.displayAssetPath(),
                         modifier = Modifier.weight(1f).height(220.dp),
                     )
                     VersionImage(
-                        path = candidate.correctedAssetPath ?: candidate.originalAssetPath,
+                        path = candidate.displayAssetPath(),
                         modifier = Modifier.weight(1f).height(220.dp),
                     )
                 }
@@ -335,6 +335,9 @@ private fun VersionActions(
     }
 }
 
+private fun PageVersionRecord.displayAssetPath(): String =
+    thumbnailAssetPath ?: correctedAssetPath ?: originalAssetPath
+
 @Composable
 private fun VersionImage(path: String, modifier: Modifier = Modifier) {
     val bitmap by versionBitmap(path)
@@ -359,7 +362,7 @@ private fun OverlayVersionImage(
     comparison: PageVersionComparison?,
     modifier: Modifier = Modifier,
 ) {
-    val bitmap by versionBitmap(candidate.correctedAssetPath ?: candidate.originalAssetPath)
+    val bitmap by versionBitmap(candidate.displayAssetPath())
     val overlayColor = MaterialTheme.colorScheme.error
     val current = bitmap
     if (current == null) {
