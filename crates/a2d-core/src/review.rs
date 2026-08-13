@@ -224,3 +224,7 @@ fn review_error(code: &'static str, message: &'static str) -> A2dError {
         false,
     )
 }
+
+#[path = "version_history.rs"]
+mod version_history;
+pub use version_history::*;
