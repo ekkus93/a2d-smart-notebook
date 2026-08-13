@@ -11,6 +11,7 @@ import com.a2d.notebook.feature.scanner.camera.rememberCameraPermissionState
 @Composable
 internal fun PolicyAwareSinglePageScannerRoute(
     onBack: () -> Unit,
+    onOpenVersions: (String) -> Unit = {},
     viewModel: SinglePageScannerViewModel,
 ) {
     val state by viewModel.state
@@ -18,10 +19,17 @@ internal fun PolicyAwareSinglePageScannerRoute(
     BackHandler(enabled = state.navigationBlocked) {}
 
     if (state.recoveryMode) {
-        ScannerRecoveryContent(onBack = onBack, viewModel = viewModel)
+        ScannerRecoveryContent(
+            onBack = onBack,
+            viewModel = viewModel,
+        )
     } else {
         when (permission.status) {
-            CameraPermissionStatus.Granted -> ScannerGrantedContent(onBack, viewModel)
+            CameraPermissionStatus.Granted ->
+                ScannerGrantedContent(
+                    onBack = onBack,
+                    viewModel = viewModel,
+                )
             CameraPermissionStatus.NotRequested ->
                 scannerPermission(
                     explanation = stringResource(R.string.single_scanner_permission_title),
