@@ -268,7 +268,10 @@ impl A2dCore {
                 }
             }
             let details = BTreeMap::from([
-                ("reason_code".to_string(), VERSION_UI_REVIEW_REASON.to_string()),
+                (
+                    "reason_code".to_string(),
+                    VERSION_UI_REVIEW_REASON.to_string(),
+                ),
                 (
                     "preferred_scan_id".to_string(),
                     page.preferred_scan_id
@@ -397,10 +400,8 @@ mod tests {
     use crate::OpenLibraryRequest;
 
     fn open_core() -> (std::sync::Arc<A2dCore>, std::path::PathBuf) {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-core-version-history-{}",
-            PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-core-version-history-{}", PageId::generate()));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })
@@ -429,7 +430,11 @@ mod tests {
     fn add_scan(core: &A2dCore, page_id: &PageId, captured_at_ms: i64) -> ScanId {
         let asset = core
             .asset_store
-            .commit(b"durable-version-original", AssetKind::Original, "image/jpeg")
+            .commit(
+                b"durable-version-original",
+                AssetKind::Original,
+                "image/jpeg",
+            )
             .unwrap();
         let scan_id = ScanId::generate();
         let mut storage = core.lock_storage().unwrap();
@@ -484,7 +489,10 @@ mod tests {
         assert_eq!(timeline.page_id, page_id);
         assert_eq!(timeline.preferred_scan_id, Some(preferred_scan_id.clone()));
         assert_eq!(
-            timeline.preferred_version.as_ref().map(|item| &item.scan_id),
+            timeline
+                .preferred_version
+                .as_ref()
+                .map(|item| &item.scan_id),
             Some(&preferred_scan_id)
         );
         assert_eq!(timeline.items.len(), 1);
