@@ -12,6 +12,7 @@ import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
 import com.a2d.notebook.feature.scanner.singlepage.SinglePageScannerScreen
 import com.a2d.notebook.feature.smartpage.SmartPagesScreen
+import com.a2d.notebook.feature.version.VersionHistoryScreen
 
 object A2dDestinations {
     const val HOME = "home"
@@ -20,8 +21,11 @@ object A2dDestinations {
     const val ADD_NOTEBOOK = "notebooks/add"
     const val SMART_PAGES = "smart-pages"
     const val PAGE_CODE_PATTERN = "page-code/{notebookId}"
+    const val VERSION_HISTORY_PATTERN = "versions/{pageId}"
 
     fun pageCode(notebookId: String) = "page-code/$notebookId"
+
+    fun versionHistory(pageId: String) = "versions/$pageId"
 }
 
 @Composable
@@ -35,7 +39,12 @@ fun A2dNavHost(navController: NavHostController) {
             )
         }
         composable(A2dDestinations.SINGLE_PAGE_SCANNER) {
-            SinglePageScannerScreen(onBack = { navController.navigateUp() })
+            SinglePageScannerScreen(
+                onBack = { navController.navigateUp() },
+                onOpenVersions = { pageId ->
+                    navController.navigate(A2dDestinations.versionHistory(pageId))
+                },
+            )
         }
         composable(A2dDestinations.NOTEBOOKS) {
             NotebookLibraryScreen(
@@ -60,6 +69,15 @@ fun A2dNavHost(navController: NavHostController) {
         ) { entry ->
             PageCodeScreen(
                 notebookId = requireNotNull(entry.arguments?.getString("notebookId")),
+                onBack = { navController.navigateUp() },
+            )
+        }
+        composable(
+            route = A2dDestinations.VERSION_HISTORY_PATTERN,
+            arguments = listOf(navArgument("pageId") { type = NavType.StringType }),
+        ) { entry ->
+            VersionHistoryScreen(
+                pageId = requireNotNull(entry.arguments?.getString("pageId")),
                 onBack = { navController.navigateUp() },
             )
         }
