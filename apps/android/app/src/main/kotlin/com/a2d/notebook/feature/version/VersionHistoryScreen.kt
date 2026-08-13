@@ -28,7 +28,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -402,7 +401,10 @@ private fun OverlayVersionImage(
 }
 
 @Composable
-private fun versionBitmap(path: String): androidx.compose.runtime.State<ImageBitmap?> =
-    produceState<ImageBitmap?>(initialValue = null, key1 = path) {
-        value = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() }
+private fun versionBitmap(path: String): androidx.compose.runtime.State<ImageBitmap?> {
+    val bitmap = remember(path) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(path) {
+        bitmap.value = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() }
     }
+    return bitmap
+}
