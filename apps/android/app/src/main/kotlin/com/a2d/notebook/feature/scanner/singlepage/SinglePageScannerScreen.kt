@@ -6,7 +6,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun SinglePageScannerScreen(
     onBack: () -> Unit,
+    onOpenVersions: (String) -> Unit = {},
     viewModel: SinglePageScannerViewModel = viewModel(),
 ) {
-    PolicyAwareSinglePageScannerRoute(onBack = onBack, viewModel = viewModel)
+    PolicyAwareSinglePageScannerRoute(
+        onBack = onBack,
+        onOpenVersions = onOpenVersions,
+        viewModel = viewModel,
+    )
 }
