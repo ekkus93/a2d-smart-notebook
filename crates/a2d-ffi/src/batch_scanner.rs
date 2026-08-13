@@ -4,9 +4,7 @@
 //! reconciliation, review-item production, and session completion semantics.
 
 use a2d_core as core;
-use a2d_domain::{
-    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, NotebookId, PageId,
-};
+use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity, NotebookId, PageId};
 
 use super::{A2dClient, A2dFfiError, RegisterScanRequest, RegisteredScan};
 
@@ -237,8 +235,11 @@ fn to_core_register_scan_request(
         .as_deref()
         .map(NotebookId::parse)
         .transpose()?;
-    let preview_warnings =
-        validate_and_strip_policy_evidence(&client.core, &expected_page_id, request.preview_warnings)?;
+    let preview_warnings = validate_and_strip_policy_evidence(
+        &client.core,
+        &expected_page_id,
+        request.preview_warnings,
+    )?;
 
     Ok(core::RegisterScanRequest {
         staging_path: request.staging_path,
@@ -344,10 +345,7 @@ impl A2dClient {
             .map_err(Into::into)
     }
 
-    pub fn acknowledge_batch_scan_session(
-        &self,
-        session_id: String,
-    ) -> Result<(), A2dFfiError> {
+    pub fn acknowledge_batch_scan_session(&self, session_id: String) -> Result<(), A2dFfiError> {
         self.core
             .acknowledge_batch_scan_session(&session_id)
             .map_err(Into::into)
