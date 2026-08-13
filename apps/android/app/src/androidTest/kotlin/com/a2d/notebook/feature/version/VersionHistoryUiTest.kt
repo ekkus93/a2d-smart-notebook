@@ -60,14 +60,18 @@ class VersionHistoryUiTest {
     @Test
     fun terminalDecisionRemainsComparableWithoutOfferingAnotherDecision() {
         val base = unresolvedState()
-        val decidedCandidate = base.timeline!!.items[1].copy(decisionCode = "WRONG_SCAN")
+        val timeline = requireNotNull(base.timeline)
+        val decidedCandidate = timeline.items[1].copy(decisionCode = "WRONG_SCAN")
         composeRule.activity.setContent {
             MaterialTheme {
                 VersionHistoryContent(
                     pageId = PAGE_ID,
                     state =
                         base.copy(
-                            timeline = base.timeline.copy(items = listOf(base.timeline.items[0], decidedCandidate)),
+                            timeline =
+                                timeline.copy(
+                                    items = listOf(timeline.items[0], decidedCandidate),
+                                ),
                             proposal = null,
                         ),
                     onBack = {},
