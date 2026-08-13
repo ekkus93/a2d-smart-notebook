@@ -251,9 +251,9 @@ fn review_audit_event(
 pub fn validate_resolution_code(value: &str) -> Result<(), A2dError> {
     if value.is_empty()
         || value.len() > MAX_REVIEW_RESOLUTION_CODE_BYTES
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || b"_.-".contains(&byte))
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_uppercase() || byte.is_ascii_digit() || b"_.-".contains(&byte)
+        })
     {
         return Err(review_validation_error(
             "STORAGE_REVIEW_RESOLUTION_CODE_INVALID",

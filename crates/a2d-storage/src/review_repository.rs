@@ -135,7 +135,18 @@ fn review_item_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawReviewItemRow
 }
 
 fn decode_review_item_row(raw: RawReviewItemRow) -> Result<ReviewItem, A2dError> {
-    let (id, kind, page_id, scan_id, severity, status, details, resolution, created_at_ms, resolved_at_ms) = raw;
+    let (
+        id,
+        kind,
+        page_id,
+        scan_id,
+        severity,
+        status,
+        details,
+        resolution,
+        created_at_ms,
+        resolved_at_ms,
+    ) = raw;
     let item = ReviewItem::new(
         ReviewItemId::parse(&id)?,
         review_kind_from_str(&kind)?,
@@ -208,13 +219,17 @@ fn validate_review_item(item: &ReviewItem) -> Result<(), A2dError> {
             }
         }
         ReviewItemStatus::Resolved | ReviewItemStatus::Dismissed => {
-            if item.resolution.as_deref().is_none_or(str::is_empty) || item.resolved_at_ms.is_none() {
+            if item.resolution.as_deref().is_none_or(str::is_empty) || item.resolved_at_ms.is_none()
+            {
                 return Err(review_integrity_error(
                     "STORAGE_REVIEW_TERMINAL_MISSING_RESOLUTION",
                     "terminal review item must carry resolution and resolved timestamp",
                 ));
             }
-            if item.resolved_at_ms.is_some_and(|time| time < item.created_at_ms) {
+            if item
+                .resolved_at_ms
+                .is_some_and(|time| time < item.created_at_ms)
+            {
                 return Err(review_integrity_error(
                     "STORAGE_REVIEW_RESOLVED_BEFORE_CREATED",
                     "review item cannot resolve before it was created",

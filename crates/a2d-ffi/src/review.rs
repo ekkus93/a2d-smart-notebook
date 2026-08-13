@@ -285,10 +285,8 @@ mod tests {
 
     #[test]
     fn ffi_methods_list_defer_and_resolve_rust_owned_review_state() {
-        let root = std::env::temp_dir().join(format!(
-            "a2d-ffi-review-{}",
-            a2d_domain::PageId::generate()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("a2d-ffi-review-{}", a2d_domain::PageId::generate()));
         let core_handle = core::A2dCore::open(core::OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })

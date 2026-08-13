@@ -71,7 +71,10 @@ fn list_detail_defer_and_resolve_use_typed_rust_state() {
         .unwrap();
     assert!(resolved.changed);
     assert_eq!(resolved.item.status, ReviewItemStatus::Resolved);
-    assert_eq!(resolved.item.resolution.as_deref(), Some("KEEP_BOTH_VERSIONS"));
+    assert_eq!(
+        resolved.item.resolution.as_deref(),
+        Some("KEEP_BOTH_VERSIONS")
+    );
     assert!(!resolved.committed_data_deleted);
 
     std::fs::remove_dir_all(root).ok();
@@ -92,7 +95,10 @@ fn list_bounds_and_resolution_codes_fail_closed() {
             offset: 0,
         })
         .unwrap_err();
-    assert_eq!(list_error.code.to_string(), "CORE_REVIEW_LIST_LIMIT_INVALID");
+    assert_eq!(
+        list_error.code.to_string(),
+        "CORE_REVIEW_LIST_LIMIT_INVALID"
+    );
 
     let resolution_error = core
         .resolve_review_item(ResolveReviewItemRequest {

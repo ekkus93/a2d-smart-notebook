@@ -3,8 +3,7 @@ use std::collections::BTreeMap;
 use a2d_domain::{
     Asset, AssetId, AssetKind, AuditEventId, CaptureSource, EncryptionState, ErrorSeverity,
     LayoutId, Page, PageId, PageKind, PageState, QualityStatus, ReviewItem, ReviewItemId,
-    ReviewItemKind, ReviewItemStatus,
-    Scan, ScanId, SmartPageId,
+    ReviewItemKind, ReviewItemStatus, Scan, ScanId, SmartPageId,
 };
 use a2d_storage::{
     AssetRepository, AuditEventRepository, DeferReviewItemRequest, PageRepository,
@@ -174,7 +173,11 @@ fn defer_then_resolve_is_audited_idempotent_and_does_not_mutate_scan_or_asset() 
     assert!(!deferred.committed_data_deleted);
     assert_eq!(deferred.audit_event_id, Some(defer_audit.clone()));
     assert_eq!(
-        storage.get_audit_event(&defer_audit).unwrap().unwrap().event_kind,
+        storage
+            .get_audit_event(&defer_audit)
+            .unwrap()
+            .unwrap()
+            .event_kind,
         "review_item.deferred"
     );
 
@@ -201,13 +204,19 @@ fn defer_then_resolve_is_audited_idempotent_and_does_not_mutate_scan_or_asset() 
         .unwrap();
     assert!(resolved.changed);
     assert_eq!(resolved.item.status, ReviewItemStatus::Resolved);
-    assert_eq!(resolved.item.resolution.as_deref(), Some("KEEP_BOTH_VERSIONS"));
+    assert_eq!(
+        resolved.item.resolution.as_deref(),
+        Some("KEEP_BOTH_VERSIONS")
+    );
     assert_eq!(resolved.item.resolved_at_ms, Some(500));
     assert!(!resolved.committed_data_deleted);
     let audit = storage.get_audit_event(&resolve_audit).unwrap().unwrap();
     assert_eq!(audit.event_kind, "review_item.resolved");
     assert_eq!(
-        audit.details.get("committed_data_deleted").map(String::as_str),
+        audit
+            .details
+            .get("committed_data_deleted")
+            .map(String::as_str),
         Some("false")
     );
 
@@ -247,7 +256,9 @@ fn insertion_rejects_a_page_scan_reference_mismatch() {
     let first_page = PageId::generate();
     let second_page = PageId::generate();
     storage.insert_page(&page(first_page.clone(), 100)).unwrap();
-    storage.insert_page(&page(second_page.clone(), 101)).unwrap();
+    storage
+        .insert_page(&page(second_page.clone(), 101))
+        .unwrap();
     let asset = original_asset(AssetId::generate(), "mismatch");
     storage.insert_asset(&asset).unwrap();
     let scan_id = ScanId::generate();
