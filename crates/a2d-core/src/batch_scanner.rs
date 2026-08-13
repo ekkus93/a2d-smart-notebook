@@ -840,9 +840,8 @@ impl A2dCore {
         if entry.review_item_id.is_none() {
             let kind = match reason {
                 BatchScanReviewReason::IdentityFailure => ReviewItemKind::UnidentifiedPage,
-                BatchScanReviewReason::ProcessingFailure | BatchScanReviewReason::RegistrationFailure => {
-                    ReviewItemKind::ProcessingFailure
-                }
+                BatchScanReviewReason::ProcessingFailure
+                | BatchScanReviewReason::RegistrationFailure => ReviewItemKind::ProcessingFailure,
             };
             let mut details = BTreeMap::new();
             details.insert("producer".to_string(), "batch_scanner".to_string());
@@ -912,7 +911,10 @@ impl A2dCore {
             details.insert("producer".to_string(), "batch_scanner".to_string());
             details.insert("session_id".to_string(), session_id_owned);
             details.insert("recovery_token".to_string(), recovery_token.to_string());
-            details.insert("duplicate_page".to_string(), entry.duplicate_page.to_string());
+            details.insert(
+                "duplicate_page".to_string(),
+                entry.duplicate_page.to_string(),
+            );
             details.insert(
                 "quality_status".to_string(),
                 format!("{:?}", registered.quality_status),
@@ -934,9 +936,8 @@ impl A2dCore {
                 "Saved; review is required before treating this scan as resolved.".to_string(),
             );
         } else if entry.message.is_none() {
-            entry.message = Some(
-                "Saved. OCR remains queued until the OCR milestone is available.".to_string(),
-            );
+            entry.message =
+                Some("Saved. OCR remains queued until the OCR milestone is available.".to_string());
         }
         self.persist_batch_scan_session(&session, false)
     }
@@ -1076,8 +1077,8 @@ impl A2dCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use a2d_domain::{LayoutId, ScanId};
     use crate::{BeginScannerRecoveryRequest, OpenLibraryRequest};
+    use a2d_domain::{LayoutId, ScanId};
 
     fn open_core() -> (std::sync::Arc<A2dCore>, PathBuf) {
         let root = std::env::temp_dir().join(format!("a2d-batch-scan-{}", PageId::generate()));
@@ -1159,15 +1160,9 @@ mod tests {
         let notebook_id = NotebookId::generate();
         let page_id = PageId::generate();
         seed_session(&core, notebook_id.clone());
-        begin_recovery(
-            &core,
-            &root,
-            "resume",
-            notebook_id,
-            page_id.clone(),
-            1,
-        );
-        core.queue_batch_scan_capture("batch-test", "resume").unwrap();
+        begin_recovery(&core, &root, "resume", notebook_id, page_id.clone(), 1);
+        core.queue_batch_scan_capture("batch-test", "resume")
+            .unwrap();
         let recovery = core
             .list_scanner_recoveries()
             .unwrap()
