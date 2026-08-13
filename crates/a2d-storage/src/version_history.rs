@@ -213,6 +213,9 @@ mod tests {
                 offset: 0,
             })
             .unwrap_err();
-        assert_eq!(error.code.to_string(), "STORAGE_PAGE_VERSION_LIST_LIMIT_INVALID");
+        assert_eq!(
+            error.code.to_string(),
+            "STORAGE_PAGE_VERSION_LIST_LIMIT_INVALID"
+        );
     }
 }
