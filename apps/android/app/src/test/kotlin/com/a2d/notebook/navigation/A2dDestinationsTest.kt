@@ -16,4 +16,10 @@ class A2dDestinationsTest {
     fun singlePageScannerRouteIsStable() {
         assertEquals("scanner/single", A2dDestinations.SINGLE_PAGE_SCANNER)
     }
+
+    @Test
+    fun versionHistoryRouteCarriesTheCanonicalPageId() {
+        assertEquals("versions/{pageId}", A2dDestinations.VERSION_HISTORY_PATTERN)
+        assertEquals("versions/01ABCDEF", A2dDestinations.versionHistory("01ABCDEF"))
+    }
 }
