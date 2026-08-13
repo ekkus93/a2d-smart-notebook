@@ -112,8 +112,8 @@ fn version_integrity_error(code: &'static str, message: &'static str) -> A2dErro
 #[cfg(test)]
 mod tests {
     use a2d_domain::{
-        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, Page, PageId, PageKind,
-        PageState, QualityStatus, Scan, ScanId, SmartPageId,
+        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, Page, PageId,
+        PageKind, PageState, QualityStatus, Scan, ScanId, SmartPageId,
     };
 
     use super::*;
