@@ -1,6 +1,5 @@
 package com.a2d.notebook.feature.home
 
-import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,7 +25,6 @@ object HomeScreenTestTags {
     const val SMART_PAGES = "home_smart_pages"
 }
 
-@SuppressLint("HardcodedText")
 @Composable
 fun HomeScreen(
     onScanPage: () -> Unit,
@@ -42,7 +40,7 @@ fun HomeScreen(
         Text(
             text = stringResource(R.string.home_title),
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.testTag(HomeScrenTestTags.TITLE),
+            modifier = Modifier.testTag(HomeScreenTestTags.TITLE),
         )
         Text(stringResource(R.string.home_placeholder), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(24.dp))
