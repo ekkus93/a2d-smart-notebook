@@ -334,6 +334,10 @@ impl A2dCore {
 mod review;
 pub use review::*;
 
+#[path = "batch_scanner.rs"]
+mod batch_scanner;
+pub use batch_scanner::*;
+
 #[cfg(test)]
 #[path = "review_tests.rs"]
 mod review_tests;
