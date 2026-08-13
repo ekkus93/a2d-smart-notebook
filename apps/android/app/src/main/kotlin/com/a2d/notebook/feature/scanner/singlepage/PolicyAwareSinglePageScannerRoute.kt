@@ -65,6 +65,35 @@ internal fun PolicyAwareSinglePageScannerRoute(
 }
 
 @Composable
+internal fun PolicyAwareBatchScannerRoute(onBack: () -> Unit) {
+    val permission = rememberCameraPermissionState()
+    when (permission.status) {
+        CameraPermissionStatus.Granted -> BatchScannerScreen(onBack)
+        CameraPermissionStatus.NotRequested ->
+            scannerPermission(
+                explanation = stringResource(R.string.single_scanner_permission_title),
+                actionLabel = stringResource(R.string.single_scanner_permission_request),
+                onAction = permission.requestPermission,
+                onBack = onBack,
+            )
+        CameraPermissionStatus.Denied ->
+            scannerPermission(
+                explanation = stringResource(R.string.single_scanner_permission_title),
+                actionLabel = stringResource(R.string.common_retry),
+                onAction = permission.requestPermission,
+                onBack = onBack,
+            )
+        CameraPermissionStatus.PermanentlyDenied ->
+            scannerPermission(
+                explanation = stringResource(R.string.single_scanner_camera_unavailable),
+                actionLabel = stringResource(R.string.single_scanner_permission_settings),
+                onAction = permission.openApplicationSettings,
+                onBack = onBack,
+            )
+    }
+}
+
+@Composable
 private fun scannerPermission(
     explanation: String,
     actionLabel: String,
