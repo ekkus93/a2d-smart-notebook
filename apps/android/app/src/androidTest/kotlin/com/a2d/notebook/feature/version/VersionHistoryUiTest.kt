@@ -97,7 +97,10 @@ class VersionHistoryUiTest {
 
     private fun assertTimelineNodeIsDisplayed(index: Int, tag: String) {
         scrollTimelineTo(index)
-        composeRule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+        composeRule
+            .onNodeWithTag(tag, useUnmergedTree = true)
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     private fun scrollTimelineTo(index: Int) {
