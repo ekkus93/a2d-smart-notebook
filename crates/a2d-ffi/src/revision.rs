@@ -3,7 +3,9 @@
 use a2d_core as core;
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity, PageId, ScanId};
 
-use crate::{A2dClient, A2dFfiError, StoredScanComparisonEvidence};
+use crate::{
+    A2dClient, A2dFfiError, RegisterScanRequest, RegisteredScan, StoredScanComparisonEvidence,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
 pub enum ScanRevisionDecision {
@@ -209,3 +211,7 @@ mod tests {
 #[path = "review.rs"]
 mod review;
 pub use review::*;
+
+#[path = "batch_scanner.rs"]
+mod batch_scanner;
+pub use batch_scanner::*;
