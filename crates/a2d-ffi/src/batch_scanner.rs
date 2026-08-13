@@ -4,12 +4,15 @@
 //! reconciliation, review-item production, and session completion semantics.
 
 use a2d_core as core;
-use a2d_domain::{NotebookId, PageId};
-
-use super::{
-    registration_policy_evidence::validate_and_strip_registration_policy_evidence, A2dClient,
-    A2dFfiError, RegisterScanRequest, RegisteredScan,
+use a2d_domain::{
+    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, NotebookId, PageId,
 };
+
+use super::{A2dClient, A2dFfiError, RegisterScanRequest, RegisteredScan};
+
+const LAYOUT_PREFIX: &str = "A2D_POLICY_LAYOUT=";
+const POLICY_PREFIX: &str = "A2D_POLICY_VERSION=";
+const PIPELINE_PREFIX: &str = "A2D_PIPELINE_VERSION=";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
 pub enum BatchScanEntryStatus {
@@ -108,6 +111,122 @@ impl From<core::BatchScanSession> for BatchScanSession {
     }
 }
 
+fn validate_and_strip_policy_evidence(
+    core: &core::A2dCore,
+    page_id: &PageId,
+    values: Vec<String>,
+) -> Result<Vec<String>, A2dError> {
+    let mut layout_id = None;
+    let mut policy_version = None;
+    let mut pipeline_version = None;
+    let mut warnings = Vec::new();
+
+    for value in values {
+        if let Some(raw) = value.strip_prefix(LAYOUT_PREFIX) {
+            set_once(&mut layout_id, raw.to_string(), "layout")?;
+        } else if let Some(raw) = value.strip_prefix(POLICY_PREFIX) {
+            set_once(
+                &mut policy_version,
+                parse_version(raw, "processing policy")?,
+                "processing policy",
+            )?;
+        } else if let Some(raw) = value.strip_prefix(PIPELINE_PREFIX) {
+            set_once(
+                &mut pipeline_version,
+                parse_version(raw, "pipeline")?,
+                "pipeline",
+            )?;
+        } else {
+            warnings.push(value);
+        }
+    }
+
+    let layout_id = required(layout_id, "layout")?;
+    let policy_version = required(policy_version, "processing policy")?;
+    let pipeline_version = required(pipeline_version, "pipeline")?;
+    let current = core.resolve_stored_scan_processing_policy(page_id)?;
+
+    if layout_id != current.layout_id.to_string()
+        || policy_version != current.policy_version
+        || pipeline_version != current.pipeline_version()
+    {
+        return Err(policy_evidence_error(
+            "FFI_SCAN_PREVIEW_POLICY_MISMATCH",
+            ErrorCategory::Integrity,
+            "the reviewed preview policy no longer matches the stored page policy",
+        )
+        .with_detail("page_id", page_id.to_string())
+        .with_detail("reviewed_layout_id", layout_id)
+        .with_detail("current_layout_id", current.layout_id.to_string())
+        .with_detail("reviewed_policy_version", policy_version.to_string())
+        .with_detail("current_policy_version", current.policy_version.to_string())
+        .with_detail("reviewed_pipeline_version", pipeline_version.to_string())
+        .with_detail(
+            "current_pipeline_version",
+            current.pipeline_version().to_string(),
+        ));
+    }
+
+    Ok(warnings)
+}
+
+fn parse_version(raw: &str, field: &'static str) -> Result<u32, A2dError> {
+    raw.parse::<u32>()
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| {
+            policy_evidence_error(
+                "FFI_SCAN_PREVIEW_POLICY_EVIDENCE_INVALID",
+                ErrorCategory::Validation,
+                format!("reviewed preview {field} version is invalid"),
+            )
+            .with_detail("field", field)
+            .with_detail("value", raw)
+        })
+}
+
+fn set_once<T>(slot: &mut Option<T>, value: T, field: &'static str) -> Result<(), A2dError> {
+    if slot.replace(value).is_some() {
+        return Err(policy_evidence_error(
+            "FFI_SCAN_PREVIEW_POLICY_EVIDENCE_DUPLICATE",
+            ErrorCategory::Validation,
+            format!("reviewed preview {field} evidence was repeated"),
+        )
+        .with_detail("field", field));
+    }
+    Ok(())
+}
+
+fn required<T>(value: Option<T>, field: &'static str) -> Result<T, A2dError> {
+    value.ok_or_else(|| {
+        policy_evidence_error(
+            "FFI_SCAN_PREVIEW_POLICY_EVIDENCE_MISSING",
+            ErrorCategory::Integrity,
+            format!("reviewed preview {field} evidence is required for registration"),
+        )
+        .with_detail("field", field)
+    })
+}
+
+fn policy_evidence_error(
+    code: &'static str,
+    category: ErrorCategory,
+    message: impl Into<String>,
+) -> A2dError {
+    A2dError::new(
+        ErrorCode::new(code),
+        category,
+        if category == ErrorCategory::Integrity {
+            ErrorSeverity::Critical
+        } else {
+            ErrorSeverity::Error
+        },
+        "error.ffi.scan_preview_policy",
+        message.into(),
+        false,
+    )
+}
+
 fn to_core_register_scan_request(
     client: &A2dClient,
     request: RegisterScanRequest,
@@ -118,11 +237,9 @@ fn to_core_register_scan_request(
         .as_deref()
         .map(NotebookId::parse)
         .transpose()?;
-    let preview_warnings = validate_and_strip_registration_policy_evidence(
-        &client.core,
-        &expected_page_id,
-        request.preview_warnings,
-    )?;
+    let preview_warnings =
+        validate_and_strip_policy_evidence(&client.core, &expected_page_id, request.preview_warnings)?;
+
     Ok(core::RegisterScanRequest {
         staging_path: request.staging_path,
         page_code_payload: request.page_code_payload,
