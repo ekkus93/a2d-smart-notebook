@@ -84,6 +84,20 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           cmdline-tools-version: "15859902"
+      - name: Real ENOSPC scanner-staging evidence
+        run: |
+          mount_root="$(mktemp -d)"
+          sudo mount -t tmpfs -o size=4m tmpfs "$mount_root"
+          sudo chown "$(id -u):$(id -g)" "$mount_root"
+          cleanup() {
+            sudo umount "$mount_root" || true
+            rmdir "$mount_root" || true
+          }
+          trap cleanup EXIT
+          cd apps/android
+          A2D_ENOSPC_ROOT="$mount_root" \
+            ./gradlew testDebugUnitTest --no-daemon \
+            --tests 'com.a2d.notebook.feature.scanner.singlepage.ScannerStagingEnospcTest'
       - name: Install and select pinned Android native toolchain
         run: |
           sdkmanager --install "ndk;${A2D_ANDROID_NDK_VERSION}"
