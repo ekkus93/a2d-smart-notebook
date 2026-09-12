@@ -16,12 +16,13 @@ This ledger satisfies FIX-121 by mapping every remediation fix ID to its roadmap
 
 ## Validation baseline
 
-The last code-bearing remediation candidate was `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`.
+The last code-bearing remediation candidate before FIX-111 was `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`.
 
 - Permanent full CI run `30673255456` passed.
 - Milestone 7 native/fixture run `30673255457` passed.
 - These runs covered the integrated implementation for completed FIX-001 through FIX-110: Rust formatting, strict Clippy, workspace tests, dependency policy, binding drift, Android lint/JVM tests/debug APK, both Android ABIs, APK symbol/notices checks, emulator integration, fixture drift, and Apple compile feasibility.
 - Later branch-cleanup commits changed no production files.
+- FIX-111 completion head `cb9cf1405bb48ec5d31b8febbc988d52d1a46a01` passed permanent CI run `34713845468`, including Rust format/Clippy/tests, real tmpfs ENOSPC asset-persistence evidence, dependency policy, Android binding drift, Android native/lint/JVM/APK verification, real tmpfs scanner-staging ENOSPC evidence, and Android emulator scanner/recovery instrumentation.
 
 ## Traceability table
 
@@ -57,7 +58,7 @@ The last code-bearing remediation candidate was `d2cb054d2489cf2b0f1e66d9370b565
 | FIX-100 | Complete | 3, 16 | Migration-history SHA-256 verification/backfill | Migration history integrity tests | `716559d8c6757bb778bc953b010f19c150856be9` | `30673255456` |
 | FIX-101 | Complete | 3, 16 | Bounded non-destructive storage/core integrity checker | Corruption, limit, cancellation, asset/orphan and relational tests | `ebe0abfabf226de3410dd048d94089c6e38999e3` | `30673255456` |
 | FIX-110 | Complete | 8, 9, 16 | Rust scanner journal, FFI projection and Android recovery lifecycle | Core recovery tests and `ScannerRecoveryBridgeTest.kt` | `bd46b76c324c184bf855932c54ae1463617ef425` | `30673255456` |
-| FIX-111 | **Partial** | 8, 16, 19 | Existing permission, CameraX, state-machine, presentation and recovery paths | Many focused cases exist; consolidated matrix, batch ordering and real low-storage evidence remain open | — | Partial coverage in `30673255456` |
+| FIX-111 | Complete | 8, 16, 19 | CameraX capture-generation guard, restricted reservation-sentinel replacement, durable batch-token ordering, and permanent low-storage gates | `CameraCaptureCallbackGenerationTest.kt`, `CameraCaptureOutputPreparationTest.kt`, `ScannerStagingEnospcTest.kt`, `crates/a2d-core/tests/batch_scanner_ordering.rs`, `crates/a2d-storage/tests/enospc.rs`, and `docs/FIX_111_CAMERA_FAILURE_MATRIX_2026-09-12.md` | `cb9cf1405bb48ec5d31b8febbc988d52d1a46a01` | `34713845468` |
 | FIX-120 | Complete | 1–19 | Reconciled `A2D_SMART_NOTEBOOK_V01_TODO.md` | Source/evidence audit summarized below | `c139b861280da9cd697d7f1f06971029e998e9f0` | Exact documentation-head CI recorded outside this self-referential file |
 | FIX-121 | Complete | Remediation-wide | This ledger | Every remediation ID has a status and evidence mapping | `ed8f29da378e3333ea115cd8b3860eeb12836b82` | Exact documentation-head CI recorded outside this self-referential file |
 | FIX-130 | **Partial** | 1, 3–9, 16, 19 | Permanent CI/native/fixture/APK workflows | Most repaired invariants are gated; deliberate regression proof for every invariant is not consolidated | — | Code-bearing baseline green |
@@ -76,10 +77,10 @@ The last code-bearing remediation candidate was `d2cb054d2489cf2b0f1e66d9370b565
 4. Structured FFI details, fallible IDs, preferred-scan integrity, asset durability, PDF hardening, migration digests, and the integrity report are reflected as implemented.
 5. The development manifest is not represented as an official product design.
 6. Synthetic fixtures and thresholds are not represented as physical calibration.
-7. Milestone 8.6 is reconciled case by case and remains partial.
+7. Milestone 8.6 is reconciled case by case and complete as of FIX-111 head `cb9cf1405bb48ec5d31b8febbc988d52d1a46a01`; physical calibration remains Milestones 7/17 work, not a FIX-111 blocker.
 8. Milestone 9.2 records asset-backed change regions and stable reason/confidence availability.
-9. Milestones 9.3–14 and physical/release work remain visibly incomplete.
-10. The next product implementation block is Milestone 9.3.
+9. Milestones 10–14 and physical/release work remain visibly incomplete.
+10. The next product implementation block is Milestone 10 after physical-evidence items are scheduled or explicitly deferred.
 
 ## Maintenance rule
 
