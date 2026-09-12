@@ -36,22 +36,18 @@ fn asset_commit_reports_real_enospc_before_finalization() {
         }
     }
     drop(filler);
-    assert!(written > RELEASE_BYTES, "dedicated filesystem was unexpectedly tiny");
+    assert!(
+        written > RELEASE_BYTES,
+        "dedicated filesystem was unexpectedly tiny"
+    );
 
-    let filler = OpenOptions::new()
-        .write(true)
-        .open(&filler_path)
-        .unwrap();
+    let filler = OpenOptions::new().write(true).open(&filler_path).unwrap();
     filler.set_len(written - RELEASE_BYTES).unwrap();
     filler.sync_all().unwrap();
     drop(filler);
 
     let error = store
-        .commit(
-            &vec![0x33; ASSET_BYTES],
-            AssetKind::Original,
-            "image/jpeg",
-        )
+        .commit(&vec![0x33; ASSET_BYTES], AssetKind::Original, "image/jpeg")
         .unwrap_err();
 
     assert_eq!(
@@ -65,10 +61,17 @@ fn asset_commit_reports_real_enospc_before_finalization() {
         error.details.get("final_file_created").map(String::as_str),
         Some("false")
     );
-    assert_eq!(error.details.get("io_error_kind").map(String::as_str), Some("StorageFull"));
+    assert_eq!(
+        error.details.get("io_error_kind").map(String::as_str),
+        Some("StorageFull")
+    );
     assert!(error.retryable);
     assert!(
-        !root.join("assets/originals").read_dir().unwrap().any(|entry| entry.is_ok()),
+        !root
+            .join("assets/originals")
+            .read_dir()
+            .unwrap()
+            .any(|entry| entry.is_ok()),
         "a real ENOSPC failure before finalization must not create a final original asset"
     );
 

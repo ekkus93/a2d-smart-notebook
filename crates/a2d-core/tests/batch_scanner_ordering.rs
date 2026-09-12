@@ -156,7 +156,9 @@ fn out_of_order_recovery_completion_survives_reopen_without_cross_wiring_pages()
         library_path: root.to_string_lossy().into_owned(),
     })
     .unwrap();
-    let after_reopen = reopened.reconcile_batch_scan_session("batch-ordering").unwrap();
+    let after_reopen = reopened
+        .reconcile_batch_scan_session("batch-ordering")
+        .unwrap();
     let one = after_reopen
         .entries
         .iter()
@@ -174,7 +176,9 @@ fn out_of_order_recovery_completion_survives_reopen_without_cross_wiring_pages()
     assert_eq!(two.registered_scan_id, Some(scan_two));
 
     let scan_one = mark_committed(&reopened, "capture-one");
-    let final_session = reopened.reconcile_batch_scan_session("batch-ordering").unwrap();
+    let final_session = reopened
+        .reconcile_batch_scan_session("batch-ordering")
+        .unwrap();
     let one = final_session
         .entries
         .iter()
