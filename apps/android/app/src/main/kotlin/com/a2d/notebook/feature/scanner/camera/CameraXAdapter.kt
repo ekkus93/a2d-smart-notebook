@@ -74,6 +74,12 @@ internal fun cameraClosedState(cleanupFailure: Exception?): CameraAdapterState.C
         },
     )
 
+internal fun shouldDeliverCameraCaptureCallback(
+    closeRequested: Boolean,
+    captureGeneration: Long,
+    currentGeneration: Long,
+): Boolean = !closeRequested && captureGeneration == currentGeneration
+
 /**
  * Owns CameraX Preview, ImageAnalysis, and ImageCapture as one lifecycle-bound adapter.
  *
@@ -274,7 +280,10 @@ class CameraXAdapter(
 
     /**
      * Captures a full-resolution image to a new staging file. Existing files are rejected so a
-     * capture can never silently overwrite an original or prior staged capture.
+     * capture can never silently overwrite an original or prior staged capture. A capture callback
+     * from an obsolete bind generation is intentionally dropped: the Rust recovery journal remains
+     * authoritative for the staging file, while an obsolete CameraX callback must not mutate a
+     * rebound or closed scanner session.
      */
     fun capture(
         outputFile: File,
@@ -315,6 +324,7 @@ class CameraXAdapter(
                 return@execute
             }
 
+            val captureGeneration = bindGeneration.get()
             val options = ImageCapture.OutputFileOptions.Builder(outputFile).build()
             try {
                 capture.takePicture(
@@ -322,10 +332,28 @@ class CameraXAdapter(
                     mainExecutor,
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                            if (
+                                !shouldDeliverCameraCaptureCallback(
+                                    closeRequested = closeRequested.get(),
+                                    captureGeneration = captureGeneration,
+                                    currentGeneration = bindGeneration.get(),
+                                )
+                            ) {
+                                return
+                            }
                             callback(CameraCaptureResult.Captured(outputFile, output.savedUri))
                         }
 
                         override fun onError(exception: ImageCaptureException) {
+                            if (
+                                !shouldDeliverCameraCaptureCallback(
+                                    closeRequested = closeRequested.get(),
+                                    captureGeneration = captureGeneration,
+                                    currentGeneration = bindGeneration.get(),
+                                )
+                            ) {
+                                return
+                            }
                             callback(
                                 CameraCaptureResult.Failure(
                                     exception.message ?: "CameraX image capture failed",
