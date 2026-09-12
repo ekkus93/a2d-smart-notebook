@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use a2d_core::{
-    A2dCore, BatchScanEntryStatus, BeginBatchScanSessionRequest, BeginScannerRecoveryRequest,
-    CreateNotebookRequest, OpenLibraryRequest, PageResolution,
+    A2dCore, BatchScanEntryStatus, BatchScanReviewReason, BeginBatchScanSessionRequest,
+    BeginScannerRecoveryRequest, CreateNotebookRequest, OpenLibraryRequest, PageResolution,
 };
-use a2d_domain::{LayoutId, NotebookDesignId, PageId, ScanId};
+use a2d_domain::{LayoutId, NotebookDesignId, PageId};
 use a2d_identity::PageCode;
 
 const DESIGN_ID: &str = "6DE28E53DBKPXCWWNHPC8T7QJX";
@@ -77,31 +77,8 @@ fn begin_recovery(
     .unwrap();
 }
 
-fn mark_committed(core: &A2dCore, token: &str) -> ScanId {
-    let recovery = core
-        .list_scanner_recoveries()
-        .unwrap()
-        .into_iter()
-        .find(|record| record.token == token)
-        .unwrap();
-    core.mark_scanner_recovery_preview_ready(token).unwrap();
-    core.mark_scanner_recovery_registering(
-        token,
-        Path::new(&recovery.staging_path),
-        &recovery.page_id,
-        &recovery.notebook_id,
-        &recovery.layout_id,
-        recovery.processing_policy_version,
-    )
-    .unwrap();
-    let scan_id = ScanId::generate();
-    core.mark_scanner_recovery_committed(token, &scan_id)
-        .unwrap();
-    scan_id
-}
-
 #[test]
-fn out_of_order_recovery_completion_survives_reopen_without_cross_wiring_pages() {
+fn out_of_order_batch_terminal_results_survive_reopen_without_cross_wiring_pages() {
     let (core, root) = open_core();
     let notebook_id = create_active_notebook(&core);
     let page_one = resolve_page(&core, &notebook_id, 1);
@@ -133,23 +110,29 @@ fn out_of_order_recovery_completion_survives_reopen_without_cross_wiring_pages()
     core.queue_batch_scan_capture("batch-ordering", "capture-two")
         .unwrap();
 
-    let scan_two = mark_committed(&core, "capture-two");
-    let first_reconcile = core.reconcile_batch_scan_session("batch-ordering").unwrap();
-    let one = first_reconcile
+    let second_first = core
+        .report_batch_scan_review(
+            "batch-ordering",
+            "capture-two",
+            BatchScanReviewReason::ProcessingFailure,
+            "second capture completed first".to_string(),
+        )
+        .unwrap();
+    let one = second_first
         .entries
         .iter()
         .find(|entry| entry.recovery_token == "capture-one")
         .unwrap();
-    let two = first_reconcile
+    let two = second_first
         .entries
         .iter()
         .find(|entry| entry.recovery_token == "capture-two")
         .unwrap();
     assert_eq!(one.status, BatchScanEntryStatus::Queued);
     assert_eq!(one.page_id, page_one);
-    assert_eq!(two.status, BatchScanEntryStatus::Saved);
+    assert_eq!(two.status, BatchScanEntryStatus::NeedsReview);
     assert_eq!(two.page_id, page_two);
-    assert_eq!(two.registered_scan_id, Some(scan_two.clone()));
+    assert!(two.review_item_id.is_some());
 
     drop(core);
     let reopened = A2dCore::open(OpenLibraryRequest {
@@ -171,13 +154,17 @@ fn out_of_order_recovery_completion_survives_reopen_without_cross_wiring_pages()
         .unwrap();
     assert_eq!(one.status, BatchScanEntryStatus::Queued);
     assert_eq!(one.page_id, page_one);
-    assert_eq!(two.status, BatchScanEntryStatus::Saved);
+    assert_eq!(two.status, BatchScanEntryStatus::NeedsReview);
     assert_eq!(two.page_id, page_two);
-    assert_eq!(two.registered_scan_id, Some(scan_two));
+    let two_review = two.review_item_id.clone().unwrap();
 
-    let scan_one = mark_committed(&reopened, "capture-one");
     let final_session = reopened
-        .reconcile_batch_scan_session("batch-ordering")
+        .report_batch_scan_review(
+            "batch-ordering",
+            "capture-one",
+            BatchScanReviewReason::IdentityFailure,
+            "first capture completed after recreation".to_string(),
+        )
         .unwrap();
     let one = final_session
         .entries
@@ -189,11 +176,13 @@ fn out_of_order_recovery_completion_survives_reopen_without_cross_wiring_pages()
         .iter()
         .find(|entry| entry.recovery_token == "capture-two")
         .unwrap();
-    assert_eq!(one.status, BatchScanEntryStatus::Saved);
+    assert_eq!(one.status, BatchScanEntryStatus::NeedsReview);
     assert_eq!(one.page_id, page_one);
-    assert_eq!(one.registered_scan_id, Some(scan_one));
-    assert_eq!(two.status, BatchScanEntryStatus::Saved);
+    assert!(one.review_item_id.is_some());
+    assert_ne!(one.review_item_id.as_ref(), Some(&two_review));
+    assert_eq!(two.status, BatchScanEntryStatus::NeedsReview);
     assert_eq!(two.page_id, page_two);
+    assert_eq!(two.review_item_id.as_ref(), Some(&two_review));
 
     drop(reopened);
     std::fs::remove_dir_all(root).ok();
