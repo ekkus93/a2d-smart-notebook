@@ -60,6 +60,19 @@ sealed interface CameraCaptureResult {
     ) : CameraCaptureResult
 }
 
+internal enum class CameraCaptureOutputPreparation {
+    READY,
+    EXISTING_NON_RESERVATION,
+    RESERVATION_READ_FAILED,
+    RESERVATION_CLEANUP_FAILED,
+}
+
+private val KNOWN_CAMERA_CAPTURE_RESERVATIONS =
+    listOf(
+        "A2D_CAMERA_CAPTURE_RESERVED_V1\n".encodeToByteArray(),
+        "A2D_BATCH_CAMERA_CAPTURE_RESERVED_V1\n".encodeToByteArray(),
+    )
+
 private fun cameraThreadFactory(name: String): ThreadFactory = ThreadFactory { runnable ->
     Thread(runnable, name).apply { isDaemon = true }
 }
@@ -79,6 +92,30 @@ internal fun shouldDeliverCameraCaptureCallback(
     captureGeneration: Long,
     currentGeneration: Long,
 ): Boolean = !closeRequested && captureGeneration == currentGeneration
+
+internal fun prepareCameraCaptureOutputFile(outputFile: File): CameraCaptureOutputPreparation {
+    if (!outputFile.exists()) return CameraCaptureOutputPreparation.READY
+    if (!outputFile.isFile) return CameraCaptureOutputPreparation.EXISTING_NON_RESERVATION
+
+    val maximumReservationBytes = KNOWN_CAMERA_CAPTURE_RESERVATIONS.maxOf { it.size }.toLong()
+    if (outputFile.length() > maximumReservationBytes) {
+        return CameraCaptureOutputPreparation.EXISTING_NON_RESERVATION
+    }
+    val bytes =
+        try {
+            outputFile.readBytes()
+        } catch (_: Exception) {
+            return CameraCaptureOutputPreparation.RESERVATION_READ_FAILED
+        }
+    if (KNOWN_CAMERA_CAPTURE_RESERVATIONS.none { reservation -> bytes.contentEquals(reservation) }) {
+        return CameraCaptureOutputPreparation.EXISTING_NON_RESERVATION
+    }
+    return if (outputFile.delete()) {
+        CameraCaptureOutputPreparation.READY
+    } else {
+        CameraCaptureOutputPreparation.RESERVATION_CLEANUP_FAILED
+    }
+}
 
 /**
  * Owns CameraX Preview, ImageAnalysis, and ImageCapture as one lifecycle-bound adapter.
@@ -279,11 +316,11 @@ class CameraXAdapter(
     }
 
     /**
-     * Captures a full-resolution image to a new staging file. Existing files are rejected so a
-     * capture can never silently overwrite an original or prior staged capture. A capture callback
-     * from an obsolete bind generation is intentionally dropped: the Rust recovery journal remains
-     * authoritative for the staging file, while an obsolete CameraX callback must not mutate a
-     * rebound or closed scanner session.
+     * Captures a full-resolution image to a staging file. Arbitrary existing content is rejected,
+     * but the exact A2D scanner-reservation sentinels are verified and removed immediately before
+     * CameraX writes. This preserves the journal-before-camera invariant without allowing a capture
+     * to overwrite an original or unrelated staged image. A callback from an obsolete bind
+     * generation is intentionally dropped: Rust recovery remains authoritative for that path.
      */
     fun capture(
         outputFile: File,
@@ -304,14 +341,35 @@ class CameraXAdapter(
                 callback(CameraCaptureResult.Failure("camera is not bound", null))
                 return@execute
             }
-            if (outputFile.exists()) {
-                callback(
-                    CameraCaptureResult.Failure(
-                        "capture staging file already exists",
-                        null,
-                    ),
-                )
-                return@execute
+            when (prepareCameraCaptureOutputFile(outputFile)) {
+                CameraCaptureOutputPreparation.READY -> Unit
+                CameraCaptureOutputPreparation.EXISTING_NON_RESERVATION -> {
+                    callback(
+                        CameraCaptureResult.Failure(
+                            "capture staging path contains non-reservation content",
+                            null,
+                        ),
+                    )
+                    return@execute
+                }
+                CameraCaptureOutputPreparation.RESERVATION_READ_FAILED -> {
+                    callback(
+                        CameraCaptureResult.Failure(
+                            "capture staging reservation could not be verified",
+                            null,
+                        ),
+                    )
+                    return@execute
+                }
+                CameraCaptureOutputPreparation.RESERVATION_CLEANUP_FAILED -> {
+                    callback(
+                        CameraCaptureResult.Failure(
+                            "capture staging reservation could not be released",
+                            null,
+                        ),
+                    )
+                    return@execute
+                }
             }
             val parent = outputFile.parentFile
             if (parent == null || (!parent.exists() && !parent.mkdirs())) {
