@@ -1,8 +1,8 @@
 # A2D Smart Notebook v0.1 — Authoritative Implementation Roadmap
 
-**Status:** Reconciled through Milestone 9.3 closeout on 2026-08-12. Milestones 1–6 have substantial production implementation but are not blanket release-complete; Milestone 7 is software/synthetic-evidence complete with photographed and physical-device calibration evidence pending; Milestone 8.1–8.4 and scanner recovery are implemented; Milestone 8.5 and part of 8.6 remain open; Milestone 9.1–9.3 are implemented without calibrated duplicate/revision classification; Milestone 9.4–19 remain partial or open as stated below.  
+**Status:** Reconciled through Milestone 9.5 and Milestone 8.5 closeout on 2026-09-12. Milestones 1–6 have substantial production implementation but are not blanket release-complete; Milestone 7 is software/synthetic-evidence complete with photographed and physical-device calibration evidence pending; Milestone 8.1–8.5 and scanner recovery are implemented while part of 8.6 remains open; Milestone 9.1–9.5 are implemented without calibrated duplicate/revision classification; Milestones 10–19 remain partial or open as stated below.  
 **Version:** 0.1  
-**Date:** 2026-08-12  
+**Date:** 2026-09-12  
 **Repository:** `ekkus93/a2d-smart-notebook`  
 **Authoritative specification:** `docs/A2D_SMART_NOTEBOOK_V01_SPEC.md`  
 **Remediation plan:** `docs/A2D_SMART_NOTEBOOK_CODE_REVIEW_FIX_TODO_2026-07-28.md`  
@@ -10,7 +10,7 @@
 
 This file is the authoritative execution roadmap. A checked item means production code and focused evidence exist. A milestone marked **Partial** may contain many checked implementation items while still having explicit evidence, physical-validation, workflow, or product-scope gaps.
 
-The last code-bearing remediation candidate, `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`, passed permanent CI run `30673255456` and Milestone 7 native validation run `30673255457`. Milestone 9.3's code-bearing closeout head, `e3984b8261de80c0c542c3dba5657c6914cef2bb`, passed permanent CI run `31652574271`, including Rust format/Clippy/tests, dependency policy, generated Kotlin UniFFI contract validation, Android lint/JVM tests/APK verification, and packaged-native emulator coverage of the revision boundary. Future code-bearing completion claims require permanent CI on the exact claimed source head.
+The last code-bearing remediation candidate, `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`, passed permanent CI run `30673255456` and Milestone 7 native validation run `30673255457`. Milestone 9.3's code-bearing closeout head, `e3984b8261de80c0c542c3dba5657c6914cef2bb`, passed permanent CI run `31652574271`. The combined batch-scanner, Needs Review, and Version UI source head `3e9ddf6b2043c374a91abb02304a41bbbb970a72` passed permanent CI run `31738664552`, including Rust format/Clippy/tests, dependency policy, generated Kotlin UniFFI contract validation, Android lint/JVM tests/APK verification, and packaged-native emulator coverage. Future code-bearing completion claims require permanent CI on the exact claimed source head.
 
 ---
 
@@ -55,8 +55,8 @@ Do not:
 | 5 — Layout and PDF | **Software complete / physical evidence pending** | Layouts, official markers, QR, PDF generation, raster compatibility, Rust limits, hardened finalization | Real printer/paper/camera acceptance |
 | 6 — Notebook and Smart Pages | **Implementation complete / release evidence pending** | Rust workflows, Android UI, Rust-owned limits, cancellation and recreation hardening | Broader release walkthrough and physical workflows |
 | 7 — Detection and image processing | **Software and synthetic evidence complete** | AprilTag, image inputs, QR boundary, rectification, metrics, derived images, deterministic corpus | Photographed fixtures, physical `arm64-v8a` measurements, calibrated thresholds, ADR 0002 acceptance |
-| 8 — CameraX scanning | **Partial** | 8.1–8.4 and process-death recovery | Batch scanner and remaining 8.6 matrix cases |
-| 9 — Durable scans and revisions | **Partial** | 9.1 durable registration; 9.2 asset-backed fingerprints, changed regions, reasons and confidence availability; 9.3 safe audited revision decisions with UniFFI/Android projection | Calibrated thresholds, 9.4 Needs Review, 9.5 version UI |
+| 8 — CameraX scanning | **Partial** | 8.1–8.5, process-death recovery, durable batch-session semantics, duplicate/session summary and Needs Review integration | Remaining 8.6/FIX-111 matrix cases and real low-storage evidence |
+| 9 — Durable scans and revisions | **Partial** | 9.1 durable registration; 9.2 asset-backed fingerprints/changed regions; 9.3 safe audited revision decisions; 9.4 Needs Review; 9.5 Version UI | Calibrated duplicate/revision thresholds from reviewed physical evidence |
 | 10 — Library UI | **Not implemented** | — | Entire milestone |
 | 11 — OCR | **Not implemented** | Domain/storage scaffolding only | Provider, queue, persistence workflow, correction UI |
 | 12 — Search | **Not implemented** | Crate scaffolding only | FTS, API, UI, scale tests |
@@ -235,7 +235,7 @@ Do not:
 
 # Milestone 8 — CameraX scanning
 
-**Status: Partial. Single-page scanning and recovery are implemented; batch scanning and part of the camera failure matrix remain open.**
+**Status: Partial. Single-page scanning, process-death recovery, and batch scanning are implemented; the remaining camera failure matrix is open.**
 
 ## 8.1 Camera adapter
 
@@ -263,13 +263,13 @@ Do not:
 
 ## 8.5 Batch scanner
 
-- [ ] Keep the active Notebook fixed until explicitly changed.
-- [ ] Save and return immediately to camera.
-- [ ] Queue final processing/OCR.
-- [ ] Nonblocking saved confirmation.
-- [ ] Duplicate-page detection and session summary.
-- [ ] Review-item integration.
-- [ ] Recreation/process-death behavior without duplicate registration.
+- [x] Keep the active Notebook fixed until the batch is explicitly completed and a new session is started.
+- [x] Capture and return immediately to camera once the JPEG is finalized into durable recoverable staging; Saved is shown only after Rust registration succeeds.
+- [x] Queue final processing and preserve OCR-ready derived assets; persistent OCR execution remains a Milestone 11 dependency rather than a Kotlin-only placeholder queue.
+- [x] Nonblocking saved confirmation with durable queued/saved/review counts.
+- [x] Duplicate-page detection and persisted session summary without deleting either capture.
+- [x] Review-item integration for duplicate, revision, identity, quality, and processing outcomes.
+- [x] Recreation/process-death reconciliation without blind duplicate registration.
 
 ## 8.6 Camera failure matrix
 
@@ -294,7 +294,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 # Milestone 9 — Durable scan registration and revisions
 
-**Status: Partial. Durable registration, evidence-only comparison, and safe revision decisions are implemented; Needs Review workflows and version UI remain open.**
+**Status: Partial only because calibrated duplicate/revision thresholds still require reviewed physical evidence. Durable registration, evidence-only comparison, safe revision decisions, Needs Review, and Version UI are implemented.**
 
 ## 9.1 Final scan registration
 
@@ -328,15 +328,15 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 ## 9.4 Needs Review
 
-- [ ] Review kinds for identity, Notebook selection/conflict, quality/alignment, duplicate/revision/physical copy, OCR/processing, import, and restore conflicts.
-- [ ] List/filter/detail/resolve/defer APIs.
-- [ ] Audited resolution with no data loss.
+- [x] Review kinds for identity, Notebook selection/conflict, quality/alignment, duplicate/revision/physical copy, OCR/processing, import, and restore conflicts.
+- [x] Rust-owned list/filter/detail/resolve/defer APIs projected through UniFFI.
+- [x] Audited resolution with no committed-data loss and idempotent terminal semantics.
 
 ## 9.5 Version UI
 
-- [ ] Timeline and preferred indicator.
-- [ ] Side-by-side/overlay visual comparison and changed regions.
-- [ ] Keep both, set preferred, mark another physical copy, and move unresolved cases to review.
+- [x] Rust-owned paginated timeline and preferred indicator.
+- [x] Side-by-side/overlay visual comparison and Rust-projected changed regions.
+- [x] Keep both, set preferred, mark another physical copy, Wrong Scan, and move unresolved cases to review, with action availability driven by Rust.
 
 ---
 
@@ -434,7 +434,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 - [x] Processing/policy/pipeline versions are retained in implemented scan paths.
 - [ ] Automatic redaction of note text, API keys, passwords, and recovery keys.
 - [ ] User-controlled diagnostic export excluding note content by default.
-- [ ] Review-resolution diagnostics after Milestone 9.4 exists.
+- [ ] Review-resolution diagnostics.
 
 ## 16.2 Input hardening
 
@@ -553,15 +553,17 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 # Recommended execution order from the reconciled state
 
-1. [x] **Milestone 9.3 — Safe revision rules.** Audited decision workflow implemented on the existing durable registration, comparison evidence, and preferred-scan transaction.
-2. [ ] **Milestone 9.4 — Needs Review APIs**, followed by **9.5 version UI**.
-3. [ ] **Milestone 8.5 batch scanner** and finish the consolidated **8.6/FIX-111 camera failure matrix**.
-4. [ ] In parallel, collect **Milestone 7/17 photographed and physical-device evidence** and calibrate versioned capture/comparison thresholds.
-5. [ ] Implement Milestones 10–12: Library, OCR, and search.
-6. [ ] Implement Milestone 13: manual backup/restore/export.
-7. [ ] Implement Milestone 14 and the remaining Milestone 16 security controls.
-8. [ ] Complete Milestones 15, 17, 18, and 19 release readiness.
-9. [ ] Complete remediation FIX-130/131, FIX-140–142, and FIX-150/151 as their prerequisite implementation surfaces stabilize.
+1. [x] **Milestone 9.3 — Safe revision rules.**
+2. [x] **Milestone 9.4 — Needs Review APIs.**
+3. [x] **Milestone 9.5 — Version UI.**
+4. [x] **Milestone 8.5 — Batch scanner**, with persistent OCR execution intentionally delegated to Milestone 11.
+5. [ ] Complete the consolidated **Milestone 8.6 / FIX-111 camera failure matrix**.
+6. [ ] In parallel, collect **Milestone 7/17 photographed and physical-device evidence** and calibrate versioned capture/comparison thresholds.
+7. [ ] Implement Milestones 10–12: Library, OCR, and search.
+8. [ ] Implement Milestone 13: manual backup/restore/export.
+9. [ ] Implement Milestone 14 and the remaining Milestone 16 security controls.
+10. [ ] Complete Milestones 15, 17, 18, and 19 release readiness.
+11. [ ] Complete remediation FIX-130/131, FIX-140–142, and FIX-150/151 as their prerequisite implementation surfaces stabilize.
 
 ---
 
