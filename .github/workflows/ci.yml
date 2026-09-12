@@ -46,6 +46,20 @@ jobs:
       - name: cargo test --workspace --all-features
         # Also exercises Kotlin and Swift UniFFI generation contract checks.
         run: cargo test --workspace --all-features
+      - name: Real ENOSPC asset-persistence evidence
+        run: |
+          mount_root="$(mktemp -d)"
+          sudo mount -t tmpfs -o size=8m tmpfs "$mount_root"
+          sudo chown "$(id -u):$(id -g)" "$mount_root"
+          cleanup() {
+            sudo umount "$mount_root" || true
+            rmdir "$mount_root" || true
+          }
+          trap cleanup EXIT
+          A2D_ENOSPC_ROOT="$mount_root/library" \
+            cargo test -p a2d-storage --test enospc \
+            asset_commit_reports_real_enospc_before_finalization -- \
+            --ignored --exact
 
   deny:
     name: cargo deny (dependency/license checks)
