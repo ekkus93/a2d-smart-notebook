@@ -24,6 +24,8 @@ mod milestone6;
 pub use milestone6::*;
 mod milestone9;
 pub use milestone9::*;
+mod ocr;
+pub use ocr::*;
 mod revision;
 pub use revision::*;
 mod scan_comparison;
