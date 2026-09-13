@@ -1326,7 +1326,7 @@ mod tests {
     #[test]
     fn mismatched_result_cannot_complete_a_different_job() {
         let request = request();
-        let mut other = request();
+        let mut other = self::request();
         other.source.scan_ref = OcrScanRef::new("scan-2").unwrap();
         let job = OcrJobRecord::queued(&request, 100).unwrap();
         let result = normalize_ocr_output(&other, recognized_output()).unwrap();
