@@ -5,13 +5,82 @@
 //! successful recognition, successful no-text detection, or OCR unavailability/failure. A failed
 //! OCR run must never be converted into a fabricated empty successful transcription.
 
-use a2d_domain::{A2dError, AssetId, ErrorCategory, ErrorCode, ErrorSeverity, Outcome, ScanId};
+use std::collections::BTreeMap;
 
+const MAX_REF_BYTES: usize = 200;
 const MAX_LANGUAGE_TAG_BYTES: usize = 35;
 const MAX_LABEL_BYTES: usize = 120;
 const MAX_WARNING_CODE_BYTES: usize = 80;
 const MIN_POLYGON_POINTS: usize = 3;
 const MAX_POLYGON_POINTS: usize = 8;
+
+/// Structured OCR contract error. Core/FFI integration will map these codes to the project-wide
+/// `A2dError` envelope when the OCR persistence API is connected.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OcrContractError {
+    pub code: String,
+    pub developer_message: String,
+    pub retryable: bool,
+    pub details: BTreeMap<String, String>,
+}
+
+impl OcrContractError {
+    fn new(code: &'static str, developer_message: impl Into<String>, retryable: bool) -> Self {
+        Self {
+            code: code.to_string(),
+            developer_message: developer_message.into(),
+            retryable,
+            details: BTreeMap::new(),
+        }
+    }
+
+    #[must_use]
+    fn with_detail(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.details.insert(key.into(), value.into());
+        self
+    }
+}
+
+/// Typed OCR reference to the Rust scan identity submitted by the caller.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct OcrScanRef(String);
+
+impl OcrScanRef {
+    pub fn new(value: impl Into<String>) -> Result<Self, OcrContractError> {
+        let value = value.into();
+        validate_reference(&value, "scan_ref")?;
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Typed OCR reference to the immutable Rust asset identity submitted by the caller.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct OcrAssetRef(String);
+
+impl OcrAssetRef {
+    pub fn new(value: impl Into<String>) -> Result<Self, OcrContractError> {
+        let value = value.into();
+        validate_reference(&value, "asset_ref")?;
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The result of a cancellable OCR adapter call. Cancellation is structurally distinct from OCR
+/// failure and must not be presented as a normal failed recognition.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OcrAdapterOutcome<T> {
+    Completed(T),
+    Cancelled,
+    Failed(OcrContractError),
+}
 
 /// Resource limits Rust applies to every platform OCR adapter result before it may be persisted.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -42,7 +111,7 @@ impl Default for OcrLimits {
 }
 
 impl OcrLimits {
-    fn validate(&self) -> Result<(), A2dError> {
+    fn validate(&self) -> Result<(), OcrContractError> {
         if self.max_image_dimension_px == 0
             || self.max_image_pixels == 0
             || self.max_full_text_bytes == 0
@@ -73,15 +142,15 @@ pub enum OcrInputKind {
 /// receive or resolve bytes through platform code, then return normalized OCR results.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrImageSource {
-    pub scan_id: ScanId,
-    pub input_asset_id: AssetId,
+    pub scan_ref: OcrScanRef,
+    pub input_asset_ref: OcrAssetRef,
     pub input_kind: OcrInputKind,
     pub width_px: u32,
     pub height_px: u32,
 }
 
 impl OcrImageSource {
-    fn validate(&self, limits: &OcrLimits) -> Result<(), A2dError> {
+    fn validate(&self, limits: &OcrLimits) -> Result<(), OcrContractError> {
         if self.width_px == 0 || self.height_px == 0 {
             return Err(ocr_contract_error(
                 "OCR_IMAGE_DIMENSIONS_INVALID",
@@ -138,7 +207,7 @@ impl OcrRequest {
         }
     }
 
-    pub fn validate(&self) -> Result<(), A2dError> {
+    pub fn validate(&self) -> Result<(), OcrContractError> {
         self.limits.validate()?;
         self.source.validate(&self.limits)?;
         if let Some(provider_hint) = &self.provider_hint {
@@ -160,7 +229,7 @@ pub struct OcrProviderInfo {
 }
 
 impl OcrProviderInfo {
-    fn validate(&self) -> Result<(), A2dError> {
+    fn validate(&self) -> Result<(), OcrContractError> {
         validate_bounded_label(&self.provider, "provider")?;
         validate_bounded_label(&self.provider_version, "provider_version")?;
         if let Some(model_version) = &self.model_version {
@@ -188,7 +257,7 @@ pub struct OcrWarning {
 }
 
 impl OcrWarning {
-    fn validate(&self, limits: &OcrLimits) -> Result<(), A2dError> {
+    fn validate(&self, limits: &OcrLimits) -> Result<(), OcrContractError> {
         validate_warning_code(&self.code)?;
         validate_bounded_label(&self.message_key, "message_key")?;
         if self.developer_message.is_empty()
@@ -221,7 +290,7 @@ pub struct OcrRect {
 }
 
 impl OcrRect {
-    fn validate(&self, source: &OcrImageSource) -> Result<(), A2dError> {
+    fn validate(&self, source: &OcrImageSource) -> Result<(), OcrContractError> {
         validate_coordinate(self.left, source.width_px, "left")?;
         validate_coordinate(self.right, source.width_px, "right")?;
         validate_coordinate(self.top, source.height_px, "top")?;
@@ -243,7 +312,7 @@ pub struct OcrPolygon {
 }
 
 impl OcrPolygon {
-    fn validate(&self, source: &OcrImageSource) -> Result<(), A2dError> {
+    fn validate(&self, source: &OcrImageSource) -> Result<(), OcrContractError> {
         if self.points.len() < MIN_POLYGON_POINTS || self.points.len() > MAX_POLYGON_POINTS {
             return Err(ocr_contract_error(
                 "OCR_POLYGON_POINT_COUNT_INVALID",
@@ -268,7 +337,7 @@ pub enum OcrConfidence {
 }
 
 impl OcrConfidence {
-    fn validate(&self) -> Result<(), A2dError> {
+    fn validate(&self) -> Result<(), OcrContractError> {
         match self {
             OcrConfidence::Available(value) => {
                 if !value.is_finite() || !(0.0..=1.0).contains(value) {
@@ -304,7 +373,7 @@ pub struct OcrRegion {
 }
 
 impl OcrRegion {
-    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), A2dError> {
+    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), OcrContractError> {
         if self.text.len() > limits.max_region_text_bytes {
             return Err(ocr_contract_error(
                 "OCR_REGION_TEXT_EXCEEDS_LIMIT",
@@ -349,7 +418,7 @@ pub struct OcrRecognizedText {
 }
 
 impl OcrRecognizedText {
-    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), A2dError> {
+    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), OcrContractError> {
         self.provider.validate()?;
         if self.full_text.len() > limits.max_full_text_bytes {
             return Err(ocr_contract_error(
@@ -420,7 +489,7 @@ pub struct OcrUnavailable {
 }
 
 impl OcrUnavailable {
-    fn validate(&self, limits: &OcrLimits) -> Result<(), A2dError> {
+    fn validate(&self, limits: &OcrLimits) -> Result<(), OcrContractError> {
         if let Some(provider) = &self.provider {
             provider.validate()?;
         }
@@ -444,7 +513,7 @@ pub enum OcrAdapterOutput {
 }
 
 impl OcrAdapterOutput {
-    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), A2dError> {
+    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), OcrContractError> {
         match self {
             OcrAdapterOutput::Recognized(text) => text.validate(source, limits),
             OcrAdapterOutput::Unavailable(unavailable) => unavailable.validate(limits),
@@ -454,8 +523,8 @@ impl OcrAdapterOutput {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct OcrResult {
-    pub scan_id: ScanId,
-    pub input_asset_id: AssetId,
+    pub scan_ref: OcrScanRef,
+    pub input_asset_ref: OcrAssetRef,
     pub input_kind: OcrInputKind,
     pub body: OcrAdapterOutput,
 }
@@ -471,27 +540,28 @@ impl OcrResult {
 }
 
 /// Platform adapters implement OCR recognition and return a cancellable outcome. Cancellation is
-/// not failure, and adapter failures are returned as [`OcrAdapterOutput::Unavailable`].
+/// not failure, and adapter failures should be returned as [`OcrAdapterOutput::Unavailable`]
+/// whenever the adapter reached a typed OCR failure state.
 pub trait OcrProviderAdapter {
-    fn recognize(&self, request: &OcrRequest) -> Outcome<OcrAdapterOutput>;
+    fn recognize(&self, request: &OcrRequest) -> OcrAdapterOutcome<OcrAdapterOutput>;
 }
 
 /// Validate and bind an adapter output to the exact scan/asset request Rust submitted.
 pub fn normalize_ocr_output(
     request: &OcrRequest,
     output: OcrAdapterOutput,
-) -> Result<OcrResult, A2dError> {
+) -> Result<OcrResult, OcrContractError> {
     request.validate()?;
     output.validate(&request.source, &request.limits)?;
     Ok(OcrResult {
-        scan_id: request.source.scan_id.clone(),
-        input_asset_id: request.source.input_asset_id.clone(),
+        scan_ref: request.source.scan_ref.clone(),
+        input_asset_ref: request.source.input_asset_ref.clone(),
         input_kind: request.source.input_kind,
         body: output,
     })
 }
 
-fn validate_warnings(warnings: &[OcrWarning], limits: &OcrLimits) -> Result<(), A2dError> {
+fn validate_warnings(warnings: &[OcrWarning], limits: &OcrLimits) -> Result<(), OcrContractError> {
     if warnings.len() > limits.max_warning_count {
         return Err(ocr_contract_error(
             "OCR_WARNING_COUNT_EXCEEDS_LIMIT",
@@ -507,7 +577,11 @@ fn validate_warnings(warnings: &[OcrWarning], limits: &OcrLimits) -> Result<(), 
     Ok(())
 }
 
-fn validate_coordinate(value: f32, max_inclusive: u32, field: &'static str) -> Result<(), A2dError> {
+fn validate_coordinate(
+    value: f32,
+    max_inclusive: u32,
+    field: &'static str,
+) -> Result<(), OcrContractError> {
     if !value.is_finite() || value < 0.0 || value > max_inclusive as f32 {
         return Err(ocr_contract_error(
             "OCR_COORDINATE_OUT_OF_BOUNDS",
@@ -521,7 +595,20 @@ fn validate_coordinate(value: f32, max_inclusive: u32, field: &'static str) -> R
     Ok(())
 }
 
-fn validate_bounded_label(value: &str, field: &'static str) -> Result<(), A2dError> {
+fn validate_reference(value: &str, field: &'static str) -> Result<(), OcrContractError> {
+    if value.is_empty() || value.len() > MAX_REF_BYTES {
+        return Err(ocr_contract_error(
+            "OCR_REFERENCE_INVALID",
+            "OCR scan and asset references must be non-empty and bounded",
+            false,
+        )
+        .with_detail("field", field)
+        .with_detail("max_bytes", MAX_REF_BYTES.to_string()));
+    }
+    Ok(())
+}
+
+fn validate_bounded_label(value: &str, field: &'static str) -> Result<(), OcrContractError> {
     if value.is_empty() || value.len() > MAX_LABEL_BYTES {
         return Err(ocr_contract_error(
             "OCR_LABEL_INVALID",
@@ -534,7 +621,7 @@ fn validate_bounded_label(value: &str, field: &'static str) -> Result<(), A2dErr
     Ok(())
 }
 
-fn validate_language_tag(value: &str) -> Result<(), A2dError> {
+fn validate_language_tag(value: &str) -> Result<(), OcrContractError> {
     let valid = !value.is_empty()
         && value.len() <= MAX_LANGUAGE_TAG_BYTES
         && value
@@ -551,7 +638,7 @@ fn validate_language_tag(value: &str) -> Result<(), A2dError> {
     Ok(())
 }
 
-fn validate_warning_code(value: &str) -> Result<(), A2dError> {
+fn validate_warning_code(value: &str) -> Result<(), OcrContractError> {
     let valid = !value.is_empty()
         && value.len() <= MAX_WARNING_CODE_BYTES
         && value
@@ -572,15 +659,8 @@ fn ocr_contract_error(
     code: &'static str,
     developer_message: impl Into<String>,
     retryable: bool,
-) -> A2dError {
-    A2dError::new(
-        ErrorCode::new(code),
-        ErrorCategory::Ocr,
-        ErrorSeverity::Error,
-        "error.ocr.contract",
-        developer_message,
-        retryable,
-    )
+) -> OcrContractError {
+    OcrContractError::new(code, developer_message, retryable)
 }
 
 #[cfg(test)]
@@ -590,8 +670,8 @@ mod tests {
     fn request() -> OcrRequest {
         OcrRequest {
             source: OcrImageSource {
-                scan_id: ScanId::generate(),
-                input_asset_id: AssetId::generate(),
+                scan_ref: OcrScanRef::new("scan-1").unwrap(),
+                input_asset_ref: OcrAssetRef::new("asset-1").unwrap(),
                 input_kind: OcrInputKind::OcrOptimized,
                 width_px: 1_000,
                 height_px: 1_400,
@@ -637,8 +717,16 @@ mod tests {
 
         let err = request.validate().unwrap_err();
 
-        assert_eq!(err.code.to_string(), "OCR_IMAGE_DIMENSIONS_EXCEED_LIMIT");
-        assert_eq!(err.category, ErrorCategory::Ocr);
+        assert_eq!(err.code, "OCR_IMAGE_DIMENSIONS_EXCEED_LIMIT");
+    }
+
+    #[test]
+    fn typed_references_are_non_empty_and_bounded() {
+        let err = OcrScanRef::new("").unwrap_err();
+        assert_eq!(err.code, "OCR_REFERENCE_INVALID");
+
+        let asset = OcrAssetRef::new("asset-1").unwrap();
+        assert_eq!(asset.as_str(), "asset-1");
     }
 
     #[test]
@@ -671,7 +759,7 @@ mod tests {
         let result = normalize_ocr_output(&request, output).unwrap();
 
         assert!(result.is_recognized());
-        assert_eq!(result.scan_id, request.source.scan_id);
+        assert_eq!(result.scan_ref, request.source.scan_ref);
         match result.body {
             OcrAdapterOutput::Recognized(text) => {
                 assert_eq!(text.full_text, "hello notebook");
@@ -719,7 +807,7 @@ mod tests {
 
         let err = normalize_ocr_output(&request, output).unwrap_err();
 
-        assert_eq!(err.code.to_string(), "OCR_DETECTED_TEXT_EMPTY");
+        assert_eq!(err.code, "OCR_DETECTED_TEXT_EMPTY");
     }
 
     #[test]
@@ -754,7 +842,10 @@ mod tests {
                     points: vec![
                         OcrPoint { x: 10.0, y: 10.0 },
                         OcrPoint { x: 20.0, y: 10.0 },
-                        OcrPoint { x: 2_000.0, y: 10.0 },
+                        OcrPoint {
+                            x: 2_000.0,
+                            y: 10.0,
+                        },
                     ],
                 },
                 bounding_box: None,
@@ -767,7 +858,7 @@ mod tests {
 
         let err = normalize_ocr_output(&request, output).unwrap_err();
 
-        assert_eq!(err.code.to_string(), "OCR_COORDINATE_OUT_OF_BOUNDS");
+        assert_eq!(err.code, "OCR_COORDINATE_OUT_OF_BOUNDS");
     }
 
     #[test]
@@ -784,6 +875,6 @@ mod tests {
 
         let err = normalize_ocr_output(&request, output).unwrap_err();
 
-        assert_eq!(err.code.to_string(), "OCR_WARNING_COUNT_EXCEEDS_LIMIT");
+        assert_eq!(err.code, "OCR_WARNING_COUNT_EXCEEDS_LIMIT");
     }
 }
