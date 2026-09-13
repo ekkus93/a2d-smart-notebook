@@ -1,1 +1,1 @@
-Retired branch after PR #32.
+Retired.
