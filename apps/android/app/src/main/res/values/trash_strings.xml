@@ -1,0 +1,24 @@
+<resources>
+    <string name="trash_title">Trash</string>
+    <string name="trash_local_first">Deleted items stay in the local library on this device until Rust confirms restore or permanent deletion. No account or A2D server is required.</string>
+    <string name="trash_summary_title">Trash overview</string>
+    <string name="trash_total_count">Trash items: %1$d</string>
+    <string name="trash_restorable_count">Restorable: %1$d</string>
+    <string name="trash_permanent_delete_count">Permanent-delete eligible: %1$d</string>
+    <string name="trash_boundary_title">Trash data boundary</string>
+    <string name="trash_api_boundary">Rust trash APIs must own deletion state, restore, permanent delete, asset retention, audit events, and ID retirement. This screen does not invent deleted rows or perform destructive work in Kotlin.</string>
+    <string name="trash_api_connected">Trash rows are supplied by injected presentation state; destructive actions remain callback-only until Rust APIs are connected.</string>
+    <string name="trash_no_id_reuse">Restore keeps the original identity. Permanent delete must retire identities so page, scan, Notebook, Page Set, and collection IDs are never reused.</string>
+    <string name="trash_empty_title">Trash is empty</string>
+    <string name="trash_empty_body">Items moved to trash will appear here after the Rust trash lifecycle API exists. Empty state does not invent deleted rows.</string>
+    <string name="trash_item_kind">Kind: %1$s</string>
+    <string name="trash_item_id">ID: %1$s</string>
+    <string name="trash_item_location">Location: %1$s</string>
+    <string name="trash_item_deleted">Deleted: %1$s</string>
+    <string name="trash_item_retained_assets">Assets: %1$s</string>
+    <string name="trash_restore_consequence">Restore consequence: %1$s</string>
+    <string name="trash_permanent_delete_consequence">Permanent delete consequence: %1$s</string>
+    <string name="trash_open_page">Open page</string>
+    <string name="trash_restore">Restore</string>
+    <string name="trash_permanent_delete">Permanently delete</string>
+</resources>
