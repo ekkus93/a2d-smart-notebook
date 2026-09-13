@@ -45,10 +45,7 @@ class TrashWorkflowUiTest {
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNodeWithTag(TrashWorkflowTestTags.EMPTY_STATE).performScrollTo().assertIsDisplayed()
-        composeRule
-            .onNodeWithText("does not invent deleted rows", substring = true)
-            .performScrollTo()
-            .assertIsDisplayed()
+        composeRule.onNodeWithText("Trash is empty").performScrollTo().assertIsDisplayed()
     }
 
     @Test
