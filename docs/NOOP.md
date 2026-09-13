@@ -1,3 +1,1 @@
-This file was accidentally committed to the already-merged source branch after PR #32 had landed. It is not present on master and must not be merged or treated as product documentation.
-
-The branch is intentionally retired after PR #32. Do not open another PR from this branch.
+This branch was used for PR #32, which has already been squash-merged into master. Ignore branch-only commits after `095706c10f834e1fc9c17cac74c35e4179952a80`; they are not product changes and must not be merged.
