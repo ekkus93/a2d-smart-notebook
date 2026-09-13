@@ -1,7 +1,7 @@
 use crate::A2dCore;
 use a2d_domain::{
-    A2dError, Asset, AssetId, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, OcrRun,
-    OcrRunId, OcrRunStatus, OcrUnavailableReason, Provenance, Scan, ScanId, system_now_ms,
+    A2dError, Asset, AssetId, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, OcrRun, OcrRunId,
+    OcrRunStatus, OcrUnavailableReason, Provenance, Scan, ScanId, system_now_ms,
 };
 use a2d_storage::{AssetRepository, OcrRunRepository, ScanRepository};
 
