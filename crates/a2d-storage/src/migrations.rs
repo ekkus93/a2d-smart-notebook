@@ -48,4 +48,9 @@ pub static MIGRATIONS: &[Migration] = &[
         name: "preferred_scan_workflow_gate",
         sql: include_str!("migrations/0008_preferred_scan_workflow_gate.sql"),
     },
+    Migration {
+        version: 9,
+        name: "explicit_ocr_result_outcomes",
+        sql: include_str!("migrations/0009_explicit_ocr_result_outcomes.sql"),
+    },
 ];
