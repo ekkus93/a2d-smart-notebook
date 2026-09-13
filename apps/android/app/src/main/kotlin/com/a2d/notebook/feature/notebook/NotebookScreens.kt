@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,11 +37,22 @@ import com.a2d.notebook.rustbridge.QrCaptureButton
 import uniffi.a2d_ffi.CreateNotebookRequest
 import uniffi.a2d_ffi.NotebookSummary
 
+object NotebookScreenTestTags {
+    const val NOTEBOOK_CARD = "notebook_card"
+    const val VIEW_DETAILS = "notebook_view_details"
+    const val DETAIL_TITLE = "notebook_detail_title"
+    const val DETAIL_IDENTITY = "notebook_detail_identity"
+    const val DETAIL_ACTIONS = "notebook_detail_actions"
+    const val DETAIL_PAGE_SLOTS = "notebook_detail_page_slots"
+    const val DETAIL_MISSING = "notebook_detail_missing"
+}
+
 @Composable
 fun NotebookLibraryScreen(
     onBack: () -> Unit,
     onAddNotebook: () -> Unit,
     viewModel: NotebookViewModel = viewModel(),
+    onOpenNotebook: (String) -> Unit = {},
 ) {
     val state by viewModel.state
     var renaming by remember { mutableStateOf<NotebookSummary?>(null) }
@@ -63,7 +76,7 @@ fun NotebookLibraryScreen(
             state.notebooks.isEmpty() -> Text(stringResource(R.string.notebooks_empty))
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(state.notebooks, key = { it.id }) { notebook ->
-                    Card(Modifier.fillMaxWidth()) {
+                    Card(Modifier.fillMaxWidth().testTag(NotebookScreenTestTags.NOTEBOOK_CARD)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(notebook.displayName, style = MaterialTheme.typography.titleMedium)
                             Text(stringResource(R.string.notebooks_design, notebook.designId))
@@ -74,6 +87,11 @@ fun NotebookLibraryScreen(
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TextButton(
+                                    enabled = !state.busy,
+                                    onClick = { onOpenNotebook(notebook.id) },
+                                    modifier = Modifier.testTag(NotebookScreenTestTags.VIEW_DETAILS),
+                                ) { Text(stringResource(R.string.notebooks_view_details)) }
                                 if (!notebook.active) {
                                     TextButton(
                                         enabled = !state.busy,
@@ -131,6 +149,135 @@ fun NotebookLibraryScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+fun NotebookDetailScreen(
+    notebookId: String,
+    onBack: () -> Unit,
+    onScanPage: () -> Unit,
+    onBatchScan: () -> Unit,
+    viewModel: NotebookViewModel = viewModel(),
+) {
+    val state by viewModel.state
+
+    LaunchedEffect(notebookId) { viewModel.refreshNotebooks() }
+
+    NotebookDetailContent(
+        notebookId = notebookId,
+        notebook = state.notebooks.firstOrNull { it.id == notebookId },
+        busy = state.busy,
+        error = state.error,
+        onBack = onBack,
+        onScanPage = onScanPage,
+        onBatchScan = onBatchScan,
+    )
+}
+
+@Composable
+fun NotebookDetailContent(
+    notebookId: String,
+    notebook: NotebookSummary?,
+    busy: Boolean,
+    error: String?,
+    onBack: () -> Unit,
+    onScanPage: () -> Unit,
+    onBatchScan: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        TextButton(onClick = onBack) { Text(stringResource(R.string.common_back)) }
+        Text(
+            stringResource(R.string.notebook_detail_title),
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.testTag(NotebookScreenTestTags.DETAIL_TITLE),
+        )
+        if (busy) Text(stringResource(R.string.common_loading))
+        error?.let {
+            Text(stringResource(R.string.common_error_prefix, it), color = MaterialTheme.colorScheme.error)
+        }
+        if (notebook == null) {
+            Card(Modifier.fillMaxWidth().testTag(NotebookScreenTestTags.DETAIL_MISSING)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.notebook_detail_missing_title))
+                    Text(stringResource(R.string.notebook_detail_missing_body, notebookId))
+                }
+            }
+            return@Column
+        }
+
+        NotebookIdentityCard(notebook)
+        NotebookScanActions(onScanPage = onScanPage, onBatchScan = onBatchScan)
+        NotebookPageSlotsBoundary()
+    }
+}
+
+@Composable
+private fun NotebookIdentityCard(notebook: NotebookSummary) {
+    Card(Modifier.fillMaxWidth().testTag(NotebookScreenTestTags.DETAIL_IDENTITY)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(notebook.displayName, style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.notebook_detail_id, notebook.id))
+            Text(stringResource(R.string.notebook_detail_design_id, notebook.designId))
+            Text(
+                stringResource(
+                    R.string.notebook_detail_status,
+                    notebookStatusLabel(notebook),
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun notebookStatusLabel(notebook: NotebookSummary): String =
+    when {
+        notebook.archived -> stringResource(R.string.notebook_detail_status_archived)
+        notebook.active -> stringResource(R.string.notebook_detail_status_active)
+        else -> stringResource(R.string.notebook_detail_status_inactive)
+    }
+
+@Composable
+private fun NotebookScanActions(
+    onScanPage: () -> Unit,
+    onBatchScan: () -> Unit,
+) {
+    Card(Modifier.fillMaxWidth().testTag(NotebookScreenTestTags.DETAIL_ACTIONS)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.notebook_detail_actions_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Button(onClick = onScanPage, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.notebook_detail_scan_page))
+            }
+            OutlinedButton(onClick = onBatchScan, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.notebook_detail_batch_scan))
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotebookPageSlotsBoundary() {
+    Card(Modifier.fillMaxWidth().testTag(NotebookScreenTestTags.DETAIL_PAGE_SLOTS)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.notebook_detail_page_slots_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(stringResource(R.string.notebook_detail_page_slots_boundary))
+            Text(stringResource(R.string.notebook_detail_page_slots_counts_unavailable))
+            Text(stringResource(R.string.notebook_detail_no_renumbering))
+        }
     }
 }
 

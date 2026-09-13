@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.a2d.notebook.feature.home.HomeScreen
 import com.a2d.notebook.feature.library.LibraryHubScreen
+import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
@@ -23,11 +24,14 @@ object A2dDestinations {
     const val BATCH_SCANNER = "scanner/batch"
     const val NOTEBOOKS = "notebooks"
     const val ADD_NOTEBOOK = "notebooks/add"
+    const val NOTEBOOK_DETAIL_PATTERN = "notebooks/detail/{notebookId}"
     const val SMART_PAGES = "smart-pages"
     const val PAGE_CODE_PATTERN = "page-code/{notebookId}"
     const val VERSION_HISTORY_PATTERN = "versions/{pageId}"
 
     fun pageCode(notebookId: String) = "page-code/$notebookId"
+
+    fun notebookDetail(notebookId: String) = "notebooks/detail/$notebookId"
 
     fun versionHistory(pageId: String) = "versions/$pageId"
 }
@@ -66,6 +70,20 @@ fun A2dNavHost(navController: NavHostController) {
             NotebookLibraryScreen(
                 onBack = { navController.navigateUp() },
                 onAddNotebook = { navController.navigate(A2dDestinations.ADD_NOTEBOOK) },
+                onOpenNotebook = { notebookId ->
+                    navController.navigate(A2dDestinations.notebookDetail(notebookId))
+                },
+            )
+        }
+        composable(
+            route = A2dDestinations.NOTEBOOK_DETAIL_PATTERN,
+            arguments = listOf(navArgument("notebookId") { type = NavType.StringType }),
+        ) { entry ->
+            NotebookDetailScreen(
+                notebookId = requireNotNull(entry.arguments?.getString("notebookId")),
+                onBack = { navController.navigateUp() },
+                onScanPage = { navController.navigate(A2dDestinations.SINGLE_PAGE_SCANNER) },
+                onBatchScan = { navController.navigate(A2dDestinations.BATCH_SCANNER) },
             )
         }
         composable(A2dDestinations.ADD_NOTEBOOK) {

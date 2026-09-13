@@ -65,8 +65,25 @@
     <string name="notebooks_clear_active">Clear active selection</string>
     <string name="notebooks_rename">Rename</string>
     <string name="notebooks_archive">Archive</string>
+    <string name="notebooks_view_details">Details</string>
     <string name="notebooks_name">Notebook name</string>
     <string name="notebooks_design">Design: %1$s</string>
+    <string name="notebook_detail_title">Notebook detail</string>
+    <string name="notebook_detail_missing_title">Notebook record unavailable</string>
+    <string name="notebook_detail_missing_body">The local library could not find Notebook %1$s. No page or scan data is fabricated.</string>
+    <string name="notebook_detail_id">Notebook ID: %1$s</string>
+    <string name="notebook_detail_design_id">Design ID: %1$s</string>
+    <string name="notebook_detail_status">Status: %1$s</string>
+    <string name="notebook_detail_status_active">active scan destination</string>
+    <string name="notebook_detail_status_inactive">registered</string>
+    <string name="notebook_detail_status_archived">archived</string>
+    <string name="notebook_detail_actions_title">Scan this Notebook</string>
+    <string name="notebook_detail_scan_page">Scan one page</string>
+    <string name="notebook_detail_batch_scan">Batch scan this Notebook</string>
+    <string name="notebook_detail_page_slots_title">Logical page slots</string>
+    <string name="notebook_detail_page_slots_boundary">Notebook page slots are Rust-owned durable records created from the Notebook Design. A later page-presentation slice will read those records instead of duplicating page identity rules in Kotlin.</string>
+    <string name="notebook_detail_page_slots_counts_unavailable">Scanned, unscanned, and Needs Review counts are not displayed until the page-list API is connected.</string>
+    <string name="notebook_detail_no_renumbering">The UI must not renumber pages from scan order.</string>
 
     <string name="setup_title">Add a Notebook</string>
     <string name="setup_scan">Photograph Setup Code</string>
