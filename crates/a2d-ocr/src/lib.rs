@@ -573,10 +573,7 @@ pub fn normalize_ocr_output(
     })
 }
 
-fn validate_warnings(
-    warnings: &[OcrWarning],
-    limits: &OcrLimits,
-) -> Result<(), OcrContractError> {
+fn validate_warnings(warnings: &[OcrWarning], limits: &OcrLimits) -> Result<(), OcrContractError> {
     if warnings.len() > limits.max_warning_count {
         return Err(ocr_contract_error(
             "OCR_WARNING_COUNT_EXCEEDS_LIMIT",
