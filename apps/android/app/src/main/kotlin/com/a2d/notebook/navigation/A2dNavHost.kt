@@ -13,6 +13,7 @@ import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
+import com.a2d.notebook.feature.review.NeedsReviewScreen
 import com.a2d.notebook.feature.scanner.singlepage.PolicyAwareBatchScannerRoute
 import com.a2d.notebook.feature.scanner.singlepage.SinglePageScannerScreen
 import com.a2d.notebook.feature.smartpage.SmartPagesScreen
@@ -22,6 +23,7 @@ object A2dDestinations {
     const val HOME = "home"
     const val LIBRARY = "library"
     const val PAGES = "library/pages"
+    const val NEEDS_REVIEW = "library/needs-review"
     const val SINGLE_PAGE_SCANNER = "scanner/single"
     const val BATCH_SCANNER = "scanner/batch"
     const val NOTEBOOKS = "notebooks"
@@ -56,10 +58,19 @@ fun A2dNavHost(navController: NavHostController) {
                 onOpenNotebooks = { navController.navigate(A2dDestinations.NOTEBOOKS) },
                 onOpenSmartPages = { navController.navigate(A2dDestinations.SMART_PAGES) },
                 onOpenPages = { navController.navigate(A2dDestinations.PAGES) },
+                onOpenNeedsReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
             )
         }
         composable(A2dDestinations.PAGES) {
             PageBrowserScreen(
+                onBack = { navController.navigateUp() },
+                onOpenVersions = { pageId ->
+                    navController.navigate(A2dDestinations.versionHistory(pageId))
+                },
+            )
+        }
+        composable(A2dDestinations.NEEDS_REVIEW) {
+            NeedsReviewScreen(
                 onBack = { navController.navigateUp() },
                 onOpenVersions = { pageId ->
                     navController.navigate(A2dDestinations.versionHistory(pageId))
