@@ -66,7 +66,43 @@
     <string name="page_browser_status">Status: %1$s</string>
     <string name="page_browser_updated">Updated: %1$s</string>
     <string name="page_browser_needs_review_badge">Needs Review</string>
+    <string name="page_browser_open_page">Open page</string>
     <string name="page_browser_open_versions">Open versions</string>
+
+    <string name="page_viewer_title">Page viewer</string>
+    <string name="page_viewer_local_first">View one local page on this device. No account or A2D server is required.</string>
+    <string name="page_viewer_summary_title">Page summary</string>
+    <string name="page_viewer_page_id">Page ID: %1$s</string>
+    <string name="page_viewer_notebook">Notebook: %1$s</string>
+    <string name="page_viewer_visible_page">Visible page: %1$s</string>
+    <string name="page_viewer_status">Status: %1$s</string>
+    <string name="page_viewer_updated">Updated: %1$s</string>
+    <string name="page_viewer_needs_review_badge">Needs Review</string>
+    <string name="page_viewer_boundary_title">Page viewer data boundary</string>
+    <string name="page_viewer_api_boundary">This screen is the presentation shell for page viewing. A later Rust page-view API will supply durable original, corrected, OCR, annotation, related-page, and skill-result rows. The UI does not fabricate images, OCR text, annotations, related pages, or model output.</string>
+    <string name="page_viewer_original_title">Original</string>
+    <string name="page_viewer_original_available">Original scan is available from Rust-owned asset metadata.</string>
+    <string name="page_viewer_original_unavailable">No original scan is displayed until Rust supplies an immutable original asset.</string>
+    <string name="page_viewer_corrected_title">Corrected</string>
+    <string name="page_viewer_corrected_available">Corrected image is available from Rust-owned derived asset metadata.</string>
+    <string name="page_viewer_corrected_unavailable">No corrected image is displayed until Rust supplies a derived corrected asset.</string>
+    <string name="page_viewer_text_title">Text</string>
+    <string name="page_viewer_text_available">Recognized text is available from OCR provenance.</string>
+    <string name="page_viewer_text_unavailable">OCR text remains unavailable until Milestone 11 supplies recognized and corrected text.</string>
+    <string name="page_viewer_split_title">Split</string>
+    <string name="page_viewer_split_boundary">Split image/text view remains disabled until both corrected image and OCR text are available from Rust-owned records.</string>
+    <string name="page_viewer_metadata_title">Metadata</string>
+    <string name="page_viewer_metadata_detail">Page %1$s is currently %2$s. Detailed capture, quality, storage, and provenance metadata must come from Rust.</string>
+    <string name="page_viewer_versions_title">Versions</string>
+    <string name="page_viewer_versions_detail">Version history is handled by the existing Rust-backed version timeline.</string>
+    <string name="page_viewer_annotations_title">Annotations</string>
+    <string name="page_viewer_annotations_detail">Annotations: %1$d</string>
+    <string name="page_viewer_related_title">Related</string>
+    <string name="page_viewer_related_detail">Related pages: %1$d</string>
+    <string name="page_viewer_skill_results_title">Skill results</string>
+    <string name="page_viewer_skill_results_detail">Skill results: %1$d</string>
+    <string name="page_viewer_open_versions">Open versions</string>
+    <string name="page_viewer_open_needs_review">Open Needs Review</string>
 
     <string name="needs_review_title">Needs Review</string>
     <string name="needs_review_local_first">Review decisions are stored locally and delegated to Rust. No account or A2D server is required.</string>
@@ -86,32 +122,6 @@
     <string name="needs_review_defer">Defer</string>
     <string name="needs_review_resolve_as">Resolve as %1$s</string>
     <string name="needs_review_no_resolution_options">No resolution options are exposed by this presentation state.</string>
-
-    <string name="smart_page_library_title">Smart Page library</string>
-    <string name="smart_page_library_local_first">Browse generated Smart Pages, Page Sets, and Collections stored on this device.</string>
-    <string name="smart_page_library_summary_title">Generated content overview</string>
-    <string name="smart_page_library_smart_pages_count">Smart Pages: %1$d</string>
-    <string name="smart_page_library_page_sets_count">Page Sets: %1$d</string>
-    <string name="smart_page_library_collections_count">Collections: %1$d</string>
-    <string name="smart_page_library_boundary_title">Generated-content boundary</string>
-    <string name="smart_page_library_api_boundary">Rust generated-content APIs will supply durable Smart Page, Page Set, and Collection rows. This screen does not invent generated content.</string>
-    <string name="smart_page_library_api_connected">Generated-content rows are supplied by the injected presentation state.</string>
-    <string name="smart_page_library_no_id_reuse">Generated IDs must never be reused after export, restore, collection edits, or deletion.</string>
-    <string name="smart_page_library_empty_title">No generated Smart Pages are listed yet</string>
-    <string name="smart_page_library_empty_body">Create Smart Pages to produce immutable page and Page Set identities. They will appear here once the Rust listing API is connected.</string>
-    <string name="smart_page_library_create">Create Smart Pages</string>
-    <string name="smart_page_library_smart_pages_section">Smart Pages</string>
-    <string name="smart_page_library_page_sets_section">Page Sets</string>
-    <string name="smart_page_library_collections_section">Collections</string>
-    <string name="smart_page_library_smart_page_id">Smart Page ID: %1$s</string>
-    <string name="smart_page_library_page_set_id">Page Set ID: %1$s</string>
-    <string name="smart_page_library_page_count">Pages: %1$d</string>
-    <string name="smart_page_library_style">Style: %1$s</string>
-    <string name="smart_page_library_created">Created: %1$s</string>
-    <string name="smart_page_library_first_visible_page">First visible page: %1$d</string>
-    <string name="smart_page_library_collection_id">Collection ID: %1$s</string>
-    <string name="smart_page_library_collection_items">Items: %1$d</string>
-    <string name="smart_page_library_collection_rule">Rule: %1$s</string>
 
     <string name="common_back">Back</string>
     <string name="common_retry">Retry</string>
@@ -283,6 +293,25 @@
     <string name="smart_pages_preview_failed">PDF preview failed. The verified PDF can still be saved, shared, or printed.</string>
     <string name="smart_pages_preview_unavailable">PDF preview unavailable.</string>
     <string name="smart_pages_preview_description">Generated Smart Page preview</string>
+
+    <string name="smart_page_library_title">Generated content</string>
+    <string name="smart_page_library_local_first">Generated Smart Pages, Page Sets, and Collections stay on this device unless you export or back them up manually.</string>
+    <string name="smart_page_library_summary_title">Generated-content overview</string>
+    <string name="smart_page_library_smart_pages_count">Smart Pages: %1$d</string>
+    <string name="smart_page_library_page_sets_count">Page Sets: %1$d</string>
+    <string name="smart_page_library_collections_count">Collections: %1$d</string>
+    <string name="smart_page_library_boundary_title">Generated-content data boundary</string>
+    <string name="smart_page_library_api_boundary">This screen is the presentation shell for generated content. A later Rust generated-content API will supply durable Smart Page, Page Set, and Collection rows with immutable IDs.</string>
+    <string name="smart_page_library_empty_title">No generated content yet</string>
+    <string name="smart_page_library_empty_body">Create Smart Pages to register immutable generated page identities. This library does not fabricate generated-content rows.</string>
+    <string name="smart_page_library_create">Create Smart Pages</string>
+    <string name="smart_page_library_smart_page_title">Smart Page %1$s</string>
+    <string name="smart_page_library_page_set_title">Page Set %1$s</string>
+    <string name="smart_page_library_collection_title">Collection %1$s</string>
+    <string name="smart_page_library_item_id">ID: %1$s</string>
+    <string name="smart_page_library_item_pages">Pages: %1$d</string>
+    <string name="smart_page_library_item_updated">Updated: %1$s</string>
+    <string name="smart_page_library_item_identity">Immutable identity is preserved; rows are never renumbered or reused by display order.</string>
 
     <string name="single_scanner_versions">View page versions</string>
 

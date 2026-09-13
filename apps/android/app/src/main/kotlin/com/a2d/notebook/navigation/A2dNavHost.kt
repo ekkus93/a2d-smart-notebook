@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 import com.a2d.notebook.feature.home.HomeScreen
 import com.a2d.notebook.feature.library.LibraryHubScreen
 import com.a2d.notebook.feature.library.PageBrowserScreen
+import com.a2d.notebook.feature.library.PageViewerScreen
 import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
@@ -24,6 +25,7 @@ object A2dDestinations {
     const val HOME = "home"
     const val LIBRARY = "library"
     const val PAGES = "library/pages"
+    const val PAGE_VIEWER_PATTERN = "library/pages/{pageId}"
     const val NEEDS_REVIEW = "library/needs-review"
     const val SMART_PAGE_LIBRARY = "library/smart-pages"
     const val SINGLE_PAGE_SCANNER = "scanner/single"
@@ -34,6 +36,8 @@ object A2dDestinations {
     const val SMART_PAGES = "smart-pages"
     const val PAGE_CODE_PATTERN = "page-code/{notebookId}"
     const val VERSION_HISTORY_PATTERN = "versions/{pageId}"
+
+    fun pageViewer(pageId: String) = "library/pages/$pageId"
 
     fun pageCode(notebookId: String) = "page-code/$notebookId"
 
@@ -68,9 +72,25 @@ fun A2dNavHost(navController: NavHostController) {
         composable(A2dDestinations.PAGES) {
             PageBrowserScreen(
                 onBack = { navController.navigateUp() },
+                onOpenPage = { pageId ->
+                    navController.navigate(A2dDestinations.pageViewer(pageId))
+                },
                 onOpenVersions = { pageId ->
                     navController.navigate(A2dDestinations.versionHistory(pageId))
                 },
+            )
+        }
+        composable(
+            route = A2dDestinations.PAGE_VIEWER_PATTERN,
+            arguments = listOf(navArgument("pageId") { type = NavType.StringType }),
+        ) { entry ->
+            PageViewerScreen(
+                pageId = requireNotNull(entry.arguments?.getString("pageId")),
+                onBack = { navController.navigateUp() },
+                onOpenVersions = { pageId ->
+                    navController.navigate(A2dDestinations.versionHistory(pageId))
+                },
+                onOpenNeedsReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
             )
         }
         composable(A2dDestinations.NEEDS_REVIEW) {

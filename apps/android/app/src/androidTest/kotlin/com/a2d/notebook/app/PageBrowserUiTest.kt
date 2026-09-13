@@ -50,7 +50,7 @@ class PageBrowserUiTest {
     }
 
     @Test
-    fun populatedPageBrowserShowsRowsAndVersionAction() {
+    fun populatedPageBrowserShowsRowsAndPageActions() {
         composeRule.activity.setContent {
             MaterialTheme {
                 PageBrowserContent(
@@ -73,6 +73,7 @@ class PageBrowserUiTest {
                                 ),
                         ),
                     onBack = {},
+                    onOpenPage = {},
                     onOpenVersions = {},
                 )
             }
@@ -87,6 +88,7 @@ class PageBrowserUiTest {
         composeRule.onNodeWithText("Notebook: Field Notes").assertIsDisplayed()
         composeRule.onNodeWithText("Status: scanned").assertIsDisplayed()
         composeRule.onNodeWithText("Updated: last scan retained locally").assertIsDisplayed()
+        composeRule.onNodeWithTag(PageBrowserTestTags.OPEN_PAGE).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageBrowserTestTags.OPEN_VERSIONS).performScrollTo().assertIsDisplayed()
     }
 }
