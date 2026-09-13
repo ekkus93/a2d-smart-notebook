@@ -10,6 +10,7 @@ import com.a2d.notebook.feature.home.HomeScreen
 import com.a2d.notebook.feature.library.LibraryHubScreen
 import com.a2d.notebook.feature.library.PageBrowserScreen
 import com.a2d.notebook.feature.library.PageViewerScreen
+import com.a2d.notebook.feature.library.TrashScreen
 import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
@@ -28,6 +29,7 @@ object A2dDestinations {
     const val PAGE_VIEWER_PATTERN = "library/pages/{pageId}"
     const val NEEDS_REVIEW = "library/needs-review"
     const val SMART_PAGE_LIBRARY = "library/smart-pages"
+    const val TRASH = "library/trash"
     const val SINGLE_PAGE_SCANNER = "scanner/single"
     const val BATCH_SCANNER = "scanner/batch"
     const val NOTEBOOKS = "notebooks"
@@ -67,6 +69,7 @@ fun A2dNavHost(navController: NavHostController) {
                 onOpenPageSets = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
                 onOpenCollections = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
                 onOpenNeedsReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
+                onOpenTrash = { navController.navigate(A2dDestinations.TRASH) },
             )
         }
         composable(A2dDestinations.PAGES) {
@@ -105,6 +108,14 @@ fun A2dNavHost(navController: NavHostController) {
             SmartPageLibraryScreen(
                 onBack = { navController.navigateUp() },
                 onCreateSmartPages = { navController.navigate(A2dDestinations.SMART_PAGES) },
+            )
+        }
+        composable(A2dDestinations.TRASH) {
+            TrashScreen(
+                onBack = { navController.navigateUp() },
+                onOpenPage = { pageId ->
+                    navController.navigate(A2dDestinations.pageViewer(pageId))
+                },
             )
         }
         composable(A2dDestinations.SINGLE_PAGE_SCANNER) {
