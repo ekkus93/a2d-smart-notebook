@@ -16,6 +16,7 @@ import com.a2d.notebook.feature.notebook.PageCodeScreen
 import com.a2d.notebook.feature.review.NeedsReviewScreen
 import com.a2d.notebook.feature.scanner.singlepage.PolicyAwareBatchScannerRoute
 import com.a2d.notebook.feature.scanner.singlepage.SinglePageScannerScreen
+import com.a2d.notebook.feature.smartpage.SmartPageLibraryScreen
 import com.a2d.notebook.feature.smartpage.SmartPagesScreen
 import com.a2d.notebook.feature.version.VersionHistoryScreen
 
@@ -24,6 +25,7 @@ object A2dDestinations {
     const val LIBRARY = "library"
     const val PAGES = "library/pages"
     const val NEEDS_REVIEW = "library/needs-review"
+    const val SMART_PAGE_LIBRARY = "library/smart-pages"
     const val SINGLE_PAGE_SCANNER = "scanner/single"
     const val BATCH_SCANNER = "scanner/batch"
     const val NOTEBOOKS = "notebooks"
@@ -56,8 +58,10 @@ fun A2dNavHost(navController: NavHostController) {
             LibraryHubScreen(
                 onBack = { navController.navigateUp() },
                 onOpenNotebooks = { navController.navigate(A2dDestinations.NOTEBOOKS) },
-                onOpenSmartPages = { navController.navigate(A2dDestinations.SMART_PAGES) },
+                onOpenSmartPages = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
                 onOpenPages = { navController.navigate(A2dDestinations.PAGES) },
+                onOpenPageSets = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
+                onOpenCollections = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
                 onOpenNeedsReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
             )
         }
@@ -75,6 +79,12 @@ fun A2dNavHost(navController: NavHostController) {
                 onOpenVersions = { pageId ->
                     navController.navigate(A2dDestinations.versionHistory(pageId))
                 },
+            )
+        }
+        composable(A2dDestinations.SMART_PAGE_LIBRARY) {
+            SmartPageLibraryScreen(
+                onBack = { navController.navigateUp() },
+                onCreateSmartPages = { navController.navigate(A2dDestinations.SMART_PAGES) },
             )
         }
         composable(A2dDestinations.SINGLE_PAGE_SCANNER) {
