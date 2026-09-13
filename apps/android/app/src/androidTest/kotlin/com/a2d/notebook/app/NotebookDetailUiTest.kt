@@ -54,7 +54,7 @@ class NotebookDetailUiTest {
         composeRule.onNodeWithText("Batch scan this Notebook").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(NotebookScreenTestTags.DETAIL_PAGE_SLOTS).performScrollTo().assertIsDisplayed()
         composeRule
-            .onNodeWithText("logical page slots", substring = true)
+            .onNodeWithText("Notebook page slots are Rust-owned durable records", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
         composeRule
