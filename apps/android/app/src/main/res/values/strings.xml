@@ -68,6 +68,25 @@
     <string name="page_browser_needs_review_badge">Needs Review</string>
     <string name="page_browser_open_versions">Open versions</string>
 
+    <string name="needs_review_title">Needs Review</string>
+    <string name="needs_review_local_first">Review decisions are stored locally and delegated to Rust. No account or A2D server is required.</string>
+    <string name="needs_review_summary_title">Review queue overview</string>
+    <string name="needs_review_total_count">Review items: %1$d</string>
+    <string name="needs_review_unresolved_count">Unresolved: %1$d</string>
+    <string name="needs_review_deferred_count">Deferred: %1$d</string>
+    <string name="needs_review_boundary_title">Review data boundary</string>
+    <string name="needs_review_api_boundary">This screen is the presentation shell for the Rust review queue. A later connection step will call listReviewItems, deferReviewItem, and resolveReviewItem.</string>
+    <string name="needs_review_empty_title">No local review items</string>
+    <string name="needs_review_empty_body">Scans that need a human decision will appear here after the Rust review queue is connected. This screen does not fabricate review items.</string>
+    <string name="needs_review_item_title">Review %1$s</string>
+    <string name="needs_review_page_id">Page ID: %1$s</string>
+    <string name="needs_review_reason">Reason: %1$s</string>
+    <string name="needs_review_created">Created: %1$s</string>
+    <string name="needs_review_open_versions">Open versions</string>
+    <string name="needs_review_defer">Defer</string>
+    <string name="needs_review_resolve_as">Resolve as %1$s</string>
+    <string name="needs_review_no_resolution_options">No resolution options are exposed by this presentation state.</string>
+
     <string name="common_back">Back</string>
     <string name="common_retry">Retry</string>
     <string name="common_cancel">Cancel</string>
