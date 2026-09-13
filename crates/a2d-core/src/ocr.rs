@@ -193,7 +193,11 @@ fn asset_kind_label(kind: AssetKind) -> &'static str {
     }
 }
 
-fn ocr_core_error(code: &'static str, developer_message: impl Into<String>, retryable: bool) -> A2dError {
+fn ocr_core_error(
+    code: &'static str,
+    developer_message: impl Into<String>,
+    retryable: bool,
+) -> A2dError {
     A2dError::new(
         ErrorCode::new(code),
         ErrorCategory::Ocr,
@@ -234,7 +238,11 @@ mod tests {
         Asset::new(
             id.clone(),
             kind,
-            format!("assets/{}/{}.png", asset_kind_label(kind).to_lowercase(), id),
+            format!(
+                "assets/{}/{}.png",
+                asset_kind_label(kind).to_lowercase(),
+                id
+            ),
             "image/png".to_string(),
             1_024,
             "test-sha256".to_string(),
@@ -264,8 +272,10 @@ mod tests {
         );
         let original_asset_id = AssetId::generate();
         let original_asset = asset(original_asset_id.clone(), AssetKind::Original, true);
-        let corrected_asset = corrected.map(|(kind, immutable)| asset(AssetId::generate(), kind, immutable));
-        let ocr_asset = ocr_optimized.map(|(kind, immutable)| asset(AssetId::generate(), kind, immutable));
+        let corrected_asset =
+            corrected.map(|(kind, immutable)| asset(AssetId::generate(), kind, immutable));
+        let ocr_asset =
+            ocr_optimized.map(|(kind, immutable)| asset(AssetId::generate(), kind, immutable));
         let scan_id = ScanId::generate();
         let scan = Scan::new(
             scan_id.clone(),
@@ -322,11 +332,17 @@ mod tests {
         let fixture = insert_scan_fixture(&core, None, None);
 
         let prepared = core
-            .prepare_ocr_input(prepare_request(&fixture.scan_id, CoreOcrInputKind::Original))
+            .prepare_ocr_input(prepare_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Original,
+            ))
             .unwrap();
 
         assert_eq!(prepared.scan_id, fixture.scan_id.to_string());
-        assert_eq!(prepared.input_asset_id, fixture.original_asset_id.to_string());
+        assert_eq!(
+            prepared.input_asset_id,
+            fixture.original_asset_id.to_string()
+        );
         assert_eq!(prepared.input_kind, CoreOcrInputKind::Original);
         assert_eq!(prepared.media_type, "image/png");
         assert_eq!(prepared.byte_length, 1_024);
@@ -341,7 +357,10 @@ mod tests {
         let fixture = insert_scan_fixture(&core, None, None);
 
         let err = core
-            .prepare_ocr_input(prepare_request(&fixture.scan_id, CoreOcrInputKind::Corrected))
+            .prepare_ocr_input(prepare_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Corrected,
+            ))
             .unwrap_err();
 
         assert_eq!(err.code.to_string(), "CORE_OCR_INPUT_ASSET_MISSING");
@@ -358,13 +377,13 @@ mod tests {
         let fixture = insert_scan_fixture(&core, Some((AssetKind::Ocr, true)), None);
 
         let err = core
-            .prepare_ocr_input(prepare_request(&fixture.scan_id, CoreOcrInputKind::Corrected))
+            .prepare_ocr_input(prepare_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Corrected,
+            ))
             .unwrap_err();
 
-        assert_eq!(
-            err.code.to_string(),
-            "CORE_OCR_INPUT_ASSET_KIND_MISMATCH"
-        );
+        assert_eq!(err.code.to_string(), "CORE_OCR_INPUT_ASSET_KIND_MISMATCH");
         assert_eq!(
             err.details.get("expected_asset_kind").map(String::as_str),
             Some("Corrected")
@@ -382,7 +401,10 @@ mod tests {
         let fixture = insert_scan_fixture(&core, Some((AssetKind::Corrected, false)), None);
 
         let err = core
-            .prepare_ocr_input(prepare_request(&fixture.scan_id, CoreOcrInputKind::Corrected))
+            .prepare_ocr_input(prepare_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Corrected,
+            ))
             .unwrap_err();
 
         assert_eq!(err.code.to_string(), "CORE_OCR_INPUT_ASSET_NOT_IMMUTABLE");
