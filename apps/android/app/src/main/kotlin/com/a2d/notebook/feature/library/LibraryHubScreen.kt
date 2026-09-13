@@ -26,6 +26,7 @@ object LibraryHubTestTags {
     const val EMPTY_STATE = "library_empty_state"
     const val NOTEBOOKS = "library_notebooks"
     const val SMART_PAGES = "library_smart_pages"
+    const val PAGES = "library_pages"
     const val PAGE_SETS = "library_page_sets"
     const val COLLECTIONS = "library_collections"
     const val IMPORTS = "library_imports"
@@ -36,6 +37,7 @@ object LibraryHubTestTags {
 data class LibraryHubState(
     val notebookCount: Int = 0,
     val smartPageCount: Int = 0,
+    val pageCount: Int = 0,
     val pageSetCount: Int = 0,
     val collectionCount: Int = 0,
     val importCount: Int = 0,
@@ -46,6 +48,7 @@ data class LibraryHubState(
         get() =
             notebookCount +
                 smartPageCount +
+                pageCount +
                 pageSetCount +
                 collectionCount +
                 importCount +
@@ -63,6 +66,7 @@ fun LibraryHubScreen(
     onOpenSmartPages: () -> Unit,
     modifier: Modifier = Modifier,
     state: LibraryHubState = LibraryHubState(),
+    onOpenPages: () -> Unit = {},
     onOpenPageSets: () -> Unit = {},
     onOpenCollections: () -> Unit = {},
     onOpenImports: () -> Unit = {},
@@ -119,6 +123,12 @@ fun LibraryHubScreen(
             detail = stringResource(R.string.library_smart_pages_detail, state.smartPageCount),
             testTag = LibraryHubTestTags.SMART_PAGES,
             onClick = onOpenSmartPages,
+        )
+        LibraryDestinationButton(
+            title = stringResource(R.string.library_pages),
+            detail = stringResource(R.string.library_pages_detail, state.pageCount),
+            testTag = LibraryHubTestTags.PAGES,
+            onClick = onOpenPages,
         )
         LibraryDestinationButton(
             title = stringResource(R.string.library_page_sets),

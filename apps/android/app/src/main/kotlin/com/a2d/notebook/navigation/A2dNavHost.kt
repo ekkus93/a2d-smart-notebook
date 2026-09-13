@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.a2d.notebook.feature.home.HomeScreen
 import com.a2d.notebook.feature.library.LibraryHubScreen
+import com.a2d.notebook.feature.library.PageBrowserScreen
 import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
@@ -20,6 +21,7 @@ import com.a2d.notebook.feature.version.VersionHistoryScreen
 object A2dDestinations {
     const val HOME = "home"
     const val LIBRARY = "library"
+    const val PAGES = "library/pages"
     const val SINGLE_PAGE_SCANNER = "scanner/single"
     const val BATCH_SCANNER = "scanner/batch"
     const val NOTEBOOKS = "notebooks"
@@ -53,6 +55,15 @@ fun A2dNavHost(navController: NavHostController) {
                 onBack = { navController.navigateUp() },
                 onOpenNotebooks = { navController.navigate(A2dDestinations.NOTEBOOKS) },
                 onOpenSmartPages = { navController.navigate(A2dDestinations.SMART_PAGES) },
+                onOpenPages = { navController.navigate(A2dDestinations.PAGES) },
+            )
+        }
+        composable(A2dDestinations.PAGES) {
+            PageBrowserScreen(
+                onBack = { navController.navigateUp() },
+                onOpenVersions = { pageId ->
+                    navController.navigate(A2dDestinations.versionHistory(pageId))
+                },
             )
         }
         composable(A2dDestinations.SINGLE_PAGE_SCANNER) {

@@ -40,6 +40,7 @@ class LibraryHubUiTest {
         composeRule.onNodeWithTag(LibraryHubTestTags.EMPTY_STATE).assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.NOTEBOOKS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.SMART_PAGES).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.PAGES).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.PAGE_SETS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.COLLECTIONS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.IMPORTS).performScrollTo().assertIsDisplayed()
@@ -56,6 +57,7 @@ class LibraryHubUiTest {
                         LibraryHubState(
                             notebookCount = 2,
                             smartPageCount = 3,
+                            pageCount = 8,
                             pageSetCount = 4,
                             collectionCount = 5,
                             importCount = 6,
@@ -70,16 +72,17 @@ class LibraryHubUiTest {
         }
 
         composeRule.onNodeWithTag(LibraryHubTestTags.STATUS).assertIsDisplayed()
-        composeRule.onNodeWithText("Total visible library entries: 28").assertIsDisplayed()
+        composeRule.onNodeWithText("Total visible library entries: 36").assertIsDisplayed()
         composeRule.onNodeWithText("Notebooks: 2").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Smart Pages: 3").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Pages: 8").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Page Sets: 4").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Collections: 5").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Imports: 6").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Needs Review: 1").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Trash: 7").performScrollTo().assertIsDisplayed()
         composeRule
-            .onNodeWithText("Search, OCR, backup, restore, and full page browsing remain separate roadmap slices.")
+            .onNodeWithText("Search, OCR, backup, restore, page-row persistence", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
     }
