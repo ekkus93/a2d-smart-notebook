@@ -20,11 +20,34 @@
     <string name="home_backup_attention_needed">attention needed</string>
     <string name="home_open_needs_review">Open Needs Review</string>
     <string name="home_open_backup">Backup status</string>
+    <string name="home_library">Library</string>
     <string name="home_notebooks">Notebooks</string>
     <string name="home_smart_pages">Create Smart Pages</string>
     <string name="home_scan_page">Scan a Page</string>
     <string name="home_batch_scan">Batch Scan</string>
     <string name="home_import">Import</string>
+
+    <string name="library_title">Library</string>
+    <string name="library_local_first">Browse the local library on this device. No account or A2D server is required.</string>
+    <string name="library_status_title">Library overview</string>
+    <string name="library_total_entries">Total visible library entries: %1$d</string>
+    <string name="library_status_boundary">Search, OCR, backup, restore, and full page browsing remain separate roadmap slices.</string>
+    <string name="library_empty_title">No local library entries yet</string>
+    <string name="library_empty_body">Add a Notebook, create Smart Pages, import files, or scan a page. The hub keeps every destination visible even before its backing workflow exists.</string>
+    <string name="library_notebooks">Notebooks</string>
+    <string name="library_notebooks_detail">Notebooks: %1$d</string>
+    <string name="library_smart_pages">Smart Pages</string>
+    <string name="library_smart_pages_detail">Smart Pages: %1$d</string>
+    <string name="library_page_sets">Page Sets</string>
+    <string name="library_page_sets_detail">Page Sets: %1$d</string>
+    <string name="library_collections">Collections</string>
+    <string name="library_collections_detail">Collections: %1$d</string>
+    <string name="library_imports">Imports</string>
+    <string name="library_imports_detail">Imports: %1$d</string>
+    <string name="library_needs_review">Needs Review</string>
+    <string name="library_needs_review_detail">Needs Review: %1$d</string>
+    <string name="library_trash">Trash</string>
+    <string name="library_trash_detail">Trash: %1$d</string>
 
     <string name="common_back">Back</string>
     <string name="common_retry">Retry</string>

@@ -41,6 +41,7 @@ class HomeScreenUiTest {
         composeRule.onNodeWithTag(HomeScreenTestTags.PRIMARY_ACTIONS).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeScreenTestTags.SCAN_PAGE).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeScreenTestTags.BATCH_SCAN).assertIsDisplayed()
+        composeRule.onNodeWithTag(HomeScreenTestTags.LIBRARY).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeScreenTestTags.NOTEBOOKS).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeScreenTestTags.SMART_PAGES).assertIsDisplayed()
         composeRule.onNodeWithTag(HomeScreenTestTags.IMPORT).assertIsDisplayed()

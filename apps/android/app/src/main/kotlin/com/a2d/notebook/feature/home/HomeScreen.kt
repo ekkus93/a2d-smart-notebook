@@ -35,6 +35,7 @@ object HomeScreenTestTags {
     const val BACKUP_STATUS = "home_backup_status"
     const val SCAN_PAGE = "home_scan_page"
     const val BATCH_SCAN = "home_batch_scan"
+    const val LIBRARY = "home_library"
     const val NOTEBOOKS = "home_notebooks"
     const val SMART_PAGES = "home_smart_pages"
     const val IMPORT = "home_import"
@@ -79,6 +80,7 @@ fun HomeScreen(
     onCreateSmartPages: () -> Unit,
     modifier: Modifier = Modifier,
     state: HomeDashboardState = HomeDashboardState(),
+    onOpenLibrary: () -> Unit = {},
     onOpenNotebook: (String) -> Unit = {},
     onOpenNeedsReview: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
@@ -111,6 +113,7 @@ fun HomeScreen(
         HomePrimaryActions(
             onScanPage = onScanPage,
             onBatchScan = onBatchScan,
+            onOpenLibrary = onOpenLibrary,
             onOpenNotebooks = onOpenNotebooks,
             onCreateSmartPages = onCreateSmartPages,
             onImport = onImport,
@@ -183,6 +186,7 @@ private fun backupStatusLabel(status: HomeBackupStatus): String =
 private fun HomePrimaryActions(
     onScanPage: () -> Unit,
     onBatchScan: () -> Unit,
+    onOpenLibrary: () -> Unit,
     onOpenNotebooks: () -> Unit,
     onCreateSmartPages: () -> Unit,
     onImport: () -> Unit,
@@ -203,6 +207,10 @@ private fun HomePrimaryActions(
             onClick = onBatchScan,
             modifier = Modifier.fillMaxWidth().testTag(HomeScreenTestTags.BATCH_SCAN),
         ) { Text(stringResource(R.string.home_batch_scan)) }
+        OutlinedButton(
+            onClick = onOpenLibrary,
+            modifier = Modifier.fillMaxWidth().testTag(HomeScreenTestTags.LIBRARY),
+        ) { Text(stringResource(R.string.home_library)) }
         OutlinedButton(
             onClick = onOpenNotebooks,
             modifier = Modifier.fillMaxWidth().testTag(HomeScreenTestTags.NOTEBOOKS),
