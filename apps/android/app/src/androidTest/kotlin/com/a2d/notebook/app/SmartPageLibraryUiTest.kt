@@ -4,12 +4,11 @@ import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.a2d.notebook.feature.smartpage.GeneratedContentCollectionSummary
+import com.a2d.notebook.feature.smartpage.GeneratedCollectionSummary
 import com.a2d.notebook.feature.smartpage.GeneratedPageSetSummary
 import com.a2d.notebook.feature.smartpage.GeneratedSmartPageSummary
 import com.a2d.notebook.feature.smartpage.SmartPageLibraryContent
@@ -25,7 +24,7 @@ class SmartPageLibraryUiTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun emptyGeneratedContentLibraryShowsLocalFirstBoundaryWithoutInventingRows() {
+    fun emptyGeneratedContentLibraryShowsLocalFirstBoundaryAndCreateAction() {
         composeRule.activity.setContent {
             MaterialTheme {
                 SmartPageLibraryContent(
@@ -38,18 +37,15 @@ class SmartPageLibraryUiTest {
 
         composeRule.onNodeWithTag(SmartPageLibraryTestTags.TITLE).assertIsDisplayed()
         composeRule.onNodeWithTag(SmartPageLibraryTestTags.LOCAL_FIRST).assertIsDisplayed()
-        composeRule.onNodeWithText("stay on this device", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag(SmartPageLibraryTestTags.SUMMARY).assertIsDisplayed()
         composeRule.onNodeWithText("Smart Pages: 0").assertIsDisplayed()
-        composeRule.onNodeWithText("Page Sets: 0").assertIsDisplayed()
-        composeRule.onNodeWithText("Collections: 0").assertIsDisplayed()
-        composeRule.onNodeWithTag(SmartPageLibraryTestTags.API_BOUNDARY).performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag(SmartPageLibraryTestTags.EMPTY_STATE).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(SmartPageLibraryTestTags.BOUNDARY).assertIsDisplayed()
         composeRule
-            .onNodeWithText("does not fabricate generated-content rows", substring = true)
+            .onNodeWithText("Rust generated-content APIs", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNodeWithTag(SmartPageLibraryTestTags.CREATE).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(SmartPageLibraryTestTags.EMPTY_STATE).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -59,33 +55,37 @@ class SmartPageLibraryUiTest {
                 SmartPageLibraryContent(
                     state =
                         SmartPageLibraryState(
-                            generatedContentApiConnected = true,
                             smartPages =
                                 listOf(
                                     GeneratedSmartPageSummary(
-                                        pageId = "smart-page-1",
+                                        smartPageId = "smart-page-1",
+                                        title = "Lecture notes",
                                         pageSetId = "page-set-1",
-                                        visiblePageLabel = "101",
-                                        updatedSummary = "generated locally",
+                                        pageCount = 3,
+                                        style = "Lined",
+                                        createdSummary = "2026-09-13",
                                     ),
                                 ),
                             pageSets =
                                 listOf(
                                     GeneratedPageSetSummary(
                                         pageSetId = "page-set-1",
-                                        pageCount = 5,
-                                        updatedSummary = "print-ready PDF retained",
+                                        title = "Week 1 packet",
+                                        pageCount = 3,
+                                        firstVisiblePage = 1,
+                                        createdSummary = "2026-09-13",
                                     ),
                                 ),
                             collections =
                                 listOf(
-                                    GeneratedContentCollectionSummary(
+                                    GeneratedCollectionSummary(
                                         collectionId = "collection-1",
-                                        title = "Lab templates",
-                                        pageCount = 5,
-                                        updatedSummary = "manual grouping",
+                                        title = "Biology class",
+                                        itemCount = 2,
+                                        ruleSummary = "Manual local collection",
                                     ),
                                 ),
+                            generatedContentApiConnected = true,
                         ),
                     onBack = {},
                     onCreateSmartPages = {},
@@ -93,25 +93,18 @@ class SmartPageLibraryUiTest {
             }
         }
 
-        composeRule.onNodeWithText("Smart Pages: 1").assertIsDisplayed()
+        composeRule.onNodeWithText("Smart Pages: 3").assertIsDisplayed()
         composeRule.onNodeWithText("Page Sets: 1").assertIsDisplayed()
         composeRule.onNodeWithText("Collections: 1").assertIsDisplayed()
-        composeRule.onAllNodesWithTag(SmartPageLibraryTestTags.SMART_PAGE_ROW)[0]
-            .performScrollTo()
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("Smart Page 101").assertIsDisplayed()
-        composeRule.onNodeWithText("ID: smart-page-1").assertIsDisplayed()
-        composeRule.onAllNodesWithTag(SmartPageLibraryTestTags.PAGE_SET_ROW)[0]
-            .performScrollTo()
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("Page Set page-set-1").assertIsDisplayed()
-        composeRule.onNodeWithText("Pages: 5").assertIsDisplayed()
-        composeRule.onAllNodesWithTag(SmartPageLibraryTestTags.COLLECTION_ROW)[0]
-            .performScrollTo()
-            .assertIsDisplayed()
-        composeRule.onNodeWithText("Collection Lab templates").assertIsDisplayed()
+        composeRule.onNodeWithTag(SmartPageLibraryTestTags.SMART_PAGE_ITEM).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Smart Page ID: smart-page-1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Style: Lined").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(SmartPageLibraryTestTags.PAGE_SET_ITEM).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("First visible page: 1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(SmartPageLibraryTestTags.COLLECTION_ITEM).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Collection ID: collection-1").performScrollTo().assertIsDisplayed()
         composeRule
-            .onNodeWithText("rows are never renumbered or reused", substring = true)
+            .onNodeWithText("Generated IDs must never be reused", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
     }
