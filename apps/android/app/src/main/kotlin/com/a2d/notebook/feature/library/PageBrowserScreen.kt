@@ -25,6 +25,7 @@ object PageBrowserTestTags {
     const val API_BOUNDARY = "page_browser_api_boundary"
     const val EMPTY_STATE = "page_browser_empty_state"
     const val PAGE_ROW = "page_browser_page_row"
+    const val OPEN_PAGE = "page_browser_open_page"
     const val OPEN_VERSIONS = "page_browser_open_versions"
 }
 
@@ -51,10 +52,12 @@ fun PageBrowserScreen(
     onOpenVersions: (String) -> Unit,
     modifier: Modifier = Modifier,
     state: PageBrowserState = PageBrowserState(),
+    onOpenPage: (String) -> Unit = {},
 ) {
     PageBrowserContent(
         state = state,
         onBack = onBack,
+        onOpenPage = onOpenPage,
         onOpenVersions = onOpenVersions,
         modifier = modifier,
     )
@@ -66,6 +69,7 @@ fun PageBrowserContent(
     onBack: () -> Unit,
     onOpenVersions: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenPage: (String) -> Unit = {},
 ) {
     Column(
         modifier =
@@ -112,7 +116,11 @@ fun PageBrowserContent(
             }
         } else {
             state.pages.forEach { page ->
-                PageBrowserRow(page = page, onOpenVersions = onOpenVersions)
+                PageBrowserRow(
+                    page = page,
+                    onOpenPage = onOpenPage,
+                    onOpenVersions = onOpenVersions,
+                )
             }
         }
     }
@@ -136,6 +144,7 @@ private fun PageBrowserSummaryCard(state: PageBrowserState) {
 @Composable
 private fun PageBrowserRow(
     page: PageBrowserPageSummary,
+    onOpenPage: (String) -> Unit,
     onOpenVersions: (String) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth().testTag(PageBrowserTestTags.PAGE_ROW)) {
@@ -151,6 +160,12 @@ private fun PageBrowserRow(
             }
             if (page.needsReview) {
                 Text(stringResource(R.string.page_browser_needs_review_badge))
+            }
+            OutlinedButton(
+                onClick = { onOpenPage(page.pageId) },
+                modifier = Modifier.fillMaxWidth().testTag(PageBrowserTestTags.OPEN_PAGE),
+            ) {
+                Text(stringResource(R.string.page_browser_open_page))
             }
             OutlinedButton(
                 onClick = { onOpenVersions(page.pageId) },
