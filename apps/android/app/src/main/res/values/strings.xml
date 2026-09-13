@@ -31,13 +31,15 @@
     <string name="library_local_first">Browse the local library on this device. No account or A2D server is required.</string>
     <string name="library_status_title">Library overview</string>
     <string name="library_total_entries">Total visible library entries: %1$d</string>
-    <string name="library_status_boundary">Search, OCR, backup, restore, and full page browsing remain separate roadmap slices.</string>
+    <string name="library_status_boundary">Search, OCR, backup, restore, page-row persistence, collections, imports, and trash remain separate roadmap slices.</string>
     <string name="library_empty_title">No local library entries yet</string>
     <string name="library_empty_body">Add a Notebook, create Smart Pages, import files, or scan a page. The hub keeps every destination visible even before its backing workflow exists.</string>
     <string name="library_notebooks">Notebooks</string>
     <string name="library_notebooks_detail">Notebooks: %1$d</string>
     <string name="library_smart_pages">Smart Pages</string>
     <string name="library_smart_pages_detail">Smart Pages: %1$d</string>
+    <string name="library_pages">Pages</string>
+    <string name="library_pages_detail">Pages: %1$d</string>
     <string name="library_page_sets">Page Sets</string>
     <string name="library_page_sets_detail">Page Sets: %1$d</string>
     <string name="library_collections">Collections</string>
@@ -48,6 +50,23 @@
     <string name="library_needs_review_detail">Needs Review: %1$d</string>
     <string name="library_trash">Trash</string>
     <string name="library_trash_detail">Trash: %1$d</string>
+
+    <string name="page_browser_title">Pages</string>
+    <string name="page_browser_local_first">Browse local pages on this device. No account or A2D server is required.</string>
+    <string name="page_browser_summary_title">Page overview</string>
+    <string name="page_browser_total_pages">Pages: %1$d</string>
+    <string name="page_browser_scanned_pages">Scanned pages: %1$d</string>
+    <string name="page_browser_needs_review_count">Needs Review: %1$d</string>
+    <string name="page_browser_boundary_title">Page data boundary</string>
+    <string name="page_browser_api_boundary">Page browsing is presentation-only in this slice. A later Rust page-summary API will supply durable page rows.</string>
+    <string name="page_browser_empty_title">No page rows available yet</string>
+    <string name="page_browser_empty_body">Register a Notebook and scan pages. This screen does not invent page rows before Rust exposes them.</string>
+    <string name="page_browser_page">Page: %1$s</string>
+    <string name="page_browser_notebook">Notebook: %1$s</string>
+    <string name="page_browser_status">Status: %1$s</string>
+    <string name="page_browser_updated">Updated: %1$s</string>
+    <string name="page_browser_needs_review_badge">Needs Review</string>
+    <string name="page_browser_open_versions">Open versions</string>
 
     <string name="common_back">Back</string>
     <string name="common_retry">Retry</string>
