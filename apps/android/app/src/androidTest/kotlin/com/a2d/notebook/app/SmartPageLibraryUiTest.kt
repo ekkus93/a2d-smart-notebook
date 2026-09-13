@@ -98,7 +98,7 @@ class SmartPageLibraryUiTest {
         composeRule.onNodeWithText("Collections: 1").assertIsDisplayed()
         composeRule.onNodeWithTag(SmartPageLibraryTestTags.SMART_PAGE_ITEM).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Smart Page ID: smart-page-1").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Page Set ID: page-set-1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Style: Lined").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(SmartPageLibraryTestTags.PAGE_SET_ITEM).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("First visible page: 1").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(SmartPageLibraryTestTags.COLLECTION_ITEM).performScrollTo().assertIsDisplayed()
