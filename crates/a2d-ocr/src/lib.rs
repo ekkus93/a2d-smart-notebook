@@ -1,9 +1,10 @@
-//! Provider-adapter contract for OCR.
+//! Provider-adapter and queue-status contracts for OCR.
 //!
 //! Rust owns the normalized OCR request/result shape. Platform adapters such as Android ML Kit
-//! can recognize text, but they must report bounded, explicit outcomes through this contract:
-//! successful recognition, successful no-text detection, or OCR unavailability/failure. A failed
-//! OCR run must never be converted into a fabricated empty successful transcription.
+//! may recognize text, but they must report bounded, explicit outcomes through this contract:
+//! successful recognition, successful no-text detection, OCR unavailability/failure, or
+//! cancellation. A failed OCR run must never be converted into a fabricated empty successful
+//! transcription.
 
 use std::collections::BTreeMap;
 
@@ -14,8 +15,8 @@ const MAX_WARNING_CODE_BYTES: usize = 80;
 const MIN_POLYGON_POINTS: usize = 3;
 const MAX_POLYGON_POINTS: usize = 8;
 
-/// Structured OCR contract error. Core/FFI integration will map these codes to the project-wide
-/// `A2dError` envelope when the OCR persistence API is connected.
+/// Structured OCR contract error. Core/FFI integration maps these codes to the project-wide
+/// `A2dError` envelope when OCR storage and platform adapters are connected.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrContractError {
     pub code: String,
@@ -130,6 +131,35 @@ impl OcrLimits {
     }
 }
 
+/// Resource limits for restart-safe OCR queue records.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OcrQueueLimits {
+    pub max_attempt_count: u32,
+    pub max_last_error_bytes: usize,
+}
+
+impl Default for OcrQueueLimits {
+    fn default() -> Self {
+        Self {
+            max_attempt_count: 25,
+            max_last_error_bytes: 1_000,
+        }
+    }
+}
+
+impl OcrQueueLimits {
+    fn validate(&self) -> Result<(), OcrContractError> {
+        if self.max_attempt_count == 0 || self.max_last_error_bytes == 0 {
+            return Err(ocr_contract_error(
+                "OCR_QUEUE_LIMIT_INVALID",
+                "OCR queue limits must be non-zero",
+                false,
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Which immutable Rust-owned asset is being submitted to a platform OCR adapter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum OcrInputKind {
@@ -215,6 +245,343 @@ impl OcrRequest {
         }
         for language in &self.language_hints {
             validate_language_tag(language)?;
+        }
+        Ok(())
+    }
+}
+
+/// Stable queue identity for one OCR attempt target. Retrying the same scan/asset/kind reuses this
+/// identity instead of creating duplicate OCR work.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct OcrWorkKey {
+    pub scan_ref: OcrScanRef,
+    pub input_asset_ref: OcrAssetRef,
+    pub input_kind: OcrInputKind,
+}
+
+impl OcrWorkKey {
+    pub fn from_request(request: &OcrRequest) -> Result<Self, OcrContractError> {
+        request.validate()?;
+        Ok(Self {
+            scan_ref: request.source.scan_ref.clone(),
+            input_asset_ref: request.source.input_asset_ref.clone(),
+            input_kind: request.source.input_kind,
+        })
+    }
+
+    fn matches_result(&self, result: &OcrResult) -> bool {
+        self.scan_ref == result.scan_ref
+            && self.input_asset_ref == result.input_asset_ref
+            && self.input_kind == result.input_kind
+    }
+}
+
+/// Restart-safe OCR job state. Terminal states intentionally distinguish no-text success,
+/// provider unavailability/failure, and user/system cancellation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum OcrJobStatus {
+    Queued,
+    Running,
+    Recognized,
+    Unavailable,
+    Cancelled,
+}
+
+impl OcrJobStatus {
+    pub fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            OcrJobStatus::Recognized | OcrJobStatus::Unavailable | OcrJobStatus::Cancelled
+        )
+    }
+}
+
+/// Retry state projected from OCR queue records. `retryable=false` is explicit terminal policy,
+/// not the same as a missing retry timestamp.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OcrRetryState {
+    pub attempt_count: u32,
+    pub retryable: bool,
+    pub next_retry_at_ms: Option<i64>,
+    pub last_error_code: Option<String>,
+    pub last_error_message: Option<String>,
+}
+
+impl OcrRetryState {
+    fn validate(&self, limits: &OcrQueueLimits) -> Result<(), OcrContractError> {
+        limits.validate()?;
+        if self.attempt_count > limits.max_attempt_count {
+            return Err(ocr_contract_error(
+                "OCR_ATTEMPT_COUNT_EXCEEDS_LIMIT",
+                "OCR attempt count exceeds the configured OCR queue limit",
+                false,
+            )
+            .with_detail("attempt_count", self.attempt_count.to_string())
+            .with_detail("max_attempt_count", limits.max_attempt_count.to_string()));
+        }
+        if let Some(next_retry_at_ms) = self.next_retry_at_ms
+            && next_retry_at_ms < 0
+        {
+            return Err(ocr_contract_error(
+                "OCR_RETRY_TIMESTAMP_INVALID",
+                "OCR retry timestamp must be non-negative milliseconds",
+                false,
+            ));
+        }
+        if let Some(code) = &self.last_error_code {
+            validate_warning_code(code)?;
+        }
+        if let Some(message) = &self.last_error_message
+            && (message.is_empty() || message.len() > limits.max_last_error_bytes)
+        {
+            return Err(ocr_contract_error(
+                "OCR_LAST_ERROR_MESSAGE_INVALID",
+                "OCR last error message must be non-empty and bounded when present",
+                false,
+            )
+            .with_detail("max_bytes", limits.max_last_error_bytes.to_string()));
+        }
+        if !self.retryable && self.next_retry_at_ms.is_some() {
+            return Err(ocr_contract_error(
+                "OCR_RETRY_STATE_CONFLICT",
+                "non-retryable OCR jobs must not carry a next retry timestamp",
+                false,
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Persistence-ready OCR job projection. Storage can serialize this record without inferring
+/// whether an empty string means no text, failure, or cancellation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OcrJobRecord {
+    pub work_key: OcrWorkKey,
+    pub status: OcrJobStatus,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    pub last_started_at_ms: Option<i64>,
+    pub completed_at_ms: Option<i64>,
+    pub retry_state: OcrRetryState,
+    pub result: Option<OcrResult>,
+}
+
+impl OcrJobRecord {
+    pub fn queued(request: &OcrRequest, now_ms: i64) -> Result<Self, OcrContractError> {
+        validate_timestamp(now_ms, "now_ms")?;
+        Ok(Self {
+            work_key: OcrWorkKey::from_request(request)?,
+            status: OcrJobStatus::Queued,
+            created_at_ms: now_ms,
+            updated_at_ms: now_ms,
+            last_started_at_ms: None,
+            completed_at_ms: None,
+            retry_state: OcrRetryState {
+                attempt_count: 0,
+                retryable: true,
+                next_retry_at_ms: None,
+                last_error_code: None,
+                last_error_message: None,
+            },
+            result: None,
+        })
+    }
+
+    pub fn mark_running(&self, now_ms: i64) -> Result<Self, OcrContractError> {
+        validate_timestamp(now_ms, "now_ms")?;
+        self.validate(&OcrQueueLimits::default())?;
+        if self.status.is_terminal() {
+            return Err(ocr_contract_error(
+                "OCR_JOB_TERMINAL_TRANSITION_INVALID",
+                "terminal OCR jobs cannot be marked running",
+                false,
+            ));
+        }
+        if now_ms < self.created_at_ms {
+            return Err(ocr_contract_error(
+                "OCR_JOB_TIMESTAMP_ORDER_INVALID",
+                "OCR job cannot start before it was created",
+                false,
+            ));
+        }
+        let mut next = self.clone();
+        next.status = OcrJobStatus::Running;
+        next.updated_at_ms = now_ms;
+        next.last_started_at_ms = Some(now_ms);
+        next.retry_state.attempt_count = next.retry_state.attempt_count.checked_add(1).ok_or_else(|| {
+            ocr_contract_error(
+                "OCR_ATTEMPT_COUNT_OVERFLOW",
+                "OCR attempt count overflowed",
+                false,
+            )
+        })?;
+        next.validate(&OcrQueueLimits::default())?;
+        Ok(next)
+    }
+
+    pub fn complete_with_result(
+        &self,
+        result: OcrResult,
+        now_ms: i64,
+    ) -> Result<Self, OcrContractError> {
+        validate_timestamp(now_ms, "now_ms")?;
+        self.validate(&OcrQueueLimits::default())?;
+        if !self.work_key.matches_result(&result) {
+            return Err(ocr_contract_error(
+                "OCR_RESULT_WORK_KEY_MISMATCH",
+                "OCR result must match the queued scan, asset, and input kind",
+                false,
+            ));
+        }
+        if now_ms < self.created_at_ms {
+            return Err(ocr_contract_error(
+                "OCR_JOB_TIMESTAMP_ORDER_INVALID",
+                "OCR job cannot complete before it was created",
+                false,
+            ));
+        }
+        let status = match &result.body {
+            OcrAdapterOutput::Recognized(_) => OcrJobStatus::Recognized,
+            OcrAdapterOutput::Unavailable(_) => OcrJobStatus::Unavailable,
+        };
+        let mut next = self.clone();
+        next.status = status;
+        next.updated_at_ms = now_ms;
+        next.completed_at_ms = Some(now_ms);
+        next.retry_state.retryable = matches!(
+            &result.body,
+            OcrAdapterOutput::Unavailable(unavailable) if unavailable.retryable
+        );
+        next.retry_state.next_retry_at_ms = None;
+        next.retry_state.last_error_code = match &result.body {
+            OcrAdapterOutput::Recognized(_) => None,
+            OcrAdapterOutput::Unavailable(unavailable) => {
+                Some(format!("OCR_{:?}", unavailable.reason).to_uppercase())
+            }
+        };
+        next.retry_state.last_error_message = match &result.body {
+            OcrAdapterOutput::Recognized(_) => None,
+            OcrAdapterOutput::Unavailable(unavailable) => Some(unavailable.developer_message.clone()),
+        };
+        next.result = Some(result);
+        next.validate(&OcrQueueLimits::default())?;
+        Ok(next)
+    }
+
+    pub fn cancel(&self, now_ms: i64) -> Result<Self, OcrContractError> {
+        validate_timestamp(now_ms, "now_ms")?;
+        self.validate(&OcrQueueLimits::default())?;
+        if self.status.is_terminal() {
+            return Err(ocr_contract_error(
+                "OCR_JOB_TERMINAL_TRANSITION_INVALID",
+                "terminal OCR jobs cannot be cancelled again",
+                false,
+            ));
+        }
+        let mut next = self.clone();
+        next.status = OcrJobStatus::Cancelled;
+        next.updated_at_ms = now_ms;
+        next.completed_at_ms = Some(now_ms);
+        next.retry_state.retryable = false;
+        next.retry_state.next_retry_at_ms = None;
+        next.result = None;
+        next.validate(&OcrQueueLimits::default())?;
+        Ok(next)
+    }
+
+    pub fn validate(&self, limits: &OcrQueueLimits) -> Result<(), OcrContractError> {
+        limits.validate()?;
+        validate_timestamp(self.created_at_ms, "created_at_ms")?;
+        validate_timestamp(self.updated_at_ms, "updated_at_ms")?;
+        if self.updated_at_ms < self.created_at_ms {
+            return Err(ocr_contract_error(
+                "OCR_JOB_TIMESTAMP_ORDER_INVALID",
+                "OCR job updated timestamp cannot precede creation",
+                false,
+            ));
+        }
+        if let Some(started_at) = self.last_started_at_ms {
+            validate_timestamp(started_at, "last_started_at_ms")?;
+            if started_at < self.created_at_ms {
+                return Err(ocr_contract_error(
+                    "OCR_JOB_TIMESTAMP_ORDER_INVALID",
+                    "OCR job start timestamp cannot precede creation",
+                    false,
+                ));
+            }
+        }
+        if let Some(completed_at) = self.completed_at_ms {
+            validate_timestamp(completed_at, "completed_at_ms")?;
+            if completed_at < self.created_at_ms {
+                return Err(ocr_contract_error(
+                    "OCR_JOB_TIMESTAMP_ORDER_INVALID",
+                    "OCR job completion timestamp cannot precede creation",
+                    false,
+                ));
+            }
+        }
+        self.retry_state.validate(limits)?;
+        match self.status {
+            OcrJobStatus::Queued => {
+                if self.last_started_at_ms.is_some()
+                    || self.completed_at_ms.is_some()
+                    || self.result.is_some()
+                {
+                    return Err(ocr_contract_error(
+                        "OCR_JOB_QUEUED_STATE_INVALID",
+                        "queued OCR jobs must not carry started/completed/result fields",
+                        false,
+                    ));
+                }
+            }
+            OcrJobStatus::Running => {
+                if self.last_started_at_ms.is_none()
+                    || self.completed_at_ms.is_some()
+                    || self.result.is_some()
+                {
+                    return Err(ocr_contract_error(
+                        "OCR_JOB_RUNNING_STATE_INVALID",
+                        "running OCR jobs require a start timestamp and no terminal result",
+                        false,
+                    ));
+                }
+            }
+            OcrJobStatus::Recognized => match &self.result {
+                Some(result) if result.is_recognized() && self.work_key.matches_result(result) => {}
+                _ => {
+                    return Err(ocr_contract_error(
+                        "OCR_JOB_RECOGNIZED_STATE_INVALID",
+                        "recognized OCR jobs must carry a matching recognized result",
+                        false,
+                    ));
+                }
+            },
+            OcrJobStatus::Unavailable => match &self.result {
+                Some(result) if result.is_unavailable() && self.work_key.matches_result(result) => {}
+                _ => {
+                    return Err(ocr_contract_error(
+                        "OCR_JOB_UNAVAILABLE_STATE_INVALID",
+                        "unavailable OCR jobs must carry a matching unavailable result",
+                        false,
+                    ));
+                }
+            },
+            OcrJobStatus::Cancelled => {
+                if self.completed_at_ms.is_none() || self.result.is_some() || self.retry_state.retryable {
+                    return Err(ocr_contract_error(
+                        "OCR_JOB_CANCELLED_STATE_INVALID",
+                        "cancelled OCR jobs must be terminal, non-retryable, and result-free",
+                        false,
+                    ));
+                }
+            }
+        }
+        if self.status.is_terminal() && self.completed_at_ms.is_none() {
+            return Err(ocr_contract_error(
+                "OCR_JOB_TERMINAL_TIMESTAMP_MISSING",
+                "terminal OCR jobs must carry a completion timestamp",
+                false,
+            ));
         }
         Ok(())
     }
@@ -667,6 +1034,18 @@ fn validate_warning_code(value: &str) -> Result<(), OcrContractError> {
     Ok(())
 }
 
+fn validate_timestamp(value: i64, field: &'static str) -> Result<(), OcrContractError> {
+    if value < 0 {
+        return Err(ocr_contract_error(
+            "OCR_TIMESTAMP_INVALID",
+            "OCR timestamps must be non-negative milliseconds",
+            false,
+        )
+        .with_detail("field", field));
+    }
+    Ok(())
+}
+
 fn ocr_contract_error(
     code: &'static str,
     developer_message: impl Into<String>,
@@ -722,6 +1101,42 @@ mod tests {
         }
     }
 
+    fn recognized_output() -> OcrAdapterOutput {
+        OcrAdapterOutput::Recognized(OcrRecognizedText {
+            provider: provider(),
+            text_presence: OcrTextPresence::Detected,
+            full_text: "hello notebook".to_string(),
+            regions: vec![OcrRegion {
+                kind: OcrRegionKind::Line,
+                source_order: 0,
+                text: "hello notebook".to_string(),
+                polygon: polygon(),
+                bounding_box: Some(OcrRect {
+                    left: 10.0,
+                    top: 10.0,
+                    right: 90.0,
+                    bottom: 40.0,
+                }),
+                confidence: OcrConfidence::Unavailable {
+                    reason: "provider did not expose confidence".to_string(),
+                },
+                language_tags: vec!["en-US".to_string()],
+            }],
+            language_tags: vec!["en-US".to_string()],
+            warnings: vec![warning("OCR_CONFIDENCE_UNAVAILABLE")],
+        })
+    }
+
+    fn unavailable_output(retryable: bool) -> OcrAdapterOutput {
+        OcrAdapterOutput::Unavailable(OcrUnavailable {
+            provider: Some(provider()),
+            reason: OcrUnavailableReason::AdapterFailure,
+            retryable,
+            developer_message: "text recognizer crashed before producing a result".to_string(),
+            warnings: vec![warning("OCR_PROVIDER_FAILED")],
+        })
+    }
+
     #[test]
     fn request_rejects_oversized_images_before_provider_work() {
         let mut request = request();
@@ -744,31 +1159,7 @@ mod tests {
     #[test]
     fn recognized_text_preserves_regions_languages_and_confidence_state() {
         let request = request();
-        let output = OcrAdapterOutput::Recognized(OcrRecognizedText {
-            provider: provider(),
-            text_presence: OcrTextPresence::Detected,
-            full_text: "hello notebook".to_string(),
-            regions: vec![OcrRegion {
-                kind: OcrRegionKind::Line,
-                source_order: 0,
-                text: "hello notebook".to_string(),
-                polygon: polygon(),
-                bounding_box: Some(OcrRect {
-                    left: 10.0,
-                    top: 10.0,
-                    right: 90.0,
-                    bottom: 40.0,
-                }),
-                confidence: OcrConfidence::Unavailable {
-                    reason: "provider did not expose confidence".to_string(),
-                },
-                language_tags: vec!["en-US".to_string()],
-            }],
-            language_tags: vec!["en-US".to_string()],
-            warnings: vec![warning("OCR_CONFIDENCE_UNAVAILABLE")],
-        });
-
-        let result = normalize_ocr_output(&request, output).unwrap();
+        let result = normalize_ocr_output(&request, recognized_output()).unwrap();
 
         assert!(result.is_recognized());
         assert_eq!(result.scan_ref, request.source.scan_ref);
@@ -785,15 +1176,7 @@ mod tests {
     #[test]
     fn failed_ocr_is_unavailable_not_empty_success() {
         let request = request();
-        let output = OcrAdapterOutput::Unavailable(OcrUnavailable {
-            provider: Some(provider()),
-            reason: OcrUnavailableReason::AdapterFailure,
-            retryable: true,
-            developer_message: "text recognizer crashed before producing a result".to_string(),
-            warnings: vec![warning("OCR_PROVIDER_FAILED")],
-        });
-
-        let result = normalize_ocr_output(&request, output).unwrap();
+        let result = normalize_ocr_output(&request, unavailable_output(true)).unwrap();
 
         assert!(result.is_unavailable());
         match result.body {
@@ -888,5 +1271,104 @@ mod tests {
         let err = normalize_ocr_output(&request, output).unwrap_err();
 
         assert_eq!(err.code, "OCR_WARNING_COUNT_EXCEEDS_LIMIT");
+    }
+
+    #[test]
+    fn queued_job_records_exact_work_key_without_result() {
+        let request = request();
+        let job = OcrJobRecord::queued(&request, 100).unwrap();
+
+        assert_eq!(job.status, OcrJobStatus::Queued);
+        assert_eq!(job.work_key.scan_ref, request.source.scan_ref);
+        assert!(job.result.is_none());
+        job.validate(&OcrQueueLimits::default()).unwrap();
+    }
+
+    #[test]
+    fn running_job_increments_attempt_count_without_terminal_result() {
+        let job = OcrJobRecord::queued(&request(), 100).unwrap();
+        let running = job.mark_running(125).unwrap();
+
+        assert_eq!(running.status, OcrJobStatus::Running);
+        assert_eq!(running.retry_state.attempt_count, 1);
+        assert_eq!(running.last_started_at_ms, Some(125));
+        assert!(running.completed_at_ms.is_none());
+    }
+
+    #[test]
+    fn recognized_job_completion_binds_to_same_scan_asset_and_kind() {
+        let request = request();
+        let job = OcrJobRecord::queued(&request, 100)
+            .unwrap()
+            .mark_running(125)
+            .unwrap();
+        let result = normalize_ocr_output(&request, recognized_output()).unwrap();
+        let completed = job.complete_with_result(result, 150).unwrap();
+
+        assert_eq!(completed.status, OcrJobStatus::Recognized);
+        assert_eq!(completed.completed_at_ms, Some(150));
+        assert!(completed.result.unwrap().is_recognized());
+    }
+
+    #[test]
+    fn unavailable_job_completion_remains_retryable_when_provider_says_retryable() {
+        let request = request();
+        let job = OcrJobRecord::queued(&request, 100)
+            .unwrap()
+            .mark_running(125)
+            .unwrap();
+        let result = normalize_ocr_output(&request, unavailable_output(true)).unwrap();
+        let completed = job.complete_with_result(result, 150).unwrap();
+
+        assert_eq!(completed.status, OcrJobStatus::Unavailable);
+        assert!(completed.retry_state.retryable);
+        assert_eq!(
+            completed.retry_state.last_error_code.as_deref(),
+            Some("OCR_ADAPTERFAILURE")
+        );
+        assert!(completed.result.unwrap().is_unavailable());
+    }
+
+    #[test]
+    fn cancellation_is_terminal_without_result_or_retry() {
+        let job = OcrJobRecord::queued(&request(), 100)
+            .unwrap()
+            .mark_running(125)
+            .unwrap()
+            .cancel(150)
+            .unwrap();
+
+        assert_eq!(job.status, OcrJobStatus::Cancelled);
+        assert!(job.status.is_terminal());
+        assert!(!job.retry_state.retryable);
+        assert!(job.result.is_none());
+    }
+
+    #[test]
+    fn mismatched_result_cannot_complete_a_different_job() {
+        let request = request();
+        let mut other = request();
+        other.source.scan_ref = OcrScanRef::new("scan-2").unwrap();
+        let job = OcrJobRecord::queued(&request, 100).unwrap();
+        let result = normalize_ocr_output(&other, recognized_output()).unwrap();
+
+        let err = job.complete_with_result(result, 150).unwrap_err();
+
+        assert_eq!(err.code, "OCR_RESULT_WORK_KEY_MISMATCH");
+    }
+
+    #[test]
+    fn queued_state_rejects_fabricated_empty_success_result() {
+        let mut job = OcrJobRecord::queued(&request(), 100).unwrap();
+        job.result = Some(OcrResult {
+            scan_ref: OcrScanRef::new("scan-1").unwrap(),
+            input_asset_ref: OcrAssetRef::new("asset-1").unwrap(),
+            input_kind: OcrInputKind::OcrOptimized,
+            body: unavailable_output(false),
+        });
+
+        let err = job.validate(&OcrQueueLimits::default()).unwrap_err();
+
+        assert_eq!(err.code, "OCR_JOB_QUEUED_STATE_INVALID");
     }
 }
