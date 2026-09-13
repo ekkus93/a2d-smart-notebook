@@ -1,0 +1,25 @@
+<resources>
+    <string name="imports_title">Imports</string>
+    <string name="imports_local_first">Inspect imported files in the local library on this device. No account or A2D server is required.</string>
+    <string name="imports_summary_title">Import overview</string>
+    <string name="imports_total_count">Imports: %1$d</string>
+    <string name="imports_page_count">Imported pages: %1$d</string>
+    <string name="imports_conflict_count">Conflicts: %1$d</string>
+    <string name="imports_retryable_count">Retryable: %1$d</string>
+    <string name="imports_boundary_title">Import data boundary</string>
+    <string name="imports_api_boundary">Rust import APIs must own archive traversal, resource limits, conflict detection, durable staging, audit events, and merge decisions. This screen does not fabricate imported rows or silently merge data in Kotlin.</string>
+    <string name="imports_api_connected">Import rows are supplied by injected presentation state; retry, review, and merge actions remain callback-only until Rust import APIs are connected.</string>
+    <string name="imports_no_silent_merge">Imports must never overwrite an existing page, scan, Notebook, Page Set, collection, or asset without an explicit reviewed merge decision.</string>
+    <string name="imports_empty_title">No imports are listed yet</string>
+    <string name="imports_empty_body">Imported PDFs, images, Markdown, text, JSON, and future backup inspections will appear here after Rust supplies durable import records.</string>
+    <string name="imports_item_id">Import ID: %1$s</string>
+    <string name="imports_source">Source: %1$s</string>
+    <string name="imports_item_status">Status: %1$s</string>
+    <string name="imports_item_imported">Imported: %1$s</string>
+    <string name="imports_item_pages">Pages: %1$d</string>
+    <string name="imports_item_conflicts">Conflicts: %1$d</string>
+    <string name="imports_item_consequence">Consequence: %1$s</string>
+    <string name="imports_open_page">Open page</string>
+    <string name="imports_retry">Retry import</string>
+    <string name="imports_move_to_review">Move to Needs Review</string>
+</resources>

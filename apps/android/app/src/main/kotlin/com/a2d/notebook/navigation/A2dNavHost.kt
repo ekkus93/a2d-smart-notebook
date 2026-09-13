@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.a2d.notebook.feature.home.HomeScreen
+import com.a2d.notebook.feature.library.ImportLibraryScreen
 import com.a2d.notebook.feature.library.LibraryHubScreen
 import com.a2d.notebook.feature.library.PageBrowserScreen
 import com.a2d.notebook.feature.library.PageViewerScreen
@@ -29,6 +30,7 @@ object A2dDestinations {
     const val PAGE_VIEWER_PATTERN = "library/pages/{pageId}"
     const val NEEDS_REVIEW = "library/needs-review"
     const val SMART_PAGE_LIBRARY = "library/smart-pages"
+    const val IMPORTS = "library/imports"
     const val TRASH = "library/trash"
     const val SINGLE_PAGE_SCANNER = "scanner/single"
     const val BATCH_SCANNER = "scanner/batch"
@@ -68,6 +70,7 @@ fun A2dNavHost(navController: NavHostController) {
                 onOpenPages = { navController.navigate(A2dDestinations.PAGES) },
                 onOpenPageSets = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
                 onOpenCollections = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
+                onOpenImports = { navController.navigate(A2dDestinations.IMPORTS) },
                 onOpenNeedsReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
                 onOpenTrash = { navController.navigate(A2dDestinations.TRASH) },
             )
@@ -108,6 +111,15 @@ fun A2dNavHost(navController: NavHostController) {
             SmartPageLibraryScreen(
                 onBack = { navController.navigateUp() },
                 onCreateSmartPages = { navController.navigate(A2dDestinations.SMART_PAGES) },
+            )
+        }
+        composable(A2dDestinations.IMPORTS) {
+            ImportLibraryScreen(
+                onBack = { navController.navigateUp() },
+                onOpenPage = { pageId ->
+                    navController.navigate(A2dDestinations.pageViewer(pageId))
+                },
+                onMoveToReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
             )
         }
         composable(A2dDestinations.TRASH) {
