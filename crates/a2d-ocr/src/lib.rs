@@ -15,8 +15,6 @@ const MAX_WARNING_CODE_BYTES: usize = 80;
 const MIN_POLYGON_POINTS: usize = 3;
 const MAX_POLYGON_POINTS: usize = 8;
 
-/// Structured OCR contract error. Core/FFI integration maps these codes to the project-wide
-/// `A2dError` envelope when OCR storage and platform adapters are connected.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrContractError {
     pub code: String,
@@ -42,7 +40,6 @@ impl OcrContractError {
     }
 }
 
-/// Typed OCR reference to the Rust scan identity submitted by the caller.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct OcrScanRef(String);
 
@@ -58,7 +55,6 @@ impl OcrScanRef {
     }
 }
 
-/// Typed OCR reference to the immutable Rust asset identity submitted by the caller.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct OcrAssetRef(String);
 
@@ -74,8 +70,6 @@ impl OcrAssetRef {
     }
 }
 
-/// The result of a cancellable OCR adapter call. Cancellation is structurally distinct from OCR
-/// failure and must not be presented as a normal failed recognition.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OcrAdapterOutcome<T> {
     Completed(T),
@@ -83,7 +77,6 @@ pub enum OcrAdapterOutcome<T> {
     Failed(OcrContractError),
 }
 
-/// Resource limits Rust applies to every platform OCR adapter result before it may be persisted.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrLimits {
     pub max_image_dimension_px: u32,
@@ -131,7 +124,6 @@ impl OcrLimits {
     }
 }
 
-/// Resource limits for restart-safe OCR queue records.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrQueueLimits {
     pub max_attempt_count: u32,
@@ -160,7 +152,6 @@ impl OcrQueueLimits {
     }
 }
 
-/// Which immutable Rust-owned asset is being submitted to a platform OCR adapter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum OcrInputKind {
     Original,
@@ -168,8 +159,6 @@ pub enum OcrInputKind {
     OcrOptimized,
 }
 
-/// Bounded descriptor for the image supplied to OCR. The image bytes remain asset-owned; adapters
-/// receive or resolve bytes through platform code, then return normalized OCR results.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrImageSource {
     pub scan_ref: OcrScanRef,
@@ -217,8 +206,6 @@ impl OcrImageSource {
     }
 }
 
-/// A normalized OCR request. Provider hints are hints only; Rust remains authoritative for the
-/// source scan/asset identity and resource limits.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrRequest {
     pub source: OcrImageSource,
@@ -250,8 +237,6 @@ impl OcrRequest {
     }
 }
 
-/// Stable queue identity for one OCR attempt target. Retrying the same scan/asset/kind reuses this
-/// identity instead of creating duplicate OCR work.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct OcrWorkKey {
     pub scan_ref: OcrScanRef,
@@ -276,8 +261,6 @@ impl OcrWorkKey {
     }
 }
 
-/// Restart-safe OCR job state. Terminal states intentionally distinguish no-text success,
-/// provider unavailability/failure, and user/system cancellation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum OcrJobStatus {
     Queued,
@@ -296,8 +279,6 @@ impl OcrJobStatus {
     }
 }
 
-/// Retry state projected from OCR queue records. `retryable=false` is explicit terminal policy,
-/// not the same as a missing retry timestamp.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrRetryState {
     pub attempt_count: u32,
@@ -352,8 +333,6 @@ impl OcrRetryState {
     }
 }
 
-/// Persistence-ready OCR job projection. Storage can serialize this record without inferring
-/// whether an empty string means no text, failure, or cancellation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OcrJobRecord {
     pub work_key: OcrWorkKey,
@@ -408,13 +387,17 @@ impl OcrJobRecord {
         next.status = OcrJobStatus::Running;
         next.updated_at_ms = now_ms;
         next.last_started_at_ms = Some(now_ms);
-        next.retry_state.attempt_count = next.retry_state.attempt_count.checked_add(1).ok_or_else(|| {
-            ocr_contract_error(
-                "OCR_ATTEMPT_COUNT_OVERFLOW",
-                "OCR attempt count overflowed",
-                false,
-            )
-        })?;
+        next.retry_state.attempt_count =
+            next.retry_state
+                .attempt_count
+                .checked_add(1)
+                .ok_or_else(|| {
+                    ocr_contract_error(
+                        "OCR_ATTEMPT_COUNT_OVERFLOW",
+                        "OCR attempt count overflowed",
+                        false,
+                    )
+                })?;
         next.validate(&OcrQueueLimits::default())?;
         Ok(next)
     }
@@ -440,12 +423,11 @@ impl OcrJobRecord {
                 false,
             ));
         }
-        let status = match &result.body {
+        let mut next = self.clone();
+        next.status = match &result.body {
             OcrAdapterOutput::Recognized(_) => OcrJobStatus::Recognized,
             OcrAdapterOutput::Unavailable(_) => OcrJobStatus::Unavailable,
         };
-        let mut next = self.clone();
-        next.status = status;
         next.updated_at_ms = now_ms;
         next.completed_at_ms = Some(now_ms);
         next.retry_state.retryable = matches!(
@@ -557,7 +539,8 @@ impl OcrJobRecord {
                 }
             },
             OcrJobStatus::Unavailable => match &self.result {
-                Some(result) if result.is_unavailable() && self.work_key.matches_result(result) => {}
+                Some(result) if result.is_unavailable() && self.work_key.matches_result(result) => {
+                }
                 _ => {
                     return Err(ocr_contract_error(
                         "OCR_JOB_UNAVAILABLE_STATE_INVALID",
@@ -567,7 +550,10 @@ impl OcrJobRecord {
                 }
             },
             OcrJobStatus::Cancelled => {
-                if self.completed_at_ms.is_none() || self.result.is_some() || self.retry_state.retryable {
+                if self.completed_at_ms.is_none()
+                    || self.result.is_some()
+                    || self.retry_state.retryable
+                {
                     return Err(ocr_contract_error(
                         "OCR_JOB_CANCELLED_STATE_INVALID",
                         "cancelled OCR jobs must be terminal, non-retryable, and result-free",
@@ -587,7 +573,6 @@ impl OcrJobRecord {
     }
 }
 
-/// The OCR engine and model/adapter versions that produced a result or failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrProviderInfo {
     pub provider: String,
@@ -606,15 +591,12 @@ impl OcrProviderInfo {
     }
 }
 
-/// OCR output must distinguish actual detected text from a valid no-text outcome.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum OcrTextPresence {
     Detected,
     NoTextDetected,
 }
 
-/// OCR warning codes are persisted/audited metadata. Warning text must describe adapter state, not
-/// raw note content.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrWarning {
     pub code: String,
@@ -696,7 +678,6 @@ impl OcrPolygon {
     }
 }
 
-/// Provider confidence is optional, but unavailability must be explicit and explainable.
 #[derive(Clone, Debug, PartialEq)]
 pub enum OcrConfidence {
     Available(f32),
@@ -918,14 +899,10 @@ impl OcrResult {
     }
 }
 
-/// Platform adapters implement OCR recognition and return a cancellable outcome. Cancellation is
-/// not failure, and adapter failures should be returned as [`OcrAdapterOutput::Unavailable`]
-/// whenever the adapter reached a typed OCR failure state.
 pub trait OcrProviderAdapter {
     fn recognize(&self, request: &OcrRequest) -> OcrAdapterOutcome<OcrAdapterOutput>;
 }
 
-/// Validate and bind an adapter output to the exact scan/asset request Rust submitted.
 pub fn normalize_ocr_output(
     request: &OcrRequest,
     output: OcrAdapterOutput,
@@ -1358,7 +1335,7 @@ mod tests {
     }
 
     #[test]
-    fn queued_state_rejects_fabricated_empty_success_result() {
+    fn queued_state_rejects_fabricated_terminal_result() {
         let mut job = OcrJobRecord::queued(&request(), 100).unwrap();
         job.result = Some(OcrResult {
             scan_ref: OcrScanRef::new("scan-1").unwrap(),
