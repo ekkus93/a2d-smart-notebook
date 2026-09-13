@@ -87,6 +87,32 @@
     <string name="needs_review_resolve_as">Resolve as %1$s</string>
     <string name="needs_review_no_resolution_options">No resolution options are exposed by this presentation state.</string>
 
+    <string name="smart_page_library_title">Smart Page library</string>
+    <string name="smart_page_library_local_first">Browse generated Smart Pages, Page Sets, and Collections stored on this device.</string>
+    <string name="smart_page_library_summary_title">Generated content overview</string>
+    <string name="smart_page_library_smart_pages_count">Smart Pages: %1$d</string>
+    <string name="smart_page_library_page_sets_count">Page Sets: %1$d</string>
+    <string name="smart_page_library_collections_count">Collections: %1$d</string>
+    <string name="smart_page_library_boundary_title">Generated-content boundary</string>
+    <string name="smart_page_library_api_boundary">Rust generated-content APIs will supply durable Smart Page, Page Set, and Collection rows. This screen does not invent generated content.</string>
+    <string name="smart_page_library_api_connected">Generated-content rows are supplied by the injected presentation state.</string>
+    <string name="smart_page_library_no_id_reuse">Generated IDs must never be reused after export, restore, collection edits, or deletion.</string>
+    <string name="smart_page_library_empty_title">No generated Smart Pages are listed yet</string>
+    <string name="smart_page_library_empty_body">Create Smart Pages to produce immutable page and Page Set identities. They will appear here once the Rust listing API is connected.</string>
+    <string name="smart_page_library_create">Create Smart Pages</string>
+    <string name="smart_page_library_smart_pages_section">Smart Pages</string>
+    <string name="smart_page_library_page_sets_section">Page Sets</string>
+    <string name="smart_page_library_collections_section">Collections</string>
+    <string name="smart_page_library_smart_page_id">Smart Page ID: %1$s</string>
+    <string name="smart_page_library_page_set_id">Page Set ID: %1$s</string>
+    <string name="smart_page_library_page_count">Pages: %1$d</string>
+    <string name="smart_page_library_style">Style: %1$s</string>
+    <string name="smart_page_library_created">Created: %1$s</string>
+    <string name="smart_page_library_first_visible_page">First visible page: %1$d</string>
+    <string name="smart_page_library_collection_id">Collection ID: %1$s</string>
+    <string name="smart_page_library_collection_items">Items: %1$d</string>
+    <string name="smart_page_library_collection_rule">Rule: %1$s</string>
+
     <string name="common_back">Back</string>
     <string name="common_retry">Retry</string>
     <string name="common_cancel">Cancel</string>
