@@ -1,1 +1,1 @@
-This branch was used for PR #32, which has already been squash-merged into master. Ignore branch-only commits after `095706c10f834e1fc9c17cac74c35e4179952a80`; they are not product changes and must not be merged.
+This retired source branch is closed after PR #32 and must not be reused.
