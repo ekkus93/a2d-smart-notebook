@@ -443,7 +443,9 @@ impl OcrJobRecord {
         };
         next.retry_state.last_error_message = match &result.body {
             OcrAdapterOutput::Recognized(_) => None,
-            OcrAdapterOutput::Unavailable(unavailable) => Some(unavailable.developer_message.clone()),
+            OcrAdapterOutput::Unavailable(unavailable) => {
+                Some(unavailable.developer_message.clone())
+            }
         };
         next.result = Some(result);
         next.validate(&OcrQueueLimits::default())?;
