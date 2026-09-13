@@ -373,7 +373,11 @@ pub struct OcrRegion {
 }
 
 impl OcrRegion {
-    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), OcrContractError> {
+    fn validate(
+        &self,
+        source: &OcrImageSource,
+        limits: &OcrLimits,
+    ) -> Result<(), OcrContractError> {
         if self.text.len() > limits.max_region_text_bytes {
             return Err(ocr_contract_error(
                 "OCR_REGION_TEXT_EXCEEDS_LIMIT",
@@ -418,7 +422,11 @@ pub struct OcrRecognizedText {
 }
 
 impl OcrRecognizedText {
-    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), OcrContractError> {
+    fn validate(
+        &self,
+        source: &OcrImageSource,
+        limits: &OcrLimits,
+    ) -> Result<(), OcrContractError> {
         self.provider.validate()?;
         if self.full_text.len() > limits.max_full_text_bytes {
             return Err(ocr_contract_error(
@@ -513,7 +521,11 @@ pub enum OcrAdapterOutput {
 }
 
 impl OcrAdapterOutput {
-    fn validate(&self, source: &OcrImageSource, limits: &OcrLimits) -> Result<(), OcrContractError> {
+    fn validate(
+        &self,
+        source: &OcrImageSource,
+        limits: &OcrLimits,
+    ) -> Result<(), OcrContractError> {
         match self {
             OcrAdapterOutput::Recognized(text) => text.validate(source, limits),
             OcrAdapterOutput::Unavailable(unavailable) => unavailable.validate(limits),
@@ -561,7 +573,10 @@ pub fn normalize_ocr_output(
     })
 }
 
-fn validate_warnings(warnings: &[OcrWarning], limits: &OcrLimits) -> Result<(), OcrContractError> {
+fn validate_warnings(
+    warnings: &[OcrWarning],
+    limits: &OcrLimits,
+) -> Result<(), OcrContractError> {
     if warnings.len() > limits.max_warning_count {
         return Err(ocr_contract_error(
             "OCR_WARNING_COUNT_EXCEEDS_LIMIT",
