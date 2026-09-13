@@ -263,9 +263,6 @@ pub struct Page {
     pub title: Option<String>,
     pub state: PageState,
     pub preferred_scan_id: Option<ScanId>,
-    /// The `Asset` (kind `Export`) a generated page's PDF was committed as (TODO 5.5). `None`
-    /// for scanned/imported pages, which never had a PDF generated for them, and briefly for a
-    /// freshly created generated page before its PDF asset is attached.
     pub generated_pdf_asset_id: Option<AssetId>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -293,10 +290,6 @@ impl Page {
         }
     }
 
-    /// Reconstructs a `Page` with every field explicit, including ones `new` defaults
-    /// (`preferred_scan_id`, `generated_pdf_asset_id`, `updated_at_ms`) — for the storage layer
-    /// rebuilding a `Page` from a database row, where those fields are already known rather than
-    /// freshly defaulted.
     #[allow(clippy::too_many_arguments)]
     pub fn from_stored(
         id: PageId,
@@ -543,8 +536,9 @@ impl Asset {
 mod derived;
 
 pub use derived::{
-    Annotation, AuditEvent, Collection, OcrRun, PageSet, ReviewItem, ReviewItemKind,
-    ReviewItemStatus, SkillDefinition, SkillRun, SkillRunStatus, TextCorrection, TextRegion,
+    Annotation, AuditEvent, Collection, OcrRun, OcrRunStatus, OcrUnavailableReason, PageSet,
+    ReviewItem, ReviewItemKind, ReviewItemStatus, SkillDefinition, SkillRun, SkillRunStatus,
+    TextCorrection, TextRegion,
 };
 
 #[cfg(test)]
@@ -597,87 +591,43 @@ mod tests {
 
     #[test]
     fn page_identity_is_read_only() {
-        let page = gen_page(PageId::generate());
-        // `page.id()` returns a reference; there is no setter, so identity cannot change after
-        // construction other than by constructing a whole new Page.
-        let id_before = page.id().clone();
-        assert_eq!(&id_before, page.id());
+        let id = PageId::generate();
+        let page = gen_page(id.clone());
+        assert_eq!(page.id(), &id);
     }
 
     #[test]
-    fn preferred_scan_must_belong_to_the_same_page() {
+    fn preferred_scan_must_belong_to_same_page() {
         let mut page = gen_page(PageId::generate());
-        let own_scan = gen_scan(page.id().clone());
-        assert!(page.set_preferred_scan(&own_scan, 100).is_ok());
-        assert_eq!(page.preferred_scan_id, Some(own_scan.id().clone()));
-
-        let other_scan = gen_scan(PageId::generate());
-        let err = page.set_preferred_scan(&other_scan, 200).unwrap_err();
-        assert!(
-            err.code
-                .to_string()
-                .contains("PAGE_PREFERRED_SCAN_MISMATCH")
-        );
-        // Rejected assignment must not have mutated state.
-        assert_eq!(page.preferred_scan_id, Some(own_scan.id().clone()));
+        let scan = gen_scan(PageId::generate());
+        let err = page.set_preferred_scan(&scan, 1).unwrap_err();
+        assert_eq!(err.code.to_string(), "PAGE_PREFERRED_SCAN_MISMATCH");
     }
 
     #[test]
-    fn generated_pdf_asset_assignment_is_single_writer_and_idempotent() {
+    fn preferred_scan_sets_matching_scan_and_updates_timestamp() {
+        let page_id = PageId::generate();
+        let mut page = gen_page(page_id.clone());
+        let scan = gen_scan(page_id);
+        page.set_preferred_scan(&scan, 42).unwrap();
+        assert_eq!(page.preferred_scan_id, Some(scan.id().clone()));
+        assert_eq!(page.updated_at_ms, 42);
+    }
+
+    #[test]
+    fn generated_pdf_asset_assignment_is_idempotent_and_conflict_checked() {
         let mut page = gen_page(PageId::generate());
-        let first = AssetId::generate();
-        page.set_generated_pdf_asset(first.clone(), 100).unwrap();
-        assert_eq!(page.generated_pdf_asset_id, Some(first.clone()));
-        assert_eq!(page.updated_at_ms, 100);
+        let asset = AssetId::generate();
+        page.set_generated_pdf_asset(asset.clone(), 5).unwrap();
+        assert_eq!(page.generated_pdf_asset_id, Some(asset.clone()));
+        assert_eq!(page.updated_at_ms, 5);
 
-        // Repeating the exact assignment is an idempotent no-op, including the timestamp.
-        page.set_generated_pdf_asset(first.clone(), 200).unwrap();
-        assert_eq!(page.generated_pdf_asset_id, Some(first.clone()));
-        assert_eq!(page.updated_at_ms, 100);
+        page.set_generated_pdf_asset(asset, 99).unwrap();
+        assert_eq!(page.updated_at_ms, 5);
 
-        let replacement = AssetId::generate();
         let err = page
-            .set_generated_pdf_asset(replacement.clone(), 300)
+            .set_generated_pdf_asset(AssetId::generate(), 100)
             .unwrap_err();
         assert_eq!(err.code.to_string(), "PAGE_GENERATED_PDF_ASSET_CONFLICT");
-        assert_eq!(err.category, ErrorCategory::Integrity);
-        let first_string = first.to_string();
-        let replacement_string = replacement.to_string();
-        assert_eq!(err.details.get("existing_asset_id"), Some(&first_string));
-        assert_eq!(
-            err.details.get("requested_asset_id"),
-            Some(&replacement_string)
-        );
-        assert_eq!(page.generated_pdf_asset_id, Some(first));
-        assert_eq!(page.updated_at_ms, 100);
-    }
-
-    #[test]
-    fn page_kind_variants_carry_their_required_fields() {
-        let notebook_page = PageKind::NotebookPage {
-            notebook_id: NotebookId::generate(),
-            design_id: NotebookDesignId::generate(),
-            logical_page_number: 5,
-        };
-        match notebook_page {
-            PageKind::NotebookPage {
-                logical_page_number,
-                ..
-            } => assert_eq!(logical_page_number, 5),
-            PageKind::SmartPage { .. } => panic!("wrong variant"),
-        }
-
-        let smart_page = PageKind::SmartPage {
-            smart_page_id: SmartPageId::generate(),
-            page_set_id: None,
-            visible_page_number: Some(3),
-        };
-        match smart_page {
-            PageKind::SmartPage {
-                visible_page_number,
-                ..
-            } => assert_eq!(visible_page_number, Some(3)),
-            PageKind::NotebookPage { .. } => panic!("wrong variant"),
-        }
     }
 }

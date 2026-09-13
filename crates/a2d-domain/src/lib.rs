@@ -8,9 +8,10 @@ pub mod id;
 pub use clock::{Clock, SystemClock, system_now_ms, unix_millis};
 pub use entities::{
     Annotation, Asset, AssetKind, AuditEvent, CaptureSource, Collection, EncryptionState, LayoutId,
-    Notebook, NotebookDesign, OcrRun, Page, PageKind, PageSet, PageState, PhysicalCopy, Provenance,
-    QualityStatus, ReviewItem, ReviewItemKind, ReviewItemStatus, Scan, SkillDefinition, SkillRun,
-    SkillRunStatus, TextCorrection, TextRegion, TrimSizeMm, TrustState,
+    Notebook, NotebookDesign, OcrRun, OcrRunStatus, OcrUnavailableReason, Page, PageKind, PageSet,
+    PageState, PhysicalCopy, Provenance, QualityStatus, ReviewItem, ReviewItemKind,
+    ReviewItemStatus, Scan, SkillDefinition, SkillRun, SkillRunStatus, TextCorrection, TextRegion,
+    TrimSizeMm, TrustState,
 };
 pub use error::{A2dError, A2dErrorFields, ErrorCategory, ErrorCode, ErrorSeverity, Outcome};
 pub use id::{

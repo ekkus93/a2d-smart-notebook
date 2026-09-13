@@ -2,7 +2,7 @@
 
 use a2d_domain::{
     A2dError, Asset, AssetId, AuditEvent, AuditEventId, ErrorCategory, ErrorCode, ErrorSeverity,
-    OcrRun, OcrRunId, PageId, Scan, ScanId,
+    OcrRun, OcrRunId, OcrRunStatus, OcrUnavailableReason, PageId, Scan, ScanId,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -379,17 +379,24 @@ impl OcrRunRepository for Connection {
         let warnings = encode_json(&run.warnings, "warnings")?;
         let provenance_warnings = encode_json(&run.provenance.warnings, "provenance_warnings")?;
         self.execute(
-            "INSERT INTO ocr_runs (id, scan_id, provider, provider_version, full_text, \
-             warnings, provenance_source_page_id, provenance_source_scan_id, \
+            "INSERT INTO ocr_runs (id, scan_id, input_asset_id, provider, provider_version, \
+             model_name, status, full_text, unavailable_reason, unavailable_message, \
+             completed_at_ms, warnings, provenance_source_page_id, provenance_source_scan_id, \
              provenance_producing_component, provenance_component_version, \
              provenance_created_at_ms, provenance_warnings, provenance_user_approved) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             params![
                 run.id().to_string(),
                 run.scan_id.to_string(),
+                run.input_asset_id.as_ref().map(ToString::to_string),
                 run.provider,
                 run.provider_version,
+                run.model_name,
+                ocr_run_status_to_str(run.status),
                 run.full_text,
+                run.unavailable_reason.map(ocr_unavailable_reason_to_str),
+                run.unavailable_message,
+                run.completed_at_ms,
                 warnings,
                 run.provenance
                     .source_page_id
@@ -412,8 +419,9 @@ impl OcrRunRepository for Connection {
 
     fn get_ocr_run(&self, id: &OcrRunId) -> Result<Option<OcrRun>, A2dError> {
         self.query_row(
-            "SELECT id, scan_id, provider, provider_version, full_text, warnings, \
-             provenance_source_page_id, provenance_source_scan_id, \
+            "SELECT id, scan_id, input_asset_id, provider, provider_version, model_name, \
+             status, full_text, unavailable_reason, unavailable_message, completed_at_ms, \
+             warnings, provenance_source_page_id, provenance_source_scan_id, \
              provenance_producing_component, provenance_component_version, \
              provenance_created_at_ms, provenance_warnings, provenance_user_approved \
              FROM ocr_runs WHERE id = ?1",
@@ -422,17 +430,23 @@ impl OcrRunRepository for Connection {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                    row.get::<_, Option<String>>(6)?,
-                    row.get::<_, Option<String>>(7)?,
-                    row.get::<_, String>(8)?,
-                    row.get::<_, String>(9)?,
-                    row.get::<_, i64>(10)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, Option<i64>>(10)?,
                     row.get::<_, String>(11)?,
-                    row.get::<_, Option<bool>>(12)?,
+                    row.get::<_, Option<String>>(12)?,
+                    row.get::<_, Option<String>>(13)?,
+                    row.get::<_, String>(14)?,
+                    row.get::<_, String>(15)?,
+                    row.get::<_, i64>(16)?,
+                    row.get::<_, String>(17)?,
+                    row.get::<_, Option<bool>>(18)?,
                 ))
             },
         )
@@ -442,9 +456,15 @@ impl OcrRunRepository for Connection {
             |(
                 id,
                 scan_id,
+                input_asset_id,
                 provider,
                 provider_version,
+                model_name,
+                status,
                 full_text,
+                unavailable_reason,
+                unavailable_message,
+                completed_at_ms,
                 warnings,
                 prov_source_page_id,
                 prov_source_scan_id,
@@ -454,12 +474,20 @@ impl OcrRunRepository for Connection {
                 prov_warnings,
                 prov_user_approved,
             )| {
-                Ok(OcrRun::new(
+                OcrRun::from_stored(
                     OcrRunId::parse(&id)?,
                     ScanId::parse(&scan_id)?,
+                    input_asset_id.map(|s| AssetId::parse(&s)).transpose()?,
                     provider,
                     provider_version,
+                    model_name,
+                    ocr_run_status_from_str(&status)?,
                     full_text,
+                    unavailable_reason
+                        .map(|value| ocr_unavailable_reason_from_str(&value))
+                        .transpose()?,
+                    unavailable_message,
+                    completed_at_ms,
                     decode_json(&warnings, "warnings")?,
                     a2d_domain::Provenance {
                         source_page_id: prov_source_page_id
@@ -474,10 +502,48 @@ impl OcrRunRepository for Connection {
                         warnings: decode_json(&prov_warnings, "provenance_warnings")?,
                         user_approved: prov_user_approved,
                     },
-                ))
+                )
             },
         )
         .transpose()
+    }
+}
+
+fn ocr_run_status_to_str(status: OcrRunStatus) -> &'static str {
+    match status {
+        OcrRunStatus::Detected => "Detected",
+        OcrRunStatus::NoTextDetected => "NoTextDetected",
+        OcrRunStatus::Unavailable => "Unavailable",
+    }
+}
+
+fn ocr_run_status_from_str(raw: &str) -> Result<OcrRunStatus, A2dError> {
+    match raw {
+        "Detected" => Ok(OcrRunStatus::Detected),
+        "NoTextDetected" => Ok(OcrRunStatus::NoTextDetected),
+        "Unavailable" => Ok(OcrRunStatus::Unavailable),
+        other => Err(corrupt_enum_error("ocr_runs.status", other)),
+    }
+}
+
+fn ocr_unavailable_reason_to_str(reason: OcrUnavailableReason) -> &'static str {
+    match reason {
+        OcrUnavailableReason::ProviderUnavailable => "ProviderUnavailable",
+        OcrUnavailableReason::ProviderFailed => "ProviderFailed",
+        OcrUnavailableReason::ResourceUnavailable => "ResourceUnavailable",
+        OcrUnavailableReason::UnsupportedInput => "UnsupportedInput",
+        OcrUnavailableReason::Cancelled => "Cancelled",
+    }
+}
+
+fn ocr_unavailable_reason_from_str(raw: &str) -> Result<OcrUnavailableReason, A2dError> {
+    match raw {
+        "ProviderUnavailable" => Ok(OcrUnavailableReason::ProviderUnavailable),
+        "ProviderFailed" => Ok(OcrUnavailableReason::ProviderFailed),
+        "ResourceUnavailable" => Ok(OcrUnavailableReason::ResourceUnavailable),
+        "UnsupportedInput" => Ok(OcrUnavailableReason::UnsupportedInput),
+        "Cancelled" => Ok(OcrUnavailableReason::Cancelled),
+        other => Err(corrupt_enum_error("ocr_runs.unavailable_reason", other)),
     }
 }
 
