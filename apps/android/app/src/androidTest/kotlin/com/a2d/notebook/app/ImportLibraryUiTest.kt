@@ -83,13 +83,13 @@ class ImportLibraryUiTest {
 
         composeRule.onNodeWithText("Imports: 1").assertIsDisplayed()
         composeRule.onNodeWithText("Imported pages: 3").assertIsDisplayed()
-        composeRule.onNodeWithText("Conflicts: 1").assertIsDisplayed()
         composeRule.onNodeWithText("Retryable: 1").assertIsDisplayed()
         composeRule.onNodeWithTag(ImportLibraryTestTags.ITEM).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Biology worksheet import").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Import ID: import-1").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(ImportLibraryTestTags.SOURCE).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Status: conflict requires review").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Imported: inspected locally").performScrollTo().assertIsDisplayed()
         composeRule
             .onNodeWithText("explicit merge before any existing page ID changes", substring = true)
             .performScrollTo()
