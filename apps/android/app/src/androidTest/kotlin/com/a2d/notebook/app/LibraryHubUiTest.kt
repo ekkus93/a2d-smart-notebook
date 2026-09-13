@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.a2d.notebook.feature.library.LibraryHubScreen
 import com.a2d.notebook.feature.library.LibraryHubState
@@ -37,13 +38,13 @@ class LibraryHubUiTest {
         composeRule.onNodeWithTag(LibraryHubTestTags.STATUS).assertIsDisplayed()
         composeRule.onNodeWithText("Total visible library entries: 0").assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.EMPTY_STATE).assertIsDisplayed()
-        composeRule.onNodeWithTag(LibraryHubTestTags.NOTEBOOKS).assertIsDisplayed()
-        composeRule.onNodeWithTag(LibraryHubTestTags.SMART_PAGES).assertIsDisplayed()
-        composeRule.onNodeWithTag(LibraryHubTestTags.PAGE_SETS).assertIsDisplayed()
-        composeRule.onNodeWithTag(LibraryHubTestTags.COLLECTIONS).assertIsDisplayed()
-        composeRule.onNodeWithTag(LibraryHubTestTags.IMPORTS).assertIsDisplayed()
-        composeRule.onNodeWithTag(LibraryHubTestTags.NEEDS_REVIEW).assertIsDisplayed()
-        composeRule.onNodeWithTag(LibraryHubTestTags.TRASH).assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.NOTEBOOKS).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.SMART_PAGES).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.PAGE_SETS).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.COLLECTIONS).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.IMPORTS).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.NEEDS_REVIEW).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.TRASH).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -70,15 +71,16 @@ class LibraryHubUiTest {
 
         composeRule.onNodeWithTag(LibraryHubTestTags.STATUS).assertIsDisplayed()
         composeRule.onNodeWithText("Total visible library entries: 28").assertIsDisplayed()
-        composeRule.onNodeWithText("Notebooks: 2").assertIsDisplayed()
-        composeRule.onNodeWithText("Smart Pages: 3").assertIsDisplayed()
-        composeRule.onNodeWithText("Page Sets: 4").assertIsDisplayed()
-        composeRule.onNodeWithText("Collections: 5").assertIsDisplayed()
-        composeRule.onNodeWithText("Imports: 6").assertIsDisplayed()
-        composeRule.onNodeWithText("Needs Review: 1").assertIsDisplayed()
-        composeRule.onNodeWithText("Trash: 7").assertIsDisplayed()
+        composeRule.onNodeWithText("Notebooks: 2").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Smart Pages: 3").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Page Sets: 4").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Collections: 5").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Imports: 6").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Needs Review: 1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Trash: 7").performScrollTo().assertIsDisplayed()
         composeRule
             .onNodeWithText("Search, OCR, backup, restore, and full page browsing remain separate roadmap slices.")
+            .performScrollTo()
             .assertIsDisplayed()
     }
 }
