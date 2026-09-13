@@ -177,7 +177,10 @@ fn unavailable_ocr_result_persists_reason_without_text() {
 
     assert_eq!(loaded.status, OcrRunStatus::Unavailable);
     assert_eq!(loaded.full_text, "");
-    assert_eq!(loaded.unavailable_reason, Some(OcrUnavailableReason::ProviderFailed));
+    assert_eq!(
+        loaded.unavailable_reason,
+        Some(OcrUnavailableReason::ProviderFailed)
+    );
     assert_eq!(
         loaded.unavailable_message.as_deref(),
         Some("provider returned a non-retryable failure")
