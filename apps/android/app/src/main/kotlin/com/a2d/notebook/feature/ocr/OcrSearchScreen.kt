@@ -45,6 +45,7 @@ fun OcrSearchScreen(
     searchController: AndroidOcrSearchController? = null,
 ) {
     var state by remember { mutableStateOf(OcrSearchPresentationState.noQuery()) }
+    val notConnectedMessage = stringResource(R.string.ocr_search_not_connected)
     OcrSearchContent(
         state = state,
         onBack = onBack,
@@ -54,7 +55,7 @@ fun OcrSearchScreen(
                 searchController?.submit(query)
                     ?: OcrSearchPresentationState.error(
                         query = query.trim(),
-                        message = stringResource(R.string.ocr_search_not_connected),
+                        message = notConnectedMessage,
                     )
         },
         onOpenPage = onOpenPage,
@@ -163,7 +164,12 @@ private fun OcrSearchErrorCard(errorMessage: String?) {
                 text = stringResource(R.string.ocr_search_error_title),
                 style = MaterialTheme.typography.titleMedium,
             )
-            Text(stringResource(R.string.common_error_prefix, errorMessage ?: stringResource(R.string.common_unknown)))
+            Text(
+                stringResource(
+                    R.string.common_error_prefix,
+                    errorMessage ?: stringResource(R.string.common_unknown),
+                ),
+            )
         }
     }
 }
