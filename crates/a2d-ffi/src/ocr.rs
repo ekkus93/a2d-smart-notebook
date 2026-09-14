@@ -212,8 +212,10 @@ mod tests {
     use crate::OpenLibraryRequest;
 
     fn open_test_client() -> Arc<A2dClient> {
-        let dir =
-            std::env::temp_dir().join(format!("a2d-ffi-ocr-test-{}", a2d_domain::PageId::generate()));
+        let dir = std::env::temp_dir().join(format!(
+            "a2d-ffi-ocr-test-{}",
+            a2d_domain::PageId::generate()
+        ));
         A2dClient::open(OpenLibraryRequest {
             library_path: dir.to_string_lossy().into_owned(),
         })
@@ -236,7 +238,11 @@ mod tests {
         assert_eq!(details.code, "CORE_OCR_IMAGE_DIMENSIONS_INVALID");
         assert_eq!(details.category, "Ocr");
         assert_eq!(
-            details.details.iter().map(|detail| detail.key.as_str()).collect::<Vec<_>>(),
+            details
+                .details
+                .iter()
+                .map(|detail| detail.key.as_str())
+                .collect::<Vec<_>>(),
             vec!["height_px", "width_px"]
         );
     }
