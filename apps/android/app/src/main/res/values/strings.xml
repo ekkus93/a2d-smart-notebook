@@ -75,6 +75,7 @@
     <string name="page_viewer_page_id">Page ID: %1$s</string>
     <string name="page_viewer_notebook">Notebook: %1$s</string>
     <string name="page_viewer_visible_page">Visible page: %1$s</string>
+    <string name="page_viewer_scan_id">Scan ID: %1$s</string>
     <string name="page_viewer_status">Status: %1$s</string>
     <string name="page_viewer_updated">Updated: %1$s</string>
     <string name="page_viewer_needs_review_badge">Needs Review</string>
@@ -86,9 +87,23 @@
     <string name="page_viewer_corrected_title">Corrected</string>
     <string name="page_viewer_corrected_available">Corrected image is available from Rust-owned derived asset metadata.</string>
     <string name="page_viewer_corrected_unavailable">No corrected image is displayed until Rust supplies a derived corrected asset.</string>
-    <string name="page_viewer_text_title">Text</string>
+    <string name="page_viewer_text_title">OCR text</string>
     <string name="page_viewer_text_available">Recognized text is available from OCR provenance.</string>
     <string name="page_viewer_text_unavailable">OCR text remains unavailable until Milestone 11 supplies recognized and corrected text.</string>
+    <string name="page_viewer_text_not_started">OCR has not run for this page yet. Android must ask Rust to prepare the scan-owned image before any provider reads it.</string>
+    <string name="page_viewer_text_preparing">Preparing OCR input through Rust scan and asset validation…</string>
+    <string name="page_viewer_text_recognizing">Recognizing text with the Android OCR provider…</string>
+    <string name="page_viewer_text_recording">Recording the terminal OCR outcome through Rust…</string>
+    <string name="page_viewer_text_no_text_detected">OCR completed successfully and detected no text; this is distinct from provider failure.</string>
+    <string name="page_viewer_text_unavailable_reason">OCR unavailable: %1$s. The failure is recorded explicitly instead of empty text.</string>
+    <string name="page_viewer_text_failed">OCR workflow failed before a terminal result was recorded.</string>
+    <string name="page_viewer_text_cancelled">OCR was cancelled and is tracked separately from provider failure.</string>
+    <string name="page_viewer_text_run_id">OCR run: %1$s</string>
+    <string name="page_viewer_text_provider">Provider: %1$s</string>
+    <string name="page_viewer_text_model">Model: %1$s</string>
+    <string name="page_viewer_text_preview">Text preview: %1$s</string>
+    <string name="page_viewer_text_message">OCR detail: %1$s</string>
+    <string name="page_viewer_start_ocr">Run OCR</string>
     <string name="page_viewer_split_title">Split</string>
     <string name="page_viewer_split_boundary">Split image/text view remains disabled until both corrected image and OCR text are available from Rust-owned records.</string>
     <string name="page_viewer_metadata_title">Metadata</string>
@@ -156,6 +171,7 @@
     <string name="common_error_prefix">Error: %1$s</string>
     <string name="common_details">Details</string>
     <string name="common_close">Close</string>
+    <string name="common_unknown">unknown</string>
 
     <string name="notebooks_title">Notebooks</string>
     <string name="notebooks_add">Add Notebook</string>
