@@ -109,6 +109,6 @@ class OcrSearchUiTest {
         composeRule
             .onNodeWithText("STORAGE_OCR_SEARCH_QUERY_EXCEEDS_LIMIT", substring = true)
             .assertIsDisplayed()
-        composeRule.onAllNodesWithTag(OcrSearchTestTags.RESULT_ROW).assertCountEquals(0)
+        assertEquals(0, composeRule.onAllNodesWithTag(OcrSearchTestTags.RESULT_ROW).fetchSemanticsNodes().size)
     }
 }
