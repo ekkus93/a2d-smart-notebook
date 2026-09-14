@@ -394,6 +394,10 @@ fn ocr_state_error(code: &'static str, message: &'static str) -> A2dError {
     )
 }
 
+const MIN_TEXT_REGION_POLYGON_POINTS: usize = 3;
+const MAX_TEXT_REGION_POLYGON_POINTS: usize = 8;
+const MAX_TEXT_REGION_TEXT_BYTES: usize = 20_000;
+
 /// INFERRED — spec §15.7: "polygons, confidence where available, source region."
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextRegion {
@@ -406,9 +410,124 @@ pub struct TextRegion {
 }
 
 impl TextRegion {
+    pub fn new(
+        id: TextRegionId,
+        ocr_run_id: OcrRunId,
+        polygon: Vec<(f32, f32)>,
+        text: String,
+        confidence: Option<f32>,
+        created_at_ms: i64,
+    ) -> Result<Self, A2dError> {
+        Self::from_stored(id, ocr_run_id, polygon, text, confidence, created_at_ms)
+    }
+
+    pub fn from_stored(
+        id: TextRegionId,
+        ocr_run_id: OcrRunId,
+        polygon: Vec<(f32, f32)>,
+        text: String,
+        confidence: Option<f32>,
+        created_at_ms: i64,
+    ) -> Result<Self, A2dError> {
+        validate_text_region(&polygon, &text, confidence, created_at_ms)?;
+        Ok(Self {
+            id,
+            ocr_run_id,
+            polygon,
+            text,
+            confidence,
+            created_at_ms,
+        })
+    }
+
     pub fn id(&self) -> &TextRegionId {
         &self.id
     }
+}
+
+fn validate_text_region(
+    polygon: &[(f32, f32)],
+    text: &str,
+    confidence: Option<f32>,
+    created_at_ms: i64,
+) -> Result<(), A2dError> {
+    if polygon.len() < MIN_TEXT_REGION_POLYGON_POINTS
+        || polygon.len() > MAX_TEXT_REGION_POLYGON_POINTS
+    {
+        return Err(text_region_state_error(
+            "TEXT_REGION_POLYGON_POINT_COUNT_INVALID",
+            "text-region polygon point count must be bounded",
+        )
+        .with_detail("point_count", polygon.len().to_string())
+        .with_detail(
+            "min_polygon_points",
+            MIN_TEXT_REGION_POLYGON_POINTS.to_string(),
+        )
+        .with_detail(
+            "max_polygon_points",
+            MAX_TEXT_REGION_POLYGON_POINTS.to_string(),
+        ));
+    }
+    for (point_index, (x, y)) in polygon.iter().copied().enumerate() {
+        validate_text_region_coordinate(x, "x", point_index)?;
+        validate_text_region_coordinate(y, "y", point_index)?;
+    }
+    if text.is_empty() {
+        return Err(text_region_state_error(
+            "TEXT_REGION_TEXT_EMPTY",
+            "text regions must carry non-empty recognized text",
+        ));
+    }
+    if text.len() > MAX_TEXT_REGION_TEXT_BYTES {
+        return Err(text_region_state_error(
+            "TEXT_REGION_TEXT_EXCEEDS_LIMIT",
+            "text-region text exceeds the configured OCR region limit",
+        )
+        .with_detail("text_bytes", text.len().to_string())
+        .with_detail("max_text_bytes", MAX_TEXT_REGION_TEXT_BYTES.to_string()));
+    }
+    if let Some(confidence) = confidence
+        && (!confidence.is_finite() || !(0.0..=1.0).contains(&confidence))
+    {
+        return Err(text_region_state_error(
+            "TEXT_REGION_CONFIDENCE_INVALID",
+            "text-region confidence must be finite and between 0.0 and 1.0",
+        ));
+    }
+    if created_at_ms < 0 {
+        return Err(text_region_state_error(
+            "TEXT_REGION_TIMESTAMP_INVALID",
+            "text-region timestamp must be non-negative milliseconds",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_text_region_coordinate(
+    value: f32,
+    coordinate: &'static str,
+    point_index: usize,
+) -> Result<(), A2dError> {
+    if !value.is_finite() || value < 0.0 {
+        return Err(text_region_state_error(
+            "TEXT_REGION_POLYGON_COORDINATE_INVALID",
+            "text-region polygon coordinates must be finite and non-negative",
+        )
+        .with_detail("coordinate", coordinate)
+        .with_detail("point_index", point_index.to_string()));
+    }
+    Ok(())
+}
+
+fn text_region_state_error(code: &'static str, message: &'static str) -> A2dError {
+    A2dError::new(
+        ErrorCode::new(code),
+        ErrorCategory::Ocr,
+        ErrorSeverity::Error,
+        "error.ocr.text_region_invalid",
+        message,
+        false,
+    )
 }
 
 /// INFERRED — spec §15.7: "correction history" implies each correction is its own record rather
