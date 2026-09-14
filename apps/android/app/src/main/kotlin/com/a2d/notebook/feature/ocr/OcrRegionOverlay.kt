@@ -15,7 +15,11 @@ data class OcrRegionOverlayRegion(
     val confidence: Float?,
 ) {
     val isRenderable: Boolean
-        get() = polygon.size >= 3 && polygon.all { it.x.isFinite() && it.y.isFinite() && it.x >= 0f && it.y >= 0f }
+        get() =
+            polygon.size >= 3 &&
+                polygon.all { point ->
+                    point.x.isFinite() && point.y.isFinite() && point.x >= 0f && point.y >= 0f
+                }
 }
 
 data class OcrRegionOverlayState(
