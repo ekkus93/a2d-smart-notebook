@@ -19,9 +19,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
+
+object OcrRegionOverlayTestTags {
+    const val CARD = "ocr_region_overlay_card"
+    const val CANVAS = "ocr_region_overlay_canvas"
+    const val DISABLED = "ocr_region_overlay_disabled"
+    const val SELECTED = "ocr_region_overlay_selected"
+}
 
 @Composable
 fun OcrRegionOverlayCard(
@@ -35,14 +43,17 @@ fun OcrRegionOverlayCard(
     val selectedRegion =
         overlay.renderableRegions.firstOrNull { it.textRegionId == selectedRegionId }
 
-    Card(modifier.fillMaxWidth()) {
+    Card(modifier.fillMaxWidth().testTag(OcrRegionOverlayTestTags.CARD)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = stringResource(R.string.page_viewer_ocr_region_overlay_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             if (!overlay.enabled || frame == null) {
-                Text(stringResource(R.string.page_viewer_ocr_region_overlay_disabled))
+                Text(
+                    text = stringResource(R.string.page_viewer_ocr_region_overlay_disabled),
+                    modifier = Modifier.testTag(OcrRegionOverlayTestTags.DISABLED),
+                )
                 return@Column
             }
 
@@ -59,6 +70,7 @@ fun OcrRegionOverlayCard(
                     Modifier
                         .fillMaxWidth()
                         .aspectRatio(frame.aspectRatio.coerceIn(0.5f, 2.5f))
+                        .testTag(OcrRegionOverlayTestTags.CANVAS)
                         .pointerInput(frame, overlay.renderableRegions) {
                             detectTapGestures { tap ->
                                 val sourceX = tap.x * frame.width / size.width
@@ -79,22 +91,27 @@ fun OcrRegionOverlayCard(
             }
 
             if (selectedRegion != null) {
-                Text(
-                    stringResource(
-                        R.string.page_viewer_ocr_region_selected_text,
-                        selectedRegion.text,
-                    ),
-                )
-                val confidence = selectedRegion.confidence
-                if (confidence == null) {
-                    Text(stringResource(R.string.page_viewer_ocr_region_confidence_unavailable))
-                } else {
+                Column(
+                    modifier = Modifier.testTag(OcrRegionOverlayTestTags.SELECTED),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Text(
                         stringResource(
-                            R.string.page_viewer_ocr_region_confidence,
-                            (confidence.coerceIn(0f, 1f) * 100f).toInt(),
+                            R.string.page_viewer_ocr_region_selected_text,
+                            selectedRegion.text,
                         ),
                     )
+                    val confidence = selectedRegion.confidence
+                    if (confidence == null) {
+                        Text(stringResource(R.string.page_viewer_ocr_region_confidence_unavailable))
+                    } else {
+                        Text(
+                            stringResource(
+                                R.string.page_viewer_ocr_region_confidence,
+                                (confidence.coerceIn(0f, 1f) * 100f).toInt(),
+                            ),
+                        )
+                    }
                 }
             } else {
                 Text(stringResource(R.string.page_viewer_ocr_region_tap_hint))
