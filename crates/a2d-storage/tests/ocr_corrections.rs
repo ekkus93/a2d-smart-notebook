@@ -16,10 +16,8 @@ struct ScanFixture {
 }
 
 fn open_reopenable_storage() -> (Storage, PathBuf) {
-    let dir = std::env::temp_dir().join(format!(
-        "a2d-storage-ocr-correction-{}",
-        PageId::generate()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("a2d-storage-ocr-correction-{}", PageId::generate()));
     std::fs::create_dir_all(&dir).unwrap();
     let storage = Storage::open(&dir.join("library.sqlite")).unwrap();
     (storage, dir)

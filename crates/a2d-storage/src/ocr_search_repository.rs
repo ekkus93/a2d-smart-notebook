@@ -281,11 +281,12 @@ impl TextCorrectionRepository for Connection {
                  FROM text_corrections WHERE scan_id = ?1 \
                  ORDER BY provenance_created_at_ms ASC, id ASC LIMIT ?2",
             )
-            .map_err(|error| {
-                map_rusqlite_error("list_text_corrections_for_scan.prepare", error)
-            })?;
+            .map_err(|error| map_rusqlite_error("list_text_corrections_for_scan.prepare", error))?;
         let rows = statement
-            .query_map(params![scan_id.to_string(), limit as i64], text_correction_row)
+            .query_map(
+                params![scan_id.to_string(), limit as i64],
+                text_correction_row,
+            )
             .map_err(|error| map_rusqlite_error("list_text_corrections_for_scan.query", error))?;
 
         let mut corrections = Vec::new();
@@ -347,13 +348,19 @@ fn text_correction_from_row(row: TextCorrectionRow) -> Result<TextCorrectionReco
     ) = row;
     Ok(TextCorrectionRecord {
         id: TextCorrectionId::parse(&id)?,
-        text_region_id: text_region_id.map(|value| TextRegionId::parse(&value)).transpose()?,
+        text_region_id: text_region_id
+            .map(|value| TextRegionId::parse(&value))
+            .transpose()?,
         scan_id: ScanId::parse(&scan_id)?,
         corrected_text,
         previous_text,
         provenance: Provenance {
-            source_page_id: source_page_id.map(|value| PageId::parse(&value)).transpose()?,
-            source_scan_id: source_scan_id.map(|value| ScanId::parse(&value)).transpose()?,
+            source_page_id: source_page_id
+                .map(|value| PageId::parse(&value))
+                .transpose()?,
+            source_scan_id: source_scan_id
+                .map(|value| ScanId::parse(&value))
+                .transpose()?,
             producing_component,
             component_version,
             created_at_ms,

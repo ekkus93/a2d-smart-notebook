@@ -169,15 +169,13 @@ impl A2dCore {
                     )
                     .with_detail("text_region_id", region_id.to_string())
                 })?;
-                let run = storage
-                    .get_ocr_run(&region.ocr_run_id)?
-                    .ok_or_else(|| {
-                        ocr_correction_error(
-                            "CORE_OCR_CORRECTION_REGION_OCR_RUN_MISSING",
-                            "OCR correction text region must reference an existing OCR run",
-                        )
-                        .with_detail("ocr_run_id", region.ocr_run_id.to_string())
-                    })?;
+                let run = storage.get_ocr_run(&region.ocr_run_id)?.ok_or_else(|| {
+                    ocr_correction_error(
+                        "CORE_OCR_CORRECTION_REGION_OCR_RUN_MISSING",
+                        "OCR correction text region must reference an existing OCR run",
+                    )
+                    .with_detail("ocr_run_id", region.ocr_run_id.to_string())
+                })?;
                 if run.scan_id != scan_id {
                     return Err(ocr_correction_error(
                         "CORE_OCR_CORRECTION_TEXT_REGION_SCAN_MISMATCH",
@@ -240,10 +238,7 @@ impl A2dCore {
                 "OCR correction list limit must be between 1 and the configured maximum",
             )
             .with_detail("limit", request.limit.to_string())
-            .with_detail(
-                "max_limit",
-                MAX_OCR_CORRECTION_LIST_LIMIT.to_string(),
-            ));
+            .with_detail("max_limit", MAX_OCR_CORRECTION_LIST_LIMIT.to_string()));
         }
         let scan_id = ScanId::parse(&request.scan_id)?;
         let storage = self.lock_storage()?;
@@ -311,10 +306,7 @@ fn validate_correction_text(field: &'static str, text: &str) -> Result<(), A2dEr
         )
         .with_detail("field", field)
         .with_detail("text_bytes", text.len().to_string())
-        .with_detail(
-            "max_text_bytes",
-            MAX_OCR_CORRECTION_TEXT_BYTES.to_string(),
-        ));
+        .with_detail("max_text_bytes", MAX_OCR_CORRECTION_TEXT_BYTES.to_string()));
     }
     Ok(())
 }
@@ -326,10 +318,7 @@ fn validate_optional_previous_text(text: &str) -> Result<(), A2dError> {
             "OCR correction previous text exceeds the configured limit",
         )
         .with_detail("text_bytes", text.len().to_string())
-        .with_detail(
-            "max_text_bytes",
-            MAX_OCR_CORRECTION_TEXT_BYTES.to_string(),
-        ));
+        .with_detail("max_text_bytes", MAX_OCR_CORRECTION_TEXT_BYTES.to_string()));
     }
     Ok(())
 }
@@ -364,8 +353,10 @@ mod tests {
     }
 
     fn open_test_core() -> (Arc<A2dCore>, PathBuf) {
-        let dir =
-            std::env::temp_dir().join(format!("a2d-core-ocr-correction-test-{}", PageId::generate()));
+        let dir = std::env::temp_dir().join(format!(
+            "a2d-core-ocr-correction-test-{}",
+            PageId::generate()
+        ));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: dir.to_string_lossy().into_owned(),
         })
@@ -442,7 +433,9 @@ mod tests {
         );
         let storage = core.lock_storage().unwrap();
         storage.insert_page(&page).unwrap();
-        storage.insert_asset(&asset(original_asset_id.clone())).unwrap();
+        storage
+            .insert_asset(&asset(original_asset_id.clone()))
+            .unwrap();
         storage.insert_scan(&scan).unwrap();
         ScanFixture {
             scan_id,
@@ -524,7 +517,10 @@ mod tests {
         assert_eq!(corrections.scan_id, fixture.scan_id.to_string());
         assert_eq!(corrections.corrections.len(), 1);
         assert_eq!(corrections.corrections[0].corrected_text, "hello notebook");
-        assert_eq!(corrections.corrections[0].previous_text.as_deref(), Some("helo notebook"));
+        assert_eq!(
+            corrections.corrections[0].previous_text.as_deref(),
+            Some("helo notebook")
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
