@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 a2d-domain = { path = "../a2d-domain" }
+a2d-search = { path = "../a2d-search" }
 rusqlite = { version = "~0.32", features = ["bundled"] }
 serde = "1"
 serde_json = "1"
