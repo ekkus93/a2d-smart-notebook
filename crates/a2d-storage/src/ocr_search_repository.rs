@@ -2,10 +2,16 @@
 //!
 //! The SQLite FTS table is maintained by migration-owned triggers. This repository only validates
 //! bounded query input and maps FTS rows back to typed search hits; callers never issue SQL.
+//! This module also owns the first typed repository for OCR text corrections because corrections
+//! share the OCR-text persistence boundary and must stay separate from the original OCR rows.
 
-use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity};
-use rusqlite::{Connection, params};
+use a2d_domain::{
+    A2dError, ErrorCategory, ErrorCode, ErrorSeverity, PageId, Provenance, ScanId,
+    TextCorrectionId, TextRegionId,
+};
+use rusqlite::{Connection, OptionalExtension, params};
 
+use crate::json_columns::{decode_json, encode_json};
 use crate::{Storage, map_rusqlite_error};
 
 pub const MAX_OCR_SEARCH_QUERY_BYTES: usize = 256;
@@ -151,6 +157,210 @@ impl OcrSearchRepository for Connection {
         }
         Ok(results)
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextCorrectionRecord {
+    pub id: TextCorrectionId,
+    pub text_region_id: Option<TextRegionId>,
+    pub scan_id: ScanId,
+    pub corrected_text: String,
+    pub previous_text: Option<String>,
+    pub provenance: Provenance,
+}
+
+impl TextCorrectionRecord {
+    pub fn id(&self) -> &TextCorrectionId {
+        &self.id
+    }
+}
+
+pub trait TextCorrectionRepository {
+    fn insert_text_correction(&self, correction: &TextCorrectionRecord) -> Result<(), A2dError>;
+    fn get_text_correction(
+        &self,
+        id: &TextCorrectionId,
+    ) -> Result<Option<TextCorrectionRecord>, A2dError>;
+    fn list_text_corrections_for_scan(
+        &self,
+        scan_id: &ScanId,
+        limit: usize,
+    ) -> Result<Vec<TextCorrectionRecord>, A2dError>;
+}
+
+impl TextCorrectionRepository for Storage {
+    fn insert_text_correction(&self, correction: &TextCorrectionRecord) -> Result<(), A2dError> {
+        TextCorrectionRepository::insert_text_correction(&self.conn, correction)
+    }
+
+    fn get_text_correction(
+        &self,
+        id: &TextCorrectionId,
+    ) -> Result<Option<TextCorrectionRecord>, A2dError> {
+        TextCorrectionRepository::get_text_correction(&self.conn, id)
+    }
+
+    fn list_text_corrections_for_scan(
+        &self,
+        scan_id: &ScanId,
+        limit: usize,
+    ) -> Result<Vec<TextCorrectionRecord>, A2dError> {
+        TextCorrectionRepository::list_text_corrections_for_scan(&self.conn, scan_id, limit)
+    }
+}
+
+impl TextCorrectionRepository for Connection {
+    fn insert_text_correction(&self, correction: &TextCorrectionRecord) -> Result<(), A2dError> {
+        let provenance_warnings = encode_json(
+            &correction.provenance.warnings,
+            "text_corrections.provenance_warnings",
+        )?;
+        self.execute(
+            "INSERT INTO text_corrections (id, text_region_id, scan_id, corrected_text, \
+             previous_text, provenance_source_page_id, provenance_source_scan_id, \
+             provenance_producing_component, provenance_component_version, \
+             provenance_created_at_ms, provenance_warnings, provenance_user_approved) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                correction.id.to_string(),
+                correction.text_region_id.as_ref().map(ToString::to_string),
+                correction.scan_id.to_string(),
+                correction.corrected_text,
+                correction.previous_text,
+                correction
+                    .provenance
+                    .source_page_id
+                    .as_ref()
+                    .map(ToString::to_string),
+                correction
+                    .provenance
+                    .source_scan_id
+                    .as_ref()
+                    .map(ToString::to_string),
+                correction.provenance.producing_component,
+                correction.provenance.component_version,
+                correction.provenance.created_at_ms,
+                provenance_warnings,
+                correction.provenance.user_approved,
+            ],
+        )
+        .map_err(|error| map_rusqlite_error("insert_text_correction", error))?;
+        Ok(())
+    }
+
+    fn get_text_correction(
+        &self,
+        id: &TextCorrectionId,
+    ) -> Result<Option<TextCorrectionRecord>, A2dError> {
+        self.query_row(
+            "SELECT id, text_region_id, scan_id, corrected_text, previous_text, \
+             provenance_source_page_id, provenance_source_scan_id, \
+             provenance_producing_component, provenance_component_version, \
+             provenance_created_at_ms, provenance_warnings, provenance_user_approved \
+             FROM text_corrections WHERE id = ?1",
+            [id.to_string()],
+            text_correction_row,
+        )
+        .optional()
+        .map_err(|error| map_rusqlite_error("get_text_correction", error))?
+        .map(text_correction_from_row)
+        .transpose()
+    }
+
+    fn list_text_corrections_for_scan(
+        &self,
+        scan_id: &ScanId,
+        limit: usize,
+    ) -> Result<Vec<TextCorrectionRecord>, A2dError> {
+        let mut statement = self
+            .prepare(
+                "SELECT id, text_region_id, scan_id, corrected_text, previous_text, \
+                 provenance_source_page_id, provenance_source_scan_id, \
+                 provenance_producing_component, provenance_component_version, \
+                 provenance_created_at_ms, provenance_warnings, provenance_user_approved \
+                 FROM text_corrections WHERE scan_id = ?1 \
+                 ORDER BY provenance_created_at_ms ASC, id ASC LIMIT ?2",
+            )
+            .map_err(|error| {
+                map_rusqlite_error("list_text_corrections_for_scan.prepare", error)
+            })?;
+        let rows = statement
+            .query_map(params![scan_id.to_string(), limit as i64], text_correction_row)
+            .map_err(|error| map_rusqlite_error("list_text_corrections_for_scan.query", error))?;
+
+        let mut corrections = Vec::new();
+        for row in rows {
+            corrections.push(text_correction_from_row(row.map_err(|error| {
+                map_rusqlite_error("list_text_corrections_for_scan.row", error)
+            })?)?);
+        }
+        Ok(corrections)
+    }
+}
+
+type TextCorrectionRow = (
+    String,
+    Option<String>,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+    String,
+    i64,
+    String,
+    Option<bool>,
+);
+
+fn text_correction_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TextCorrectionRow> {
+    Ok((
+        row.get::<_, String>(0)?,
+        row.get::<_, Option<String>>(1)?,
+        row.get::<_, String>(2)?,
+        row.get::<_, String>(3)?,
+        row.get::<_, Option<String>>(4)?,
+        row.get::<_, Option<String>>(5)?,
+        row.get::<_, Option<String>>(6)?,
+        row.get::<_, String>(7)?,
+        row.get::<_, String>(8)?,
+        row.get::<_, i64>(9)?,
+        row.get::<_, String>(10)?,
+        row.get::<_, Option<bool>>(11)?,
+    ))
+}
+
+fn text_correction_from_row(row: TextCorrectionRow) -> Result<TextCorrectionRecord, A2dError> {
+    let (
+        id,
+        text_region_id,
+        scan_id,
+        corrected_text,
+        previous_text,
+        source_page_id,
+        source_scan_id,
+        producing_component,
+        component_version,
+        created_at_ms,
+        provenance_warnings,
+        user_approved,
+    ) = row;
+    Ok(TextCorrectionRecord {
+        id: TextCorrectionId::parse(&id)?,
+        text_region_id: text_region_id.map(|value| TextRegionId::parse(&value)).transpose()?,
+        scan_id: ScanId::parse(&scan_id)?,
+        corrected_text,
+        previous_text,
+        provenance: Provenance {
+            source_page_id: source_page_id.map(|value| PageId::parse(&value)).transpose()?,
+            source_scan_id: source_scan_id.map(|value| ScanId::parse(&value)).transpose()?,
+            producing_component,
+            component_version,
+            created_at_ms,
+            warnings: decode_json(&provenance_warnings, "text_corrections.provenance_warnings")?,
+            user_approved,
+        },
+    })
 }
 
 fn quote_fts5_token(token: &str) -> String {
