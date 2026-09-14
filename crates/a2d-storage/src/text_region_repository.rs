@@ -105,11 +105,9 @@ impl TextRegionRepository for Connection {
 
         let mut regions = Vec::new();
         for row in rows {
-            regions.push(text_region_from_row(
-                row.map_err(|error| {
-                    map_rusqlite_error("list_text_regions_for_ocr_run.row", error)
-                })?,
-            )?);
+            regions.push(text_region_from_row(row.map_err(|error| {
+                map_rusqlite_error("list_text_regions_for_ocr_run.row", error)
+            })?)?);
         }
         Ok(regions)
     }
