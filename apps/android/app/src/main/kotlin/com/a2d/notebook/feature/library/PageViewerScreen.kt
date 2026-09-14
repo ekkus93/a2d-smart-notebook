@@ -1,10 +1,12 @@
 package com.a2d.notebook.feature.library
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,12 +16,17 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
+import com.a2d.notebook.feature.ocr.LoadedAndroidOcrTextRegion
 import com.a2d.notebook.feature.ocr.OcrPresentationState
 import com.a2d.notebook.feature.ocr.OcrPresentationStatus
+import com.a2d.notebook.feature.ocr.OcrTextPoint
+import kotlin.math.max
 
 object PageViewerTestTags {
     const val TITLE = "page_viewer_title"
@@ -32,6 +39,11 @@ object PageViewerTestTags {
     const val OCR_START = "page_viewer_ocr_start"
     const val OCR_RETRY = "page_viewer_ocr_retry"
     const val OCR_CANCEL = "page_viewer_ocr_cancel"
+    const val OCR_REGION_OVERLAY = "page_viewer_ocr_region_overlay"
+    const val OCR_REGION_OVERLAY_CANVAS = "page_viewer_ocr_region_overlay_canvas"
+    const val OCR_REGION_OVERLAY_DISABLED = "page_viewer_ocr_region_overlay_disabled"
+    const val OCR_REGION_BUTTON_PREFIX = "page_viewer_ocr_region_button_"
+    const val OCR_REGION_SELECTED = "page_viewer_ocr_region_selected"
     const val SPLIT = "page_viewer_split"
     const val METADATA = "page_viewer_metadata"
     const val VERSIONS = "page_viewer_versions"
@@ -53,6 +65,8 @@ data class PageViewerState(
     val hasCorrectedImage: Boolean = false,
     val hasRecognizedText: Boolean = false,
     val ocrState: OcrPresentationState = OcrPresentationState(),
+    val ocrTextRegions: List<LoadedAndroidOcrTextRegion> = emptyList(),
+    val selectedOcrTextRegionId: String? = null,
     val annotationCount: Int = 0,
     val relatedPageCount: Int = 0,
     val skillResultCount: Int = 0,
@@ -71,6 +85,7 @@ fun PageViewerScreen(
     onStartOcr: (String) -> Unit = {},
     onRetryOcr: (String) -> Unit = {},
     onCancelOcr: (String) -> Unit = {},
+    onSelectOcrTextRegion: (String) -> Unit = {},
 ) {
     PageViewerContent(
         state = state,
@@ -81,6 +96,7 @@ fun PageViewerScreen(
         onStartOcr = onStartOcr,
         onRetryOcr = onRetryOcr,
         onCancelOcr = onCancelOcr,
+        onSelectOcrTextRegion = onSelectOcrTextRegion,
     )
 }
 
@@ -94,6 +110,7 @@ fun PageViewerContent(
     onStartOcr: (String) -> Unit = {},
     onRetryOcr: (String) -> Unit = {},
     onCancelOcr: (String) -> Unit = {},
+    onSelectOcrTextRegion: (String) -> Unit = {},
 ) {
     Column(
         modifier =
@@ -156,6 +173,7 @@ fun PageViewerContent(
             onStartOcr = onStartOcr,
             onRetryOcr = onRetryOcr,
             onCancelOcr = onCancelOcr,
+            onSelectOcrTextRegion = onSelectOcrTextRegion,
         )
         PageViewerSection(
             title = stringResource(R.string.page_viewer_split_title),
@@ -244,6 +262,7 @@ private fun PageViewerOcrTextSection(
     onStartOcr: (String) -> Unit,
     onRetryOcr: (String) -> Unit,
     onCancelOcr: (String) -> Unit,
+    onSelectOcrTextRegion: (String) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth().testTag(PageViewerTestTags.TEXT)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -275,6 +294,12 @@ private fun PageViewerOcrTextSection(
             state.ocrState.message?.let { message ->
                 Text(stringResource(R.string.page_viewer_text_message, message))
             }
+            PageViewerOcrRegionOverlay(
+                status = state.ocrState.status,
+                regions = state.ocrTextRegions,
+                selectedRegionId = state.selectedOcrTextRegionId,
+                onSelectRegion = onSelectOcrTextRegion,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     enabled = state.preferredScanId != null &&
@@ -303,6 +328,118 @@ private fun PageViewerOcrTextSection(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PageViewerOcrRegionOverlay(
+    status: OcrPresentationStatus,
+    regions: List<LoadedAndroidOcrTextRegion>,
+    selectedRegionId: String?,
+    onSelectRegion: (String) -> Unit,
+) {
+    Card(Modifier.fillMaxWidth().testTag(PageViewerTestTags.OCR_REGION_OVERLAY)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.page_viewer_ocr_overlay_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(stringResource(R.string.page_viewer_ocr_overlay_boundary))
+            if (status != OcrPresentationStatus.Detected || regions.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.page_viewer_ocr_overlay_disabled),
+                    modifier = Modifier.testTag(PageViewerTestTags.OCR_REGION_OVERLAY_DISABLED),
+                )
+            } else {
+                PageViewerOcrRegionCanvas(regions = regions, selectedRegionId = selectedRegionId)
+                regions.forEachIndexed { index, region ->
+                    OutlinedButton(
+                        onClick = { onSelectRegion(region.textRegionId) },
+                        modifier =
+                            Modifier.testTag(
+                                PageViewerTestTags.OCR_REGION_BUTTON_PREFIX + index,
+                            ),
+                    ) {
+                        Text(
+                            stringResource(
+                                R.string.page_viewer_ocr_region_button,
+                                index + 1,
+                                region.previewText(),
+                            ),
+                        )
+                    }
+                }
+                val selectedRegion = regions.firstOrNull { it.textRegionId == selectedRegionId }
+                if (selectedRegion == null) {
+                    Text(stringResource(R.string.page_viewer_ocr_region_select_prompt))
+                } else {
+                    Column(
+                        modifier = Modifier.testTag(PageViewerTestTags.OCR_REGION_SELECTED),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            stringResource(
+                                R.string.page_viewer_ocr_region_selected,
+                                selectedRegion.textRegionId,
+                            ),
+                        )
+                        Text(selectedRegion.text)
+                        selectedRegion.confidence?.let { confidence ->
+                            Text(
+                                stringResource(
+                                    R.string.page_viewer_ocr_region_confidence,
+                                    confidence,
+                                ),
+                            )
+                        }
+                        Text(
+                            stringResource(
+                                R.string.page_viewer_ocr_region_polygon,
+                                polygonSummary(selectedRegion.polygon),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PageViewerOcrRegionCanvas(
+    regions: List<LoadedAndroidOcrTextRegion>,
+    selectedRegionId: String?,
+) {
+    val outlineColor = MaterialTheme.colorScheme.primary
+    val selectedColor = MaterialTheme.colorScheme.tertiary
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .testTag(PageViewerTestTags.OCR_REGION_OVERLAY_CANVAS),
+    ) {
+        val drawableRegions = regions.filter { region -> region.polygon.size >= 3 }
+        val allPoints = drawableRegions.flatMap { region -> region.polygon }
+        val maxX = max(1.0f, allPoints.maxOfOrNull { point -> point.x } ?: 1.0f)
+        val maxY = max(1.0f, allPoints.maxOfOrNull { point -> point.y } ?: 1.0f)
+        drawableRegions.forEach { region ->
+            val path = Path()
+            region.polygon.forEachIndexed { index, point ->
+                val x = point.x / maxX * size.width
+                val y = point.y / maxY * size.height
+                if (index == 0) {
+                    path.moveTo(x, y)
+                } else {
+                    path.lineTo(x, y)
+                }
+            }
+            path.close()
+            drawPath(
+                path = path,
+                color = if (region.textRegionId == selectedRegionId) selectedColor else outlineColor,
+                style = Stroke(width = if (region.textRegionId == selectedRegionId) 4.0f else 2.0f),
+            )
         }
     }
 }
@@ -345,3 +482,12 @@ private fun PageViewerSection(
         }
     }
 }
+
+private fun LoadedAndroidOcrTextRegion.previewText(): String =
+    text
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .take(48)
+
+private fun polygonSummary(points: List<OcrTextPoint>): String =
+    points.joinToString(separator = " → ") { point -> "(${point.x}, ${point.y})" }
