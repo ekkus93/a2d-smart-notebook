@@ -53,4 +53,9 @@ pub static MIGRATIONS: &[Migration] = &[
         name: "explicit_ocr_result_outcomes",
         sql: include_str!("migrations/0009_explicit_ocr_result_outcomes.sql"),
     },
+    Migration {
+        version: 10,
+        name: "ocr_search_index",
+        sql: include_str!("migrations/0010_ocr_search_index.sql"),
+    },
 ];
