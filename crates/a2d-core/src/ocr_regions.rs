@@ -488,7 +488,10 @@ mod tests {
         let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
         core.record_ocr_text_regions(RecordOcrTextRegionsRequest {
             ocr_run_id: run_id.to_string(),
-            regions: vec![region("first line", Some(300)), region("second line", Some(301))],
+            regions: vec![
+                region("first line", Some(300)),
+                region("second line", Some(301)),
+            ],
         })
         .unwrap();
 

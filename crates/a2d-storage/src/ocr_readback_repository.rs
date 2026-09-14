@@ -156,7 +156,9 @@ fn ocr_run_from_row(
     OcrRun::from_stored(
         OcrRunId::parse(&id)?,
         ScanId::parse(&scan_id)?,
-        input_asset_id.map(|value| AssetId::parse(&value)).transpose()?,
+        input_asset_id
+            .map(|value| AssetId::parse(&value))
+            .transpose()?,
         provider,
         provider_version,
         model_name,
