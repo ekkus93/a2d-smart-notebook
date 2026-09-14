@@ -16,6 +16,7 @@ import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
+import com.a2d.notebook.feature.ocr.OcrSearchScreen
 import com.a2d.notebook.feature.review.NeedsReviewScreen
 import com.a2d.notebook.feature.scanner.singlepage.PolicyAwareBatchScannerRoute
 import com.a2d.notebook.feature.scanner.singlepage.SinglePageScannerScreen
@@ -27,6 +28,7 @@ object A2dDestinations {
     const val HOME = "home"
     const val LIBRARY = "library"
     const val PAGES = "library/pages"
+    const val OCR_SEARCH = "library/ocr-search"
     const val PAGE_VIEWER_PATTERN = "library/pages/{pageId}"
     const val NEEDS_REVIEW = "library/needs-review"
     const val SMART_PAGE_LIBRARY = "library/smart-pages"
@@ -68,6 +70,7 @@ fun A2dNavHost(navController: NavHostController) {
                 onOpenNotebooks = { navController.navigate(A2dDestinations.NOTEBOOKS) },
                 onOpenSmartPages = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
                 onOpenPages = { navController.navigate(A2dDestinations.PAGES) },
+                onOpenOcrSearch = { navController.navigate(A2dDestinations.OCR_SEARCH) },
                 onOpenPageSets = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
                 onOpenCollections = { navController.navigate(A2dDestinations.SMART_PAGE_LIBRARY) },
                 onOpenImports = { navController.navigate(A2dDestinations.IMPORTS) },
@@ -83,6 +86,14 @@ fun A2dNavHost(navController: NavHostController) {
                 },
                 onOpenVersions = { pageId ->
                     navController.navigate(A2dDestinations.versionHistory(pageId))
+                },
+            )
+        }
+        composable(A2dDestinations.OCR_SEARCH) {
+            OcrSearchScreen(
+                onBack = { navController.navigateUp() },
+                onOpenPage = { pageId ->
+                    navController.navigate(A2dDestinations.pageViewer(pageId))
                 },
             )
         }

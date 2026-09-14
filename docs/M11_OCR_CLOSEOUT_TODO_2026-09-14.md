@@ -37,46 +37,46 @@ Base: `faa81ac0a1b9b3e8f4adad6bf3d4889521ae26b4`
 
 ### M11-S1 — Android search adapter
 
-- [ ] Add an Android wrapper around `A2dClient.searchOcrText`.
-- [ ] Define Android-facing OCR search DTOs:
-  - [ ] query request
-  - [ ] result list state
-  - [ ] hit item state
-  - [ ] document kind display mapping for full-text vs text-region hits
-- [ ] Preserve Rust error semantics at the Android boundary.
-- [ ] Do not synthesize hits for no-text, unavailable, or cancelled OCR outcomes.
-- [ ] Add unit tests for wrapper mapping and validation-error propagation.
+- [x] Add an Android wrapper around `A2dClient.searchOcrText`.
+- [x] Define Android-facing OCR search DTOs:
+  - [x] query request
+  - [x] result list state
+  - [x] hit item state
+  - [x] document kind display mapping for full-text vs text-region hits
+- [x] Preserve Rust error semantics at the Android boundary.
+- [x] Do not synthesize hits for no-text, unavailable, or cancelled OCR outcomes.
+- [x] Add unit tests for wrapper mapping and validation-error propagation.
 
 ### M11-S2 — Search presentation surface
 
-- [ ] Add a local-first OCR search presentation surface.
-- [ ] Include clear empty states:
-  - [ ] no query entered
-  - [ ] no matching OCR text
-  - [ ] OCR search unavailable due to Rust error
-- [ ] Display for each hit:
-  - [ ] snippet
-  - [ ] page ID
-  - [ ] scan ID
-  - [ ] OCR run ID
-  - [ ] text region ID when present
-  - [ ] full-text vs text-region source
-- [ ] Keep presentation honest: the UI must say OCR search uses locally persisted OCR text and not a server index.
+- [x] Add a local-first OCR search presentation surface.
+- [x] Include clear empty states:
+  - [x] no query entered
+  - [x] no matching OCR text
+  - [x] OCR search unavailable due to Rust error
+- [x] Display for each hit:
+  - [x] snippet
+  - [x] page ID
+  - [x] scan ID
+  - [x] OCR run ID
+  - [x] text region ID when present
+  - [x] full-text vs text-region source
+- [x] Keep presentation honest: the UI must say OCR search uses locally persisted OCR text and not a server index.
 
 ### M11-S3 — Navigation and Library Hub integration
 
-- [ ] Add an OCR Search destination to the Android navigation graph.
-- [ ] Add a Library Hub entry for OCR Search.
-- [ ] Ensure the route can navigate back to Library Hub.
-- [ ] Ensure the route can navigate to Page Viewer for a selected page hit when a page ID is present.
-- [ ] Update strings without truncating existing `strings.xml` resources.
+- [x] Add an OCR Search destination to the Android navigation graph.
+- [x] Add a Library Hub entry for OCR Search.
+- [x] Ensure the route can navigate back to Library Hub.
+- [x] Ensure the route can navigate to Page Viewer for a selected page hit when a page ID is present.
+- [x] Update strings without truncating existing `strings.xml` resources.
 
 ### M11-S4 — Android UI tests
 
-- [ ] Add Compose/unit tests for OCR search presentation states.
-- [ ] Add instrumentation coverage if navigation or scroll behavior needs emulator validation.
-- [ ] If an instrumentation test class is added, update the CI emulator class list.
-- [ ] Avoid ambiguous duplicate text assertions; prefer test tags or scroll to explicit nodes.
+- [x] Add Compose/unit tests for OCR search presentation states.
+- [x] Add instrumentation coverage if navigation or scroll behavior needs emulator validation.
+- [x] If an instrumentation test class is added, update the CI emulator class list.
+- [x] Avoid ambiguous duplicate text assertions; prefer test tags or scroll to explicit nodes.
 
 ### M11-S5 — PR validation and merge
 
