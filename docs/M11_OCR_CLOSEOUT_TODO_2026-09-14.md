@@ -80,7 +80,7 @@ Base: `faa81ac0a1b9b3e8f4adad6bf3d4889521ae26b4`
 
 ### M11-S5 — PR validation and merge
 
-- [ ] Open PR for Android OCR search UI integration.
+- [x] Open PR for Android OCR search UI integration.
 - [ ] Validate exact PR head:
   - [ ] Rust fmt/clippy/tests
   - [ ] cargo-deny
