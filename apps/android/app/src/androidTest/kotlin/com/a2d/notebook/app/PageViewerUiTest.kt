@@ -13,6 +13,10 @@ import com.a2d.notebook.feature.library.PageViewerState
 import com.a2d.notebook.feature.library.PageViewerTestTags
 import com.a2d.notebook.feature.ocr.OcrPresentationState
 import com.a2d.notebook.feature.ocr.OcrPresentationStatus
+import com.a2d.notebook.feature.ocr.OcrRegionOverlayRegion
+import com.a2d.notebook.feature.ocr.OcrRegionOverlayState
+import com.a2d.notebook.feature.ocr.OcrRegionOverlayTestTags
+import com.a2d.notebook.feature.ocr.OcrTextPoint
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,6 +48,8 @@ class PageViewerUiTest {
         composeRule.onNodeWithTag(PageViewerTestTags.ORIGINAL).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.CORRECTED).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(OcrRegionOverlayTestTags.CARD).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(OcrRegionOverlayTestTags.DISABLED).assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.SPLIT).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.METADATA).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.ANNOTATIONS).performScrollTo().assertIsDisplayed()
@@ -100,6 +106,45 @@ class PageViewerUiTest {
         composeRule.onNodeWithText("Skill results: 4").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.OPEN_VERSIONS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.OPEN_NEEDS_REVIEW).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun pageViewerShowsPersistedOcrRegionOverlayWhenRowsExist() {
+        composeRule.activity.setContent {
+            MaterialTheme {
+                PageViewerContent(
+                    state =
+                        PageViewerState(
+                            pageId = "page-regions",
+                            ocrRegionOverlay =
+                                OcrRegionOverlayState(
+                                    regions =
+                                        listOf(
+                                            OcrRegionOverlayRegion(
+                                                textRegionId = "region-1",
+                                                polygon =
+                                                    listOf(
+                                                        OcrTextPoint(0f, 0f),
+                                                        OcrTextPoint(100f, 0f),
+                                                        OcrTextPoint(100f, 50f),
+                                                        OcrTextPoint(0f, 50f),
+                                                    ),
+                                                text = "persisted region text",
+                                                confidence = 0.92f,
+                                            ),
+                                        ),
+                                ),
+                        ),
+                    onBack = {},
+                    onOpenVersions = {},
+                    onOpenNeedsReview = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(OcrRegionOverlayTestTags.CARD).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(OcrRegionOverlayTestTags.CANVAS).assertIsDisplayed()
+        composeRule.onNodeWithText("1 selectable regions", substring = true).assertIsDisplayed()
     }
 
     @Test
