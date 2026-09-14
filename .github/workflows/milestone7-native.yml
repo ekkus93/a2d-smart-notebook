@@ -118,7 +118,9 @@ jobs:
       - name: Show resolved Rust toolchain
         run: rustc --version && cargo --version
       - uses: Swatinem/rust-cache@v2
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools"
       - name: Install and select pinned Android native toolchain
         run: |
           sdkmanager --install "ndk;${A2D_ANDROID_NDK_VERSION}"
