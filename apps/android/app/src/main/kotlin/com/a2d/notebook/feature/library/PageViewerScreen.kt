@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
+import com.a2d.notebook.feature.ocr.OcrPresentationState
+import com.a2d.notebook.feature.ocr.OcrPresentationStatus
 
 object PageViewerTestTags {
     const val TITLE = "page_viewer_title"
@@ -27,6 +29,9 @@ object PageViewerTestTags {
     const val ORIGINAL = "page_viewer_original"
     const val CORRECTED = "page_viewer_corrected"
     const val TEXT = "page_viewer_text"
+    const val OCR_START = "page_viewer_ocr_start"
+    const val OCR_RETRY = "page_viewer_ocr_retry"
+    const val OCR_CANCEL = "page_viewer_ocr_cancel"
     const val SPLIT = "page_viewer_split"
     const val METADATA = "page_viewer_metadata"
     const val VERSIONS = "page_viewer_versions"
@@ -43,9 +48,11 @@ data class PageViewerState(
     val visiblePageLabel: String? = null,
     val statusLabel: String = "unknown",
     val updatedSummary: String? = null,
+    val preferredScanId: String? = null,
     val hasOriginalImage: Boolean = false,
     val hasCorrectedImage: Boolean = false,
     val hasRecognizedText: Boolean = false,
+    val ocrState: OcrPresentationState = OcrPresentationState(),
     val annotationCount: Int = 0,
     val relatedPageCount: Int = 0,
     val skillResultCount: Int = 0,
@@ -61,6 +68,9 @@ fun PageViewerScreen(
     onOpenNeedsReview: () -> Unit,
     modifier: Modifier = Modifier,
     state: PageViewerState = PageViewerState(pageId = pageId),
+    onStartOcr: (String) -> Unit = {},
+    onRetryOcr: (String) -> Unit = {},
+    onCancelOcr: (String) -> Unit = {},
 ) {
     PageViewerContent(
         state = state,
@@ -68,6 +78,9 @@ fun PageViewerScreen(
         onOpenVersions = onOpenVersions,
         onOpenNeedsReview = onOpenNeedsReview,
         modifier = modifier,
+        onStartOcr = onStartOcr,
+        onRetryOcr = onRetryOcr,
+        onCancelOcr = onCancelOcr,
     )
 }
 
@@ -78,6 +91,9 @@ fun PageViewerContent(
     onOpenVersions: (String) -> Unit,
     onOpenNeedsReview: () -> Unit,
     modifier: Modifier = Modifier,
+    onStartOcr: (String) -> Unit = {},
+    onRetryOcr: (String) -> Unit = {},
+    onCancelOcr: (String) -> Unit = {},
 ) {
     Column(
         modifier =
@@ -135,15 +151,11 @@ fun PageViewerContent(
                 },
             testTag = PageViewerTestTags.CORRECTED,
         )
-        PageViewerSection(
-            title = stringResource(R.string.page_viewer_text_title),
-            detail =
-                if (state.hasRecognizedText) {
-                    stringResource(R.string.page_viewer_text_available)
-                } else {
-                    stringResource(R.string.page_viewer_text_unavailable)
-                },
-            testTag = PageViewerTestTags.TEXT,
+        PageViewerOcrTextSection(
+            state = state,
+            onStartOcr = onStartOcr,
+            onRetryOcr = onRetryOcr,
+            onCancelOcr = onCancelOcr,
         )
         PageViewerSection(
             title = stringResource(R.string.page_viewer_split_title),
@@ -212,6 +224,9 @@ private fun PageViewerSummaryCard(state: PageViewerState) {
             state.visiblePageLabel?.let { label ->
                 Text(stringResource(R.string.page_viewer_visible_page, label))
             }
+            state.preferredScanId?.let { scanId ->
+                Text(stringResource(R.string.page_viewer_scan_id, scanId))
+            }
             Text(stringResource(R.string.page_viewer_status, state.statusLabel))
             state.updatedSummary?.let { updated ->
                 Text(stringResource(R.string.page_viewer_updated, updated))
@@ -222,6 +237,92 @@ private fun PageViewerSummaryCard(state: PageViewerState) {
         }
     }
 }
+
+@Composable
+private fun PageViewerOcrTextSection(
+    state: PageViewerState,
+    onStartOcr: (String) -> Unit,
+    onRetryOcr: (String) -> Unit,
+    onCancelOcr: (String) -> Unit,
+) {
+    Card(Modifier.fillMaxWidth().testTag(PageViewerTestTags.TEXT)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.page_viewer_text_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(pageViewerOcrDetail(state))
+            state.ocrState.runId?.let { runId ->
+                Text(stringResource(R.string.page_viewer_text_run_id, runId))
+            }
+            state.ocrState.providerLabel?.let { provider ->
+                Text(stringResource(R.string.page_viewer_text_provider, provider))
+            }
+            state.ocrState.modelName?.let { model ->
+                Text(stringResource(R.string.page_viewer_text_model, model))
+            }
+            state.ocrState.textPreview?.let { preview ->
+                Text(stringResource(R.string.page_viewer_text_preview, preview))
+            }
+            state.ocrState.message?.let { message ->
+                Text(stringResource(R.string.page_viewer_text_message, message))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    enabled = state.preferredScanId != null &&
+                        state.ocrState.status == OcrPresentationStatus.NotStarted,
+                    onClick = { state.preferredScanId?.let(onStartOcr) },
+                    modifier = Modifier.testTag(PageViewerTestTags.OCR_START),
+                ) {
+                    Text(stringResource(R.string.page_viewer_start_ocr))
+                }
+                if (state.ocrState.retryAvailable) {
+                    OutlinedButton(
+                        enabled = state.preferredScanId != null,
+                        onClick = { state.preferredScanId?.let(onRetryOcr) },
+                        modifier = Modifier.testTag(PageViewerTestTags.OCR_RETRY),
+                    ) {
+                        Text(stringResource(R.string.common_retry))
+                    }
+                }
+                if (state.ocrState.cancelAvailable) {
+                    OutlinedButton(
+                        enabled = state.preferredScanId != null,
+                        onClick = { state.preferredScanId?.let(onCancelOcr) },
+                        modifier = Modifier.testTag(PageViewerTestTags.OCR_CANCEL),
+                    ) {
+                        Text(stringResource(R.string.common_cancel))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun pageViewerOcrDetail(state: PageViewerState): String =
+    when (state.ocrState.status) {
+        OcrPresentationStatus.NotStarted ->
+            if (state.hasRecognizedText) {
+                stringResource(R.string.page_viewer_text_available)
+            } else {
+                stringResource(R.string.page_viewer_text_not_started)
+            }
+
+        OcrPresentationStatus.Preparing -> stringResource(R.string.page_viewer_text_preparing)
+        OcrPresentationStatus.Recognizing -> stringResource(R.string.page_viewer_text_recognizing)
+        OcrPresentationStatus.Recording -> stringResource(R.string.page_viewer_text_recording)
+        OcrPresentationStatus.Detected -> stringResource(R.string.page_viewer_text_available)
+        OcrPresentationStatus.NoTextDetected -> stringResource(R.string.page_viewer_text_no_text_detected)
+        OcrPresentationStatus.Unavailable ->
+            stringResource(
+                R.string.page_viewer_text_unavailable_reason,
+                state.ocrState.unavailableReason ?: stringResource(R.string.common_unknown),
+            )
+
+        OcrPresentationStatus.Failed -> stringResource(R.string.page_viewer_text_failed)
+        OcrPresentationStatus.Cancelled -> stringResource(R.string.page_viewer_text_cancelled)
+    }
 
 @Composable
 private fun PageViewerSection(

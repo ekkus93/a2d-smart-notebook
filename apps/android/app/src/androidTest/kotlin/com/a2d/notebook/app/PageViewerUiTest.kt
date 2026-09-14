@@ -11,6 +11,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.a2d.notebook.feature.library.PageViewerContent
 import com.a2d.notebook.feature.library.PageViewerState
 import com.a2d.notebook.feature.library.PageViewerTestTags
+import com.a2d.notebook.feature.ocr.OcrPresentationState
+import com.a2d.notebook.feature.ocr.OcrPresentationStatus
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,6 +68,7 @@ class PageViewerUiTest {
                             visiblePageLabel = "12",
                             statusLabel = "needs review",
                             updatedSummary = "captured locally today",
+                            preferredScanId = "scan-12",
                             hasOriginalImage = true,
                             hasCorrectedImage = true,
                             hasRecognizedText = true,
@@ -85,6 +88,7 @@ class PageViewerUiTest {
         composeRule.onNodeWithText("Page ID: page-12").assertIsDisplayed()
         composeRule.onNodeWithText("Notebook: Field Notes").assertIsDisplayed()
         composeRule.onNodeWithText("Visible page: 12").assertIsDisplayed()
+        composeRule.onNodeWithText("Scan ID: scan-12").assertIsDisplayed()
         composeRule.onNodeWithText("Status: needs review").assertIsDisplayed()
         composeRule.onNodeWithText("Updated: captured locally today").assertIsDisplayed()
         composeRule.onNodeWithText("Needs Review").assertIsDisplayed()
@@ -96,5 +100,67 @@ class PageViewerUiTest {
         composeRule.onNodeWithText("Skill results: 4").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.OPEN_VERSIONS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.OPEN_NEEDS_REVIEW).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun pageViewerShowsNoTextOcrAsSuccessfulDistinctState() {
+        composeRule.activity.setContent {
+            MaterialTheme {
+                PageViewerContent(
+                    state =
+                        PageViewerState(
+                            pageId = "page-no-text",
+                            preferredScanId = "scan-no-text",
+                            ocrState =
+                                OcrPresentationState(
+                                    status = OcrPresentationStatus.NoTextDetected,
+                                    runId = "ocr-run-no-text",
+                                ),
+                        ),
+                    onBack = {},
+                    onOpenVersions = {},
+                    onOpenNeedsReview = {},
+                )
+            }
+        }
+
+        composeRule
+            .onNodeWithText("detected no text", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("OCR run: ocr-run-no-text").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(PageViewerTestTags.OCR_START).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun pageViewerShowsUnavailableOcrWithRetryWithoutClaimingEmptyText() {
+        composeRule.activity.setContent {
+            MaterialTheme {
+                PageViewerContent(
+                    state =
+                        PageViewerState(
+                            pageId = "page-unavailable",
+                            preferredScanId = "scan-unavailable",
+                            ocrState =
+                                OcrPresentationState(
+                                    status = OcrPresentationStatus.Unavailable,
+                                    unavailableReason = "provider failed",
+                                    message = "ML Kit model missing",
+                                    retryAvailable = true,
+                                ),
+                        ),
+                    onBack = {},
+                    onOpenVersions = {},
+                    onOpenNeedsReview = {},
+                )
+            }
+        }
+
+        composeRule
+            .onNodeWithText("OCR unavailable: provider failed", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("ML Kit model missing", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(PageViewerTestTags.OCR_RETRY).performScrollTo().assertIsDisplayed()
     }
 }
