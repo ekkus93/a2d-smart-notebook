@@ -101,6 +101,7 @@
     <string name="page_viewer_text_run_id">OCR run: %1$s</string>
     <string name="page_viewer_text_provider">Provider: %1$s</string>
     <string name="page_viewer_text_model">Model: %1$s</string>
+    <string name="page_viewer_text_region_count">Text regions: %1$d</string>
     <string name="page_viewer_text_preview">Text preview: %1$s</string>
     <string name="page_viewer_text_message">OCR detail: %1$s</string>
     <string name="page_viewer_start_ocr">Run OCR</string>

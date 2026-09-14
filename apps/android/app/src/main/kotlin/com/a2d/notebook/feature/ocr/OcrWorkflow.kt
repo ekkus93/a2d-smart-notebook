@@ -3,9 +3,12 @@ package com.a2d.notebook.feature.ocr
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.OcrInputKind as FfiOcrInputKind
 import uniffi.a2d_ffi.OcrRunStatus as FfiOcrRunStatus
+import uniffi.a2d_ffi.OcrTextPoint as FfiOcrTextPoint
 import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
 import uniffi.a2d_ffi.PrepareOcrInputRequest as FfiPrepareOcrInputRequest
 import uniffi.a2d_ffi.RecordOcrRunRequest as FfiRecordOcrRunRequest
+import uniffi.a2d_ffi.RecordOcrTextRegionRequest as FfiRecordOcrTextRegionRequest
+import uniffi.a2d_ffi.RecordOcrTextRegionsRequest as FfiRecordOcrTextRegionsRequest
 
 /**
  * Android-side OCR orchestration around the Rust-owned Milestone 11 OCR APIs.
@@ -52,15 +55,38 @@ class AndroidOcrWorkflow(
                 )
             }
 
+        val recordedRegions =
+            if (outcome is AndroidOcrRecognitionOutcome.Detected && outcome.regions.isNotEmpty()) {
+                try {
+                    gateway.recordOcrTextRegions(
+                        AndroidRecordOcrTextRegionsRequest(
+                            ocrRunId = recorded.ocrRunId,
+                            regions = outcome.regions.map { it.toRecordRequest() },
+                        ),
+                    )
+                } catch (failure: Exception) {
+                    return AndroidOcrWorkflowResult.failed(
+                        status = OcrPresentationStatus.Failed,
+                        preparedInput = prepared,
+                        recordedRun = recorded,
+                        message = failure.message ?: "Rust rejected the OCR text regions",
+                    )
+                }
+            } else {
+                null
+            }
+
         return when (outcome) {
             is AndroidOcrRecognitionOutcome.Detected ->
                 AndroidOcrWorkflowResult(
                     status = OcrPresentationStatus.Detected,
                     preparedInput = prepared,
                     recordedRun = recorded,
+                    recordedTextRegions = recordedRegions,
                     textPreview = outcome.fullText.take(TEXT_PREVIEW_LIMIT),
                     providerLabel = outcome.provider,
                     modelName = outcome.modelName,
+                    recognizedRegionCount = recordedRegions?.regions?.size ?: 0,
                 )
 
             is AndroidOcrRecognitionOutcome.NoTextDetected ->
@@ -103,6 +129,8 @@ interface RustOcrGateway {
     fun prepareOcrInput(request: AndroidOcrStartRequest): PreparedAndroidOcrInput
 
     fun recordOcrRun(request: AndroidRecordOcrRunRequest): RecordedAndroidOcrRun
+
+    fun recordOcrTextRegions(request: AndroidRecordOcrTextRegionsRequest): RecordedAndroidOcrTextRegions
 }
 
 class FfiRustOcrGateway(private val client: A2dClient) : RustOcrGateway {
@@ -152,6 +180,29 @@ class FfiRustOcrGateway(private val client: A2dClient) : RustOcrGateway {
             status = recorded.status.toAndroid(),
         )
     }
+
+    override fun recordOcrTextRegions(
+        request: AndroidRecordOcrTextRegionsRequest,
+    ): RecordedAndroidOcrTextRegions {
+        val recorded =
+            client.recordOcrTextRegions(
+                FfiRecordOcrTextRegionsRequest(
+                    ocrRunId = request.ocrRunId,
+                    regions = request.regions.map { it.toFfi() },
+                ),
+            )
+        return RecordedAndroidOcrTextRegions(
+            ocrRunId = recorded.ocrRunId,
+            regions =
+                recorded.regions.map { region ->
+                    RecordedAndroidOcrTextRegion(
+                        textRegionId = region.textRegionId,
+                        ocrRunId = region.ocrRunId,
+                        text = region.text,
+                    )
+                },
+        )
+    }
 }
 
 data class AndroidOcrStartRequest(
@@ -193,13 +244,50 @@ data class RecordedAndroidOcrRun(
     val status: OcrRunStatus,
 )
 
+data class OcrTextPoint(
+    val x: Float,
+    val y: Float,
+)
+
+data class AndroidRecognizedTextRegion(
+    val polygon: List<OcrTextPoint>,
+    val text: String,
+    val confidence: Float?,
+    val createdAtMs: Long?,
+)
+
+data class AndroidRecordOcrTextRegionRequest(
+    val polygon: List<OcrTextPoint>,
+    val text: String,
+    val confidence: Float?,
+    val createdAtMs: Long?,
+)
+
+data class AndroidRecordOcrTextRegionsRequest(
+    val ocrRunId: String,
+    val regions: List<AndroidRecordOcrTextRegionRequest>,
+)
+
+data class RecordedAndroidOcrTextRegion(
+    val textRegionId: String,
+    val ocrRunId: String,
+    val text: String,
+)
+
+data class RecordedAndroidOcrTextRegions(
+    val ocrRunId: String,
+    val regions: List<RecordedAndroidOcrTextRegion>,
+)
+
 data class AndroidOcrWorkflowResult(
     val status: OcrPresentationStatus,
     val preparedInput: PreparedAndroidOcrInput? = null,
     val recordedRun: RecordedAndroidOcrRun? = null,
+    val recordedTextRegions: RecordedAndroidOcrTextRegions? = null,
     val textPreview: String? = null,
     val providerLabel: String? = null,
     val modelName: String? = null,
+    val recognizedRegionCount: Int = 0,
     val unavailableReason: OcrUnavailableReason? = null,
     val message: String? = null,
     val retryAvailable: Boolean = false,
@@ -211,6 +299,7 @@ data class AndroidOcrWorkflowResult(
             providerLabel = providerLabel,
             modelName = modelName,
             textPreview = textPreview,
+            recognizedRegionCount = recognizedRegionCount,
             unavailableReason = unavailableReason?.label,
             message = message,
             retryAvailable = retryAvailable,
@@ -224,10 +313,12 @@ data class AndroidOcrWorkflowResult(
             status: OcrPresentationStatus,
             message: String,
             preparedInput: PreparedAndroidOcrInput? = null,
+            recordedRun: RecordedAndroidOcrRun? = null,
         ): AndroidOcrWorkflowResult =
             AndroidOcrWorkflowResult(
                 status = status,
                 preparedInput = preparedInput,
+                recordedRun = recordedRun,
                 message = message,
                 retryAvailable = true,
             )
@@ -240,6 +331,7 @@ data class OcrPresentationState(
     val providerLabel: String? = null,
     val modelName: String? = null,
     val textPreview: String? = null,
+    val recognizedRegionCount: Int = 0,
     val unavailableReason: String? = null,
     val message: String? = null,
     val retryAvailable: Boolean = false,
@@ -290,6 +382,7 @@ sealed class AndroidOcrRecognitionOutcome {
         override val providerVersion: String,
         override val modelName: String?,
         val fullText: String,
+        val regions: List<AndroidRecognizedTextRegion> = emptyList(),
         override val completedAtMs: Long?,
         override val warnings: List<String> = emptyList(),
     ) : AndroidOcrRecognitionOutcome()
@@ -388,6 +481,22 @@ private fun AndroidOcrRecognitionOutcome.toRecordRequest(
                 warnings = warnings,
             )
     }
+
+private fun AndroidRecognizedTextRegion.toRecordRequest(): AndroidRecordOcrTextRegionRequest =
+    AndroidRecordOcrTextRegionRequest(
+        polygon = polygon,
+        text = text,
+        confidence = confidence,
+        createdAtMs = createdAtMs,
+    )
+
+private fun AndroidRecordOcrTextRegionRequest.toFfi(): FfiRecordOcrTextRegionRequest =
+    FfiRecordOcrTextRegionRequest(
+        polygon = polygon.map { point -> FfiOcrTextPoint(x = point.x, y = point.y) },
+        text = text,
+        confidence = confidence,
+        createdAtMs = createdAtMs,
+    )
 
 private fun OcrInputKind.toFfi(): FfiOcrInputKind =
     when (this) {
