@@ -26,6 +26,7 @@ mod integrity;
 mod json_columns;
 mod migration_history;
 mod migrations;
+mod ocr_readback_repository;
 mod ocr_search_repository;
 pub use ocr_search_repository::{
     MAX_OCR_SEARCH_QUERY_BYTES, MAX_OCR_SEARCH_RESULTS_LIMIT, OcrSearchDocumentKind,
@@ -53,6 +54,7 @@ pub use integrity::{
     IntegrityFindingSeverity, IntegrityReport,
 };
 pub use migrations::{MIGRATIONS, Migration};
+pub use ocr_readback_repository::OcrReadbackRepository;
 pub use preferred_scan::{ChangePreferredScanRequest, ChangePreferredScanResult};
 pub use repository::{
     AssetRepository, AuditEventRepository, NotebookDesignRepository, NotebookRepository,

@@ -138,8 +138,8 @@ impl OcrSearchRepository for Connection {
 
         let mut results = Vec::new();
         for row in rows {
-            let (page_id, scan_id, ocr_run_id, text_region_id, document_kind, snippet) = row
-                .map_err(|error| map_rusqlite_error("search_ocr_text.row", error))?;
+            let (page_id, scan_id, ocr_run_id, text_region_id, document_kind, snippet) =
+                row.map_err(|error| map_rusqlite_error("search_ocr_text.row", error))?;
             results.push(OcrSearchResult {
                 page_id,
                 scan_id,
