@@ -6,13 +6,17 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.a2d.notebook.feature.library.PageViewerContent
 import com.a2d.notebook.feature.library.PageViewerState
 import com.a2d.notebook.feature.library.PageViewerTestTags
+import com.a2d.notebook.feature.ocr.LoadedAndroidOcrTextRegion
 import com.a2d.notebook.feature.ocr.OcrPresentationState
 import com.a2d.notebook.feature.ocr.OcrPresentationStatus
+import com.a2d.notebook.feature.ocr.OcrTextPoint
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -163,4 +167,101 @@ class PageViewerUiTest {
         composeRule.onNodeWithText("ML Kit model missing", substring = true).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.OCR_RETRY).performScrollTo().assertIsDisplayed()
     }
+
+    @Test
+    fun pageViewerKeepsOcrOverlayDisabledWithoutRustRegionRows() {
+        composeRule.activity.setContent {
+            MaterialTheme {
+                PageViewerContent(
+                    state =
+                        PageViewerState(
+                            pageId = "page-no-regions",
+                            preferredScanId = "scan-no-regions",
+                            ocrState =
+                                OcrPresentationState(
+                                    status = OcrPresentationStatus.Detected,
+                                    runId = "ocr-run-no-regions",
+                                    recognizedRegionCount = 0,
+                                ),
+                            ocrTextRegions = emptyList(),
+                        ),
+                    onBack = {},
+                    onOpenVersions = {},
+                    onOpenNeedsReview = {},
+                )
+            }
+        }
+
+        composeRule
+            .onNodeWithTag(PageViewerTestTags.OCR_REGION_OVERLAY_DISABLED)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText("overlay is disabled", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun pageViewerShowsSelectableOcrRegionOverlayFromStoredPolygons() {
+        var selectedRegionId: String? = null
+        composeRule.activity.setContent {
+            MaterialTheme {
+                PageViewerContent(
+                    state =
+                        PageViewerState(
+                            pageId = "page-regions",
+                            preferredScanId = "scan-regions",
+                            ocrState =
+                                OcrPresentationState(
+                                    status = OcrPresentationStatus.Detected,
+                                    runId = "ocr-run-regions",
+                                    recognizedRegionCount = 1,
+                                ),
+                            ocrTextRegions = listOf(textRegion()),
+                            selectedOcrTextRegionId = "text-region-1",
+                        ),
+                    onBack = {},
+                    onOpenVersions = {},
+                    onOpenNeedsReview = {},
+                    onSelectOcrTextRegion = { selectedRegionId = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(PageViewerTestTags.OCR_REGION_OVERLAY).performScrollTo().assertIsDisplayed()
+        composeRule
+            .onNodeWithTag(PageViewerTestTags.OCR_REGION_OVERLAY_CANVAS)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithTag(PageViewerTestTags.OCR_REGION_BUTTON_PREFIX + "0")
+            .performScrollTo()
+            .performClick()
+        assertEquals("text-region-1", selectedRegionId)
+        composeRule
+            .onNodeWithTag(PageViewerTestTags.OCR_REGION_SELECTED)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Selected region: text-region-1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("hello overlay region").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Confidence: 0.91").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Polygon: (0.0, 0.0)", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    private fun textRegion(): LoadedAndroidOcrTextRegion =
+        LoadedAndroidOcrTextRegion(
+            textRegionId = "text-region-1",
+            ocrRunId = "ocr-run-regions",
+            polygon =
+                listOf(
+                    OcrTextPoint(x = 0.0f, y = 0.0f),
+                    OcrTextPoint(x = 10.0f, y = 0.0f),
+                    OcrTextPoint(x = 10.0f, y = 10.0f),
+                    OcrTextPoint(x = 0.0f, y = 10.0f),
+                ),
+            text = "hello overlay region",
+            confidence = 0.91f,
+            createdAtMs = 300L,
+        )
 }

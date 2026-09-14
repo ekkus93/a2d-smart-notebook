@@ -126,6 +126,14 @@
     <string name="page_viewer_text_region_count">Text regions: %1$d</string>
     <string name="page_viewer_text_preview">Text preview: %1$s</string>
     <string name="page_viewer_text_message">OCR detail: %1$s</string>
+    <string name="page_viewer_ocr_overlay_title">OCR text-region overlay</string>
+    <string name="page_viewer_ocr_overlay_boundary">Polygons are rendered only from locally persisted Rust OCR text-region rows.</string>
+    <string name="page_viewer_ocr_overlay_disabled">No Rust-owned text-region polygons are available for this page, so the overlay is disabled instead of fabricated.</string>
+    <string name="page_viewer_ocr_region_button">Region %1$d: %2$s</string>
+    <string name="page_viewer_ocr_region_select_prompt">Select a region to inspect its persisted text and confidence.</string>
+    <string name="page_viewer_ocr_region_selected">Selected region: %1$s</string>
+    <string name="page_viewer_ocr_region_confidence">Confidence: %1$.2f</string>
+    <string name="page_viewer_ocr_region_polygon">Polygon: %1$s</string>
     <string name="page_viewer_start_ocr">Run OCR</string>
     <string name="page_viewer_split_title">Split</string>
     <string name="page_viewer_split_boundary">Split image/text view remains disabled until both corrected image and OCR text are available from Rust-owned records.</string>

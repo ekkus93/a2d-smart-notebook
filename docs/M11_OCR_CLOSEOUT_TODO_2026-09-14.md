@@ -30,6 +30,7 @@ This file is the active tracking checklist for finishing Milestone 11 OCR work i
 - [x] OCR readback for Page Viewer hydration.
 - [x] OCR search index and `searchOcrText` FFI surface.
 - [x] Android OCR search UI integration — PR #55, merged at `262a76ebd20a7571bd5224fda3711a9c6176eb46`, post-merge CI passed.
+- [x] OCR correction workflow — PR #56, merged at `2320cb0fd93534d920b8b1af8ac429e48fcb06ef`, post-merge CI passed.
 
 ## Completed slice — Android OCR search UI integration
 
@@ -95,10 +96,11 @@ Merged: PR #55, exact green head `9cb97476a5116ba9b553e3cdda2288b57b451e38`
 - [x] Merge exact green PR head.
 - [x] Verify post-merge `master` CI.
 
-## Current active slice — OCR correction workflow
+## Completed slice — OCR correction workflow
 
 Branch: `ralph/m11-ocr-correction-workflow-slice`
 Base: `262a76ebd20a7571bd5224fda3711a9c6176eb46`
+Merged: PR #56, exact green head `6961bd9a05b7d8256a983956abe408502a059363`
 
 ### M11-C1 — OCR correction workflow
 
@@ -112,14 +114,19 @@ Base: `262a76ebd20a7571bd5224fda3711a9c6176eb46`
 - [x] Add Rust storage/core/FFI tests.
 - [x] Add Android presentation for correction entry and review.
 
-## Remaining M11 slices after OCR correction workflow
+## Current active slice — Text-region overlay UI
+
+Branch: `ralph/m11-ocr-region-overlay-ui-slice`
+Base: `2320cb0fd93534d920b8b1af8ac429e48fcb06ef`
 
 ### M11-R1 — Text-region overlay UI
 
-- [ ] Use stored polygons to render selectable OCR text regions in Page Viewer.
-- [ ] Display selected region text and confidence when available.
-- [ ] Keep overlay disabled when no Rust-owned region rows exist.
-- [ ] Add tests for overlay state and no-region fallback.
+- [x] Use stored polygons to render selectable OCR text regions in Page Viewer.
+- [x] Display selected region text and confidence when available.
+- [x] Keep overlay disabled when no Rust-owned region rows exist.
+- [x] Add tests for overlay state and no-region fallback.
+
+## Remaining M11 slices after text-region overlay UI
 
 ### M11-P1 — Real Android OCR provider
 
