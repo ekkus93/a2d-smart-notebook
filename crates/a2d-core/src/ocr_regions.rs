@@ -314,7 +314,10 @@ mod tests {
         let recorded = core
             .record_ocr_text_regions(RecordOcrTextRegionsRequest {
                 ocr_run_id: run_id.to_string(),
-                regions: vec![region("first line", Some(300)), region("second line", Some(301))],
+                regions: vec![
+                    region("first line", Some(300)),
+                    region("second line", Some(301)),
+                ],
             })
             .unwrap();
 
@@ -383,7 +386,12 @@ mod tests {
             "STORAGE_TEXT_REGION_OCR_RUN_NOT_DETECTED"
         );
         let storage = core.lock_storage().unwrap();
-        assert!(storage.list_text_regions_for_ocr_run(&run_id).unwrap().is_empty());
+        assert!(
+            storage
+                .list_text_regions_for_ocr_run(&run_id)
+                .unwrap()
+                .is_empty()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }
