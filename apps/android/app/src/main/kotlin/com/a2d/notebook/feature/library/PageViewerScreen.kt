@@ -261,6 +261,14 @@ private fun PageViewerOcrTextSection(
             state.ocrState.modelName?.let { model ->
                 Text(stringResource(R.string.page_viewer_text_model, model))
             }
+            if (state.ocrState.recognizedRegionCount > 0) {
+                Text(
+                    stringResource(
+                        R.string.page_viewer_text_region_count,
+                        state.ocrState.recognizedRegionCount,
+                    ),
+                )
+            }
             state.ocrState.textPreview?.let { preview ->
                 Text(stringResource(R.string.page_viewer_text_preview, preview))
             }
