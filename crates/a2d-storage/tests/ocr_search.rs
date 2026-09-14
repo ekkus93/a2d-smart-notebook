@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use a2d_domain::{
     Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, OcrRun, OcrRunId,
-    OcrRunStatus, OcrUnavailableReason, Page, PageId, PageKind, PageState, Provenance,
-    QualityStatus, Scan, ScanId, SmartPageId, TextRegion, TextRegionId,
+    OcrUnavailableReason, Page, PageId, PageKind, PageState, Provenance, QualityStatus, Scan,
+    ScanId, SmartPageId, TextRegion, TextRegionId,
 };
 use a2d_storage::{
     AssetRepository, OcrRunRepository, OcrSearchDocumentKind, OcrSearchQuery, OcrSearchRepository,
