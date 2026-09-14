@@ -27,6 +27,7 @@ object LibraryHubTestTags {
     const val NOTEBOOKS = "library_notebooks"
     const val SMART_PAGES = "library_smart_pages"
     const val PAGES = "library_pages"
+    const val OCR_SEARCH = "library_ocr_search"
     const val PAGE_SETS = "library_page_sets"
     const val COLLECTIONS = "library_collections"
     const val IMPORTS = "library_imports"
@@ -67,6 +68,7 @@ fun LibraryHubScreen(
     modifier: Modifier = Modifier,
     state: LibraryHubState = LibraryHubState(),
     onOpenPages: () -> Unit = {},
+    onOpenOcrSearch: () -> Unit = {},
     onOpenPageSets: () -> Unit = {},
     onOpenCollections: () -> Unit = {},
     onOpenImports: () -> Unit = {},
@@ -129,6 +131,12 @@ fun LibraryHubScreen(
             detail = stringResource(R.string.library_pages_detail, state.pageCount),
             testTag = LibraryHubTestTags.PAGES,
             onClick = onOpenPages,
+        )
+        LibraryDestinationButton(
+            title = stringResource(R.string.library_ocr_search),
+            detail = stringResource(R.string.library_ocr_search_detail),
+            testTag = LibraryHubTestTags.OCR_SEARCH,
+            onClick = onOpenOcrSearch,
         )
         LibraryDestinationButton(
             title = stringResource(R.string.library_page_sets),

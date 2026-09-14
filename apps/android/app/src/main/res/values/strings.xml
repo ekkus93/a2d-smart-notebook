@@ -31,7 +31,7 @@
     <string name="library_local_first">Browse the local library on this device. No account or A2D server is required.</string>
     <string name="library_status_title">Library overview</string>
     <string name="library_total_entries">Total visible library entries: %1$d</string>
-    <string name="library_status_boundary">Search, OCR, backup, restore, page-row persistence, collections, imports, and trash remain separate roadmap slices.</string>
+    <string name="library_status_boundary">Backup, restore, page-row persistence, collections, imports, and trash remain separate roadmap slices.</string>
     <string name="library_empty_title">No local library entries yet</string>
     <string name="library_empty_body">Add a Notebook, create Smart Pages, import files, or scan a page. The hub keeps every destination visible even before its backing workflow exists.</string>
     <string name="library_notebooks">Notebooks</string>
@@ -40,6 +40,8 @@
     <string name="library_smart_pages_detail">Smart Pages: %1$d</string>
     <string name="library_pages">Pages</string>
     <string name="library_pages_detail">Pages: %1$d</string>
+    <string name="library_ocr_search">OCR Search</string>
+    <string name="library_ocr_search_detail">Search locally persisted OCR text</string>
     <string name="library_page_sets">Page Sets</string>
     <string name="library_page_sets_detail">Page Sets: %1$d</string>
     <string name="library_collections">Collections</string>
@@ -50,6 +52,26 @@
     <string name="library_needs_review_detail">Needs Review: %1$d</string>
     <string name="library_trash">Trash</string>
     <string name="library_trash_detail">Trash: %1$d</string>
+
+    <string name="ocr_search_title">OCR Search</string>
+    <string name="ocr_search_local_first">Search locally persisted OCR text on this device. No account, server index, or managed cloud service is required.</string>
+    <string name="ocr_search_boundary_title">Local OCR search boundary</string>
+    <string name="ocr_search_boundary_body">Results come only from Rust-owned OCR rows and the local SQLite search index. No-text, unavailable, and cancelled OCR outcomes do not create fake searchable text.</string>
+    <string name="ocr_search_query_label">Search OCR text</string>
+    <string name="ocr_search_submit">Search OCR text</string>
+    <string name="ocr_search_not_connected">OCR search is not connected to an opened local Rust library in this presentation shell.</string>
+    <string name="ocr_search_no_query_title">Enter a search query</string>
+    <string name="ocr_search_no_query_body">Only OCR text that has already been recorded locally by Rust can appear here.</string>
+    <string name="ocr_search_no_matches_title">No matching OCR text</string>
+    <string name="ocr_search_no_matches_body">No locally persisted OCR text matched "%1$s".</string>
+    <string name="ocr_search_error_title">OCR search unavailable</string>
+    <string name="ocr_search_result_count">OCR search results: %1$d</string>
+    <string name="ocr_search_hit_source">Source: %1$s</string>
+    <string name="ocr_search_hit_page">Page ID: %1$s</string>
+    <string name="ocr_search_hit_scan">Scan ID: %1$s</string>
+    <string name="ocr_search_hit_run">OCR run: %1$s</string>
+    <string name="ocr_search_hit_region">Text region: %1$s</string>
+    <string name="ocr_search_open_page">Open page</string>
 
     <string name="page_browser_title">Pages</string>
     <string name="page_browser_local_first">Browse local pages on this device. No account or A2D server is required.</string>

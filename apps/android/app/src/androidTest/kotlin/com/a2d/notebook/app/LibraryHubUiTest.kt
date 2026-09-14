@@ -41,6 +41,7 @@ class LibraryHubUiTest {
         composeRule.onNodeWithTag(LibraryHubTestTags.NOTEBOOKS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.SMART_PAGES).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.PAGES).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(LibraryHubTestTags.OCR_SEARCH).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.PAGE_SETS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.COLLECTIONS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(LibraryHubTestTags.IMPORTS).performScrollTo().assertIsDisplayed()
@@ -76,13 +77,14 @@ class LibraryHubUiTest {
         composeRule.onNodeWithText("Notebooks: 2").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Smart Pages: 3").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Pages: 8").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Search locally persisted OCR text").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Page Sets: 4").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Collections: 5").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Imports: 6").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Needs Review: 1").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Trash: 7").performScrollTo().assertIsDisplayed()
         composeRule
-            .onNodeWithText("Search, OCR, backup, restore, page-row persistence", substring = true)
+            .onNodeWithText("Backup, restore, page-row persistence", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
     }
