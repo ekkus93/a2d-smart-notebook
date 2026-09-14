@@ -30,7 +30,8 @@ mod ocr_readback_repository;
 mod ocr_search_repository;
 pub use ocr_search_repository::{
     MAX_OCR_SEARCH_QUERY_BYTES, MAX_OCR_SEARCH_RESULTS_LIMIT, OcrSearchDocumentKind,
-    OcrSearchQuery, OcrSearchRepository, OcrSearchResult,
+    OcrSearchQuery, OcrSearchRepository, OcrSearchResult, TextCorrectionRecord,
+    TextCorrectionRepository,
 };
 mod preferred_scan;
 mod repository;

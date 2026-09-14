@@ -29,11 +29,13 @@ This file is the active tracking checklist for finishing Milestone 11 OCR work i
 - [x] Android text-region persistence wiring.
 - [x] OCR readback for Page Viewer hydration.
 - [x] OCR search index and `searchOcrText` FFI surface.
+- [x] Android OCR search UI integration — PR #55, merged at `262a76ebd20a7571bd5224fda3711a9c6176eb46`, post-merge CI passed.
 
-## Current active slice — Android OCR search UI integration
+## Completed slice — Android OCR search UI integration
 
 Branch: `ralph/m11-android-ocr-search-ui-slice`
 Base: `faa81ac0a1b9b3e8f4adad6bf3d4889521ae26b4`
+Merged: PR #55, exact green head `9cb97476a5116ba9b553e3cdda2288b57b451e38`
 
 ### M11-S1 — Android search adapter
 
@@ -80,32 +82,37 @@ Base: `faa81ac0a1b9b3e8f4adad6bf3d4889521ae26b4`
 
 ### M11-S5 — PR validation and merge
 
-- [ ] Open PR for Android OCR search UI integration.
-- [ ] Validate exact PR head:
-  - [ ] Rust fmt/clippy/tests
-  - [ ] cargo-deny
-  - [ ] Kotlin UniFFI binding drift
-  - [ ] Android native/binding generation
-  - [ ] Android lint/unit/APK
-  - [ ] Android emulator instrumentation when present
-  - [ ] Milestone 7 Native Validation when triggered
-- [ ] Fix any failures with replacement commits on the same branch.
-- [ ] Merge exact green PR head.
-- [ ] Verify post-merge `master` CI.
+- [x] Open PR for Android OCR search UI integration.
+- [x] Validate exact PR head:
+  - [x] Rust fmt/clippy/tests
+  - [x] cargo-deny
+  - [x] Kotlin UniFFI binding drift
+  - [x] Android native/binding generation
+  - [x] Android lint/unit/APK
+  - [x] Android emulator instrumentation when present
+  - [x] Milestone 7 Native Validation when triggered
+- [x] Fix any failures with replacement commits on the same branch.
+- [x] Merge exact green PR head.
+- [x] Verify post-merge `master` CI.
 
-## Remaining M11 slices after Android search UI
+## Current active slice — OCR correction workflow
+
+Branch: `ralph/m11-ocr-correction-workflow-slice`
+Base: `262a76ebd20a7571bd5224fda3711a9c6176eb46`
 
 ### M11-C1 — OCR correction workflow
 
-- [ ] Define the user-correction model over OCR text.
-- [ ] Persist corrected text separately from original OCR output.
-- [ ] Preserve provenance for both original OCR and user correction.
-- [ ] Decide and document search precedence:
-  - [ ] original OCR only
-  - [ ] corrected text only
-  - [ ] both original and corrected text with source labels
-- [ ] Add Rust storage/core/FFI tests.
-- [ ] Add Android presentation for correction entry and review.
+- [x] Define the user-correction model over OCR text.
+- [x] Persist corrected text separately from original OCR output.
+- [x] Preserve provenance for both original OCR and user correction.
+- [x] Decide and document search precedence:
+  - [x] original OCR only for the current `searchOcrText` index in M11-C1.
+  - [x] corrected text only rejected for M11-C1 because it would hide immutable original OCR provenance.
+  - [x] both original and corrected text deferred until a later unified search ranking/source-label slice.
+- [x] Add Rust storage/core/FFI tests.
+- [x] Add Android presentation for correction entry and review.
+
+## Remaining M11 slices after OCR correction workflow
 
 ### M11-R1 — Text-region overlay UI
 

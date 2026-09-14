@@ -235,6 +235,8 @@ jobs:
           grep -q 'recordOcrTextRegions' "$binding"
           grep -q 'loadLatestOcrOutput' "$binding"
           grep -q 'searchOcrText' "$binding"
+          grep -q 'recordOcrCorrection' "$binding"
+          grep -q 'listOcrCorrectionsForScan' "$binding"
           git check-ignore -q "$binding"
           if git ls-files --error-unmatch "$binding" >/dev/null 2>&1; then
             echo "Generated Kotlin UniFFI binding must not be committed" >&2
