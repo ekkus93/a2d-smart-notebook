@@ -29,6 +29,8 @@ mod ocr_regions;
 pub use ocr_regions::*;
 mod revision;
 pub use revision::*;
+mod search;
+pub use search::*;
 
 #[derive(uniffi::Record)]
 pub struct OpenLibraryRequest {

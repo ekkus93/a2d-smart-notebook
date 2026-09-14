@@ -34,6 +34,8 @@ mod scan_comparison;
 pub use scan_comparison::*;
 mod scan_policy;
 pub use scan_policy::*;
+mod search;
+pub use search::*;
 
 pub struct OpenLibraryRequest {
     pub library_path: String,
