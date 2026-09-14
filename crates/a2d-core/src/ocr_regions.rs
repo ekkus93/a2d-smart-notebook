@@ -146,9 +146,8 @@ mod tests {
     use super::*;
     use crate::OpenLibraryRequest;
     use a2d_domain::{
-        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, OcrRun,
-        OcrRunStatus, Page, PageId, PageKind, PageState, Provenance, QualityStatus, Scan, ScanId,
-        SmartPageId,
+        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, OcrRun, OcrRunStatus,
+        Page, PageId, PageKind, PageState, Provenance, QualityStatus, Scan, ScanId, SmartPageId,
     };
     use a2d_storage::{
         AssetRepository, OcrRunRepository, PageRepository, ScanRepository, TextRegionRepository,
@@ -163,10 +162,8 @@ mod tests {
     }
 
     fn open_test_core() -> (Arc<A2dCore>, PathBuf) {
-        let dir = std::env::temp_dir().join(format!(
-            "a2d-core-ocr-region-test-{}",
-            PageId::generate()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("a2d-core-ocr-region-test-{}", PageId::generate()));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: dir.to_string_lossy().into_owned(),
         })
