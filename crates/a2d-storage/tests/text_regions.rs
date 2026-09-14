@@ -142,9 +142,14 @@ fn text_region_round_trips_and_lists_for_detected_ocr_run() {
     assert_eq!(loaded.ocr_run_id, run_id);
     assert_eq!(loaded.text, "first line");
     assert_eq!(loaded.confidence, Some(0.85));
-    assert_eq!(loaded.polygon, vec![(0.0, 0.0), (120.0, 0.0), (120.0, 32.0), (0.0, 32.0)]);
+    assert_eq!(
+        loaded.polygon,
+        vec![(0.0, 0.0), (120.0, 0.0), (120.0, 32.0), (0.0, 32.0)]
+    );
 
-    let listed = storage.list_text_regions_for_ocr_run(&loaded.ocr_run_id).unwrap();
+    let listed = storage
+        .list_text_regions_for_ocr_run(&loaded.ocr_run_id)
+        .unwrap();
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[0].text, "first line");
     assert_eq!(listed[1].text, "second line");
@@ -241,7 +246,12 @@ fn text_regions_cannot_attach_to_no_text_or_unavailable_ocr_runs() {
         unavailable_error.code.to_string(),
         "STORAGE_TEXT_REGION_OCR_RUN_NOT_DETECTED"
     );
-    assert!(storage.list_text_regions_for_ocr_run(no_text.id()).unwrap().is_empty());
+    assert!(
+        storage
+            .list_text_regions_for_ocr_run(no_text.id())
+            .unwrap()
+            .is_empty()
+    );
     assert!(
         storage
             .list_text_regions_for_ocr_run(unavailable.id())
