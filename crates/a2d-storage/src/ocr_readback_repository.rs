@@ -8,7 +8,7 @@ use a2d_domain::{
     A2dError, AssetId, OcrRun, OcrRunId, OcrRunStatus, OcrUnavailableReason, PageId, Provenance,
     ScanId,
 };
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::json_columns::decode_json;
 use crate::{Storage, map_rusqlite_error};
