@@ -19,6 +19,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
 import com.a2d.notebook.feature.ocr.OcrPresentationState
+import com.a2d.notebook.feature.ocr.OcrRegionOverlayCard
+import com.a2d.notebook.feature.ocr.OcrRegionOverlayState
 import com.a2d.notebook.feature.ocr.OcrPresentationStatus
 
 object PageViewerTestTags {
@@ -53,6 +55,7 @@ data class PageViewerState(
     val hasCorrectedImage: Boolean = false,
     val hasRecognizedText: Boolean = false,
     val ocrState: OcrPresentationState = OcrPresentationState(),
+    val ocrRegionOverlay: OcrRegionOverlayState = OcrRegionOverlayState(),
     val annotationCount: Int = 0,
     val relatedPageCount: Int = 0,
     val skillResultCount: Int = 0,
@@ -157,6 +160,7 @@ fun PageViewerContent(
             onRetryOcr = onRetryOcr,
             onCancelOcr = onCancelOcr,
         )
+        OcrRegionOverlayCard(state.ocrRegionOverlay)
         PageViewerSection(
             title = stringResource(R.string.page_viewer_split_title),
             detail = stringResource(R.string.page_viewer_split_boundary),

@@ -116,10 +116,13 @@ Base: `262a76ebd20a7571bd5224fda3711a9c6176eb46`
 
 ### M11-R1 — Text-region overlay UI
 
-- [ ] Use stored polygons to render selectable OCR text regions in Page Viewer.
-- [ ] Display selected region text and confidence when available.
-- [ ] Keep overlay disabled when no Rust-owned region rows exist.
-- [ ] Add tests for overlay state and no-region fallback.
+Branch: `ralph/m11-text-region-overlay-ui-slice`
+Base: `2320cb0fd93534d920b8b1af8ac429e48fcb06ef`
+
+- [x] Use stored polygons to render selectable OCR text regions in Page Viewer.
+- [x] Display selected region text and confidence when available.
+- [x] Keep overlay disabled when no Rust-owned region rows exist.
+- [x] Add tests for overlay state and no-region fallback.
 
 ### M11-P1 — Real Android OCR provider
 
