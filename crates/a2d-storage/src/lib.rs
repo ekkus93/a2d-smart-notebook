@@ -36,6 +36,8 @@ mod review;
 pub use review::*;
 mod revision;
 pub use revision::*;
+mod text_region_repository;
+pub use text_region_repository::TextRegionRepository;
 mod transaction_repository;
 mod workflow;
 
