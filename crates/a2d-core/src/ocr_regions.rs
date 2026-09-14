@@ -243,7 +243,9 @@ mod tests {
         );
         let storage = core.lock_storage().unwrap();
         storage.insert_page(&page).unwrap();
-        storage.insert_asset(&asset(original_asset_id.clone())).unwrap();
+        storage
+            .insert_asset(&asset(original_asset_id.clone()))
+            .unwrap();
         storage.insert_scan(&scan).unwrap();
         ScanFixture {
             scan_id,
@@ -252,11 +254,7 @@ mod tests {
         }
     }
 
-    fn insert_ocr_run(
-        core: &A2dCore,
-        fixture: &ScanFixture,
-        status: OcrRunStatus,
-    ) -> OcrRunId {
+    fn insert_ocr_run(core: &A2dCore, fixture: &ScanFixture, status: OcrRunStatus) -> OcrRunId {
         let run = match status {
             OcrRunStatus::Detected => OcrRun::detected(
                 OcrRunId::generate(),
