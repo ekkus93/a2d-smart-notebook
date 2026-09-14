@@ -26,6 +26,8 @@ mod milestone9;
 pub use milestone9::*;
 mod ocr;
 pub use ocr::*;
+mod ocr_regions;
+pub use ocr_regions::*;
 mod revision;
 pub use revision::*;
 mod scan_comparison;
