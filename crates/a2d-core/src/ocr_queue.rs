@@ -156,6 +156,7 @@ impl A2dCore {
     pub fn claim_next_ocr_job(&self) -> Result<Option<OcrJobSnapshot>, A2dError> {
         let now_ms = system_now_ms()?;
         let storage = self.lock_storage()?;
+        recover_interrupted_ocr_jobs(&storage)?;
         let Some(mut job) = storage.next_due_ocr_job(now_ms)? else {
             return Ok(None);
         };
