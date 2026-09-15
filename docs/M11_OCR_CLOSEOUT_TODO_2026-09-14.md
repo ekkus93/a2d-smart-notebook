@@ -159,7 +159,7 @@ Merged: PR #60, exact green head `c861f91ffc10b8339eea4f6b56e39820063e8860`; squ
   - [x] OCR correction
   - [x] real provider support
   - [x] queue/retry orchestration
-- [ ] Verify final closeout PR and post-merge `master` CI.
+- [x] Verify final closeout PR and post-merge `master` CI — documentation closeout merged as PR #62 at `1016467c792d0d97fcc6c733bb4904757273224b`; post-merge CI run `34970372808` and hosted-status run `34971618061` both passed.
 
 ## Known cleanup
 
@@ -168,4 +168,4 @@ Merged: PR #60, exact green head `c861f91ffc10b8339eea4f6b56e39820063e8860`; squ
 
 ## Current stopping condition
 
-Only the final documentation PR qualification/merge and post-merge `master` CI verification remain before Milestone 11 is closed.
+Milestone 11 is closed: every tracked task and subtask is implemented or explicitly reconciled, the final documentation closeout is merged to `master`, and its post-merge CI is green.
