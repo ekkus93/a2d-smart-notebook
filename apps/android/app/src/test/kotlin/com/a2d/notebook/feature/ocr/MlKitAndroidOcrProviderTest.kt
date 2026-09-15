@@ -132,19 +132,19 @@ class MlKitAndroidOcrProviderTest {
     fun mlKitErrorCodesPreserveTerminalCategories() {
         assertEquals(
             LocalTextRecognitionFailureKind.Cancelled,
-            classifyMlKitFailure(MlKitException("cancel", MlKitException.CANCELLED)).kind,
+            classifyMlKitErrorCode(MlKitException.CANCELLED).kind,
         )
         assertEquals(
             LocalTextRecognitionFailureKind.ProviderUnavailable,
-            classifyMlKitFailure(MlKitException("unavailable", MlKitException.UNAVAILABLE)).kind,
+            classifyMlKitErrorCode(MlKitException.UNAVAILABLE).kind,
         )
         assertEquals(
             LocalTextRecognitionFailureKind.ResourceUnavailable,
-            classifyMlKitFailure(MlKitException("resource", MlKitException.RESOURCE_EXHAUSTED)).kind,
+            classifyMlKitErrorCode(MlKitException.RESOURCE_EXHAUSTED).kind,
         )
         assertEquals(
             LocalTextRecognitionFailureKind.UnsupportedInput,
-            classifyMlKitFailure(MlKitException("unsupported", MlKitException.UNSUPPORTED)).kind,
+            classifyMlKitErrorCode(MlKitException.UNSUPPORTED).kind,
         )
     }
 

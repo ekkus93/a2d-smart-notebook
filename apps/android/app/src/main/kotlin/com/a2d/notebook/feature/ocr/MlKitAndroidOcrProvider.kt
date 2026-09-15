@@ -372,9 +372,20 @@ internal fun classifyMlKitFailure(failure: Throwable): LocalTextRecognitionExcep
             cause = failure,
         )
     }
+    return classifyMlKitErrorCode(
+        errorCode = failure.errorCode,
+        message = failure.message ?: "Bundled ML Kit text recognition failed",
+        cause = failure,
+    )
+}
 
+internal fun classifyMlKitErrorCode(
+    errorCode: Int,
+    message: String = "Bundled ML Kit text recognition failed",
+    cause: Throwable? = null,
+): LocalTextRecognitionException {
     val kind =
-        when (failure.errorCode) {
+        when (errorCode) {
             MlKitException.CANCELLED -> LocalTextRecognitionFailureKind.Cancelled
             MlKitException.UNAVAILABLE -> LocalTextRecognitionFailureKind.ProviderUnavailable
             MlKitException.UNSUPPORTED,
@@ -402,8 +413,8 @@ internal fun classifyMlKitFailure(failure: Throwable): LocalTextRecognitionExcep
         }
     return LocalTextRecognitionException(
         kind = kind,
-        message = failure.message ?: "Bundled ML Kit text recognition failed",
+        message = message,
         retryAvailable = retryAvailable,
-        cause = failure,
+        cause = cause,
     )
 }
