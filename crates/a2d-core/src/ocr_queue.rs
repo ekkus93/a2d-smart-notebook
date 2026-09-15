@@ -1,3 +1,8 @@
+//! Durable Rust-owned OCR queue orchestration for Milestone 11.
+//!
+//! Android supplies platform OCR execution, while Rust owns queue identity, ordering, retry and
+//! cancellation state, provider diagnostics, restart recovery, and every durable transition.
+
 use crate::{A2dCore, CoreOcrInputKind, PrepareOcrInputRequest, PreparedOcrInput};
 use a2d_domain::{
     A2dError, ErrorCategory, ErrorCode, ErrorSeverity, OcrJobId, OcrRunStatus,
