@@ -17,12 +17,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
+import kotlinx.coroutines.launch
 
 object OcrSearchTestTags {
     const val TITLE = "ocr_search_title"
@@ -45,18 +47,25 @@ fun OcrSearchScreen(
     searchController: AndroidOcrSearchController? = null,
 ) {
     var state by remember { mutableStateOf(OcrSearchPresentationState.noQuery()) }
+    val scope = rememberCoroutineScope()
     val notConnectedMessage = stringResource(R.string.ocr_search_not_connected)
     OcrSearchContent(
         state = state,
         onBack = onBack,
         onQueryChange = { query -> state = OcrSearchPresentationState.noQuery(query) },
         onSubmitSearch = { query ->
-            state =
-                searchController?.submit(query)
-                    ?: OcrSearchPresentationState.error(
+            val controller = searchController
+            if (controller == null) {
+                state =
+                    OcrSearchPresentationState.error(
                         query = query.trim(),
                         message = notConnectedMessage,
                     )
+            } else {
+                scope.launch {
+                    state = controller.submit(query)
+                }
+            }
         },
         onOpenPage = onOpenPage,
         modifier = modifier,

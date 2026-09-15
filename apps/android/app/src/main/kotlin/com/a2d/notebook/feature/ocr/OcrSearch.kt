@@ -1,5 +1,8 @@
 package com.a2d.notebook.feature.ocr
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.OcrSearchDocumentKind as FfiOcrSearchDocumentKind
 import uniffi.a2d_ffi.SearchOcrTextRequest as FfiSearchOcrTextRequest
@@ -38,14 +41,15 @@ class FfiAndroidOcrSearchGateway(private val client: A2dClient) : AndroidOcrSear
 /**
  * Converts a search submission into presentation state.
  *
- * Validation and query syntax remain Rust-owned. This controller only avoids a blank-query trip
- * across the FFI boundary and preserves any Rust error text for local presentation.
+ * Validation and query syntax remain Rust-owned. Blocking FFI/database work is dispatched away
+ * from the UI thread, and any Rust error text is preserved for local presentation.
  */
 class AndroidOcrSearchController(
     private val gateway: AndroidOcrSearchGateway,
     private val defaultLimit: UInt = 20u,
+    private val searchDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    fun submit(query: String): OcrSearchPresentationState {
+    suspend fun submit(query: String): OcrSearchPresentationState {
         val trimmedQuery = query.trim()
         if (trimmedQuery.isEmpty()) {
             return OcrSearchPresentationState.noQuery(query)
@@ -53,12 +57,14 @@ class AndroidOcrSearchController(
 
         return try {
             val results =
-                gateway.searchOcrText(
-                    AndroidOcrSearchRequest(
-                        query = trimmedQuery,
-                        limit = defaultLimit,
-                    ),
-                )
+                withContext(searchDispatcher) {
+                    gateway.searchOcrText(
+                        AndroidOcrSearchRequest(
+                            query = trimmedQuery,
+                            limit = defaultLimit,
+                        ),
+                    )
+                }
             if (results.hits.isEmpty()) {
                 OcrSearchPresentationState.noMatches(trimmedQuery)
             } else {
