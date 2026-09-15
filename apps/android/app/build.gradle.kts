@@ -80,6 +80,10 @@ dependencies {
 
     implementation("com.google.zxing:core:3.5.3")
 
+    // Bundled ML Kit OCR keeps the core recognition path local and immediately available.
+    // Do not replace this with the Google Play services artifact, which downloads its model.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     // UniFFI's generated Kotlin bindings load the Rust cdylib through JNA.
     implementation("net.java.dev.jna:jna:5.14.0@aar")
 
