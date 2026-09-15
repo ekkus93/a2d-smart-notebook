@@ -421,11 +421,11 @@ private fun OcrInputKind.toQueueFfi(): FfiOcrInputKind =
         OcrInputKind.OcrOptimized -> FfiOcrInputKind.OCR_OPTIMIZED
     }
 
-private fun FfiOcrInputKind.toQueueAndroid(): OcrInputKind =
+private fun FfiOcrInputKind.toQueueAndroid(): com.a2d.notebook.feature.ocr.OcrInputKind =
     when (this) {
-        FfiOcrInputKind.ORIGINAL -> OcrInputKind.Original
-        FfiOcrInputKind.Corrected -> OcrInputKind.Corrected
-        FfiOcrInputKind.OCR_OPTIMIZED -> OcrInputKind.OcrOptimized
+        FfiOcrInputKind.ORIGINAL -> com.a2d.notebook.feature.ocr.OcrInputKind.Original
+        FfiOcrInputKind.CORRECTED -> com.a2d.notebook.feature.ocr.OcrInputKind.Corrected
+        FfiOcrInputKind.OCR_OPTIMIZED -> com.a2d.notebook.feature.ocr.OcrInputKind.OcrOptimized
     }
 
 private fun ocrThreadFactory(): ThreadFactory =
