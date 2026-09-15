@@ -195,10 +195,7 @@ impl A2dCore {
             .ok_or_else(|| missing_job_error(&job_id))
     }
 
-    pub fn request_ocr_job_cancellation(
-        &self,
-        job_id: &str,
-    ) -> Result<OcrJobSnapshot, A2dError> {
+    pub fn request_ocr_job_cancellation(&self, job_id: &str) -> Result<OcrJobSnapshot, A2dError> {
         let job_id = OcrJobId::parse(job_id)?;
         let now_ms = system_now_ms()?;
         let storage = self.lock_storage()?;
