@@ -140,8 +140,8 @@ Base: `90f642cb27d82465c6523a59caf66979f4086bc6`
 
 Branch: `ralph/m11-ocr-queue-orchestration-slice`
 Base: `7ddb3da8478d970329b5f7a3295566a7fd34f625`
-PR: #60
-Qualified exact head before checklist reconciliation: `c861f91ffc10b8339eea4f6b56e39820063e8860`
+Active PR: #64 (replacement PR for the reconciled branch head)
+Qualified exact implementation head before checklist reconciliation: `c861f91ffc10b8339eea4f6b56e39820063e8860`
 Evidence: CI `34954130385` passed; Milestone 7 Native Validation `34954130413` passed.
 
 - [x] Connect the existing OCR queue/status contract to in-app OCR execution.
