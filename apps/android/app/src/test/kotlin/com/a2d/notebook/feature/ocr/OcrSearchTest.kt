@@ -1,14 +1,16 @@
 package com.a2d.notebook.feature.ocr
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OcrSearchTest {
     @Test
-    fun blankQueryStaysLocalAndDoesNotCallRust() {
+    fun blankQueryStaysLocalAndDoesNotCallRust() = runBlocking {
         val gateway = FakeOcrSearchGateway()
-        val controller = AndroidOcrSearchController(gateway)
+        val controller = AndroidOcrSearchController(gateway, searchDispatcher = Dispatchers.Unconfined)
 
         val state = controller.submit("   ")
 
@@ -18,7 +20,7 @@ class OcrSearchTest {
     }
 
     @Test
-    fun detectedFullTextAndRegionHitsMapToPresentationRows() {
+    fun detectedFullTextAndRegionHitsMapToPresentationRows() = runBlocking {
         val gateway =
             FakeOcrSearchGateway(
                 results =
@@ -45,7 +47,12 @@ class OcrSearchTest {
                             ),
                     ),
             )
-        val controller = AndroidOcrSearchController(gateway, defaultLimit = 12u)
+        val controller =
+            AndroidOcrSearchController(
+                gateway,
+                defaultLimit = 12u,
+                searchDispatcher = Dispatchers.Unconfined,
+            )
 
         val state = controller.submit(" notebook ")
 
@@ -60,9 +67,9 @@ class OcrSearchTest {
     }
 
     @Test
-    fun noSearchHitsStayDistinctFromUnavailableOrFakeText() {
+    fun noSearchHitsStayDistinctFromUnavailableOrFakeText() = runBlocking {
         val gateway = FakeOcrSearchGateway(results = AndroidOcrSearchResults("missing", emptyList()))
-        val controller = AndroidOcrSearchController(gateway)
+        val controller = AndroidOcrSearchController(gateway, searchDispatcher = Dispatchers.Unconfined)
 
         val state = controller.submit("missing")
 
@@ -72,12 +79,12 @@ class OcrSearchTest {
     }
 
     @Test
-    fun rustValidationErrorIsPreservedForPresentation() {
+    fun rustValidationErrorIsPreservedForPresentation() = runBlocking {
         val gateway =
             FakeOcrSearchGateway(
                 failure = IllegalArgumentException("STORAGE_OCR_SEARCH_LIMIT_INVALID"),
             )
-        val controller = AndroidOcrSearchController(gateway)
+        val controller = AndroidOcrSearchController(gateway, searchDispatcher = Dispatchers.Unconfined)
 
         val state = controller.submit("notebook")
 
