@@ -2,6 +2,14 @@
 
 This file is the active tracking checklist for finishing Milestone 11 OCR work in `ekkus93/a2d-smart-notebook`.
 
+## Post-closeout review addendum — 2026-09-15
+
+This checklist is now a historical closeout record, not the current source of truth for M11 completion. A post-closeout code review of `master` baseline `da8a6528ce1a72c1612456bf643618b48b0bb2fc` found that several lower-level OCR components were implemented and CI-qualified, but key production composition and consistency seams were still open. The active remediation tracker is `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-15.md`, with requirements in `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_SPEC_2026-09-15.md`.
+
+Historical PR and CI evidence in this file remains valid for the tested slices. However, it did not prove the missing production wiring seams, including real OCR Search controller injection, real Page Viewer OCR hydration/actions, reachable correction UI, transactional OCR result/region/queue finalization, cancellation/commit race semantics, overlay source-geometry correctness, Rust polygon bounds validation, non-truncated region hydration, and queue/status/retry contract consolidation.
+
+M11 must not be represented as fully closed until the post-closeout remediation TODO reaches zero unchecked implementation, testing, qualification, documentation, and cleanup items and final post-merge `master` CI is green.
+
 ## Operating rules
 
 - Keep the core app local-first. Do not require accounts, managed cloud services, or network OCR for core workflows.
@@ -168,4 +176,4 @@ Merged: PR #60, exact green head `c861f91ffc10b8339eea4f6b56e39820063e8860`; squ
 
 ## Current stopping condition
 
-Milestone 11 is closed: every tracked task and subtask is implemented or explicitly reconciled, the final documentation closeout is merged to `master`, and its post-merge CI is green.
+Historical closeout condition superseded by post-closeout remediation: this file records the original M11 closeout evidence, but M11 is not fully closed until `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-15.md` is fully implemented, reconciled, merged to `master`, and final post-merge `master` CI is green.
