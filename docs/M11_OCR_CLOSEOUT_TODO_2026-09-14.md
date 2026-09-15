@@ -126,12 +126,15 @@ Base: `2320cb0fd93534d920b8b1af8ac429e48fcb06ef`
 
 ### M11-P1 — Real Android OCR provider
 
-- [ ] Add a real Android OCR provider behind the existing `AndroidOcrProvider` interface.
-- [ ] Keep provider failures mapped to `Unavailable`, not fake empty detected text.
-- [ ] Keep cancellation truthful.
-- [ ] Keep provider availability/resource failures explicit.
-- [ ] Add tests that the real-provider adapter preserves terminal semantics.
-- [ ] Avoid adding any account-gated or network-only OCR dependency to core workflows.
+Branch: `ralph/m11-real-android-ocr-provider-slice`
+Base: `90f642cb27d82465c6523a59caf66979f4086bc6`
+
+- [x] Add a real Android OCR provider behind the existing `AndroidOcrProvider` interface.
+- [x] Keep provider failures mapped to `Unavailable`, not fake empty detected text.
+- [x] Keep cancellation truthful.
+- [x] Keep provider availability/resource failures explicit.
+- [x] Add tests that the real-provider adapter preserves terminal semantics.
+- [x] Avoid adding any account-gated or network-only OCR dependency to core workflows.
 
 ### M11-Q1 — OCR queue/retry orchestration
 
