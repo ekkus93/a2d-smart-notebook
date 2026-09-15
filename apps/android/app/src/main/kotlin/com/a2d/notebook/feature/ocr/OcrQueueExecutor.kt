@@ -152,7 +152,15 @@ internal class AndroidOcrQueueProcessor(
     fun processNext(onClaimed: (AndroidOcrQueueJob) -> Unit = {}): AndroidOcrQueueStep {
         val claimed = gateway.claimNext() ?: return AndroidOcrQueueStep.Idle
         onClaimed(claimed)
-        val result = workflow.runPrepared(claimed.preparedInput())
+        val result =
+            workflow.run(
+                AndroidOcrStartRequest(
+                    scanId = claimed.scanId,
+                    inputKind = claimed.inputKind,
+                    widthPx = claimed.widthPx,
+                    heightPx = claimed.heightPx,
+                ),
+            )
         val recorded =
             result.recordedRun
                 ?: return AndroidOcrQueueStep.RecoverableFailure(
