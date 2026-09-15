@@ -1,5 +1,13 @@
 # Milestone 11 OCR Closeout — 2026-09-15
 
+## Post-closeout review addendum — remediation open
+
+This closeout document is a historical record of the original M11 merge chain and CI evidence. A later post-closeout source review found that the lower-level OCR infrastructure was substantially present, but the original closeout overstated production integration. Active remediation is tracked in `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-15.md` and specified in `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_SPEC_2026-09-15.md`.
+
+Until that remediation is complete, M11 status should be read as: core OCR persistence/provider/search/correction/queue infrastructure exists, but production composition and consistency remediation remains open. The known gaps include real OCR Search injection, real Page Viewer OCR hydration and durable actions, reachable correction UI, transactional detected-result finalization, explicit cancellation/commit race semantics, overlay geometry based on authoritative source dimensions, Rust polygon bounds validation, non-silent region hydration limits, queue/status/retry contract consolidation, and production-path integration tests.
+
+The PR and CI evidence below remains valid historical evidence for the slices it exercised. It does not prove the production composition seams identified by the post-closeout review.
+
 Milestone 11 is implemented and qualified through the durable OCR queue/retry slice merged by PR #60. The post-merge `master` head for that slice is `38a1bae9713df6b805ed11f2ad4d579130d35b52`; permanent CI run `34958132321` passed on that exact head.
 
 ## Delivered chain
