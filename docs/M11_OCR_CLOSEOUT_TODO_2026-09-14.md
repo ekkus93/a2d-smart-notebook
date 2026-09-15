@@ -138,32 +138,34 @@ Base: `90f642cb27d82465c6523a59caf66979f4086bc6`
 
 ### M11-Q1 — OCR queue/retry orchestration
 
-- [ ] Connect the existing OCR queue/status contract to in-app OCR execution.
-- [ ] Persist queued/running/terminal state transitions durably.
-- [ ] Bound queue size and retry counts.
-- [ ] Make cancellation observable and truthful.
-- [ ] Add provider availability diagnostics.
-- [ ] Add tests for retry, cancellation, and unavailable-provider behavior.
+Merged: PR #60, exact green head `c861f91ffc10b8339eea4f6b56e39820063e8860`; squash-merged to `38a1bae9713df6b805ed11f2ad4d579130d35b52`; post-merge CI run `34958132321` passed.
+
+- [x] Connect the existing OCR queue/status contract to in-app OCR execution.
+- [x] Persist queued/running/terminal state transitions durably.
+- [x] Bound queue size and retry counts.
+- [x] Make cancellation observable and truthful.
+- [x] Add provider availability diagnostics.
+- [x] Add tests for retry, cancellation, and unavailable-provider behavior.
 
 ### M11-D1 — Documentation and closeout
 
-- [ ] Add an M11 closeout document with merged PR chain, guarantees, limitations, and evidence.
-- [ ] Record each deferred item explicitly with rationale.
-- [ ] Update roadmap/status docs that still describe OCR/search as not implemented.
-- [ ] Ensure docs distinguish:
-  - [ ] OCR result persistence
-  - [ ] OCR readback
-  - [ ] OCR search index
-  - [ ] OCR correction
-  - [ ] real provider support
-  - [ ] queue/retry orchestration
+- [x] Add an M11 closeout document with merged PR chain, guarantees, limitations, and evidence.
+- [x] Record each deferred item explicitly with rationale.
+- [x] Update roadmap/status docs that still describe OCR/search as not implemented.
+- [x] Ensure docs distinguish:
+  - [x] OCR result persistence
+  - [x] OCR readback
+  - [x] OCR search index
+  - [x] OCR correction
+  - [x] real provider support
+  - [x] queue/retry orchestration
 - [ ] Verify final closeout PR and post-merge `master` CI.
 
 ## Known cleanup
 
-- [ ] Do not use the abandoned scratch branch `ralph/m11-ocr-search-index-slice`; it contains an early bad `Cargo.lock` edit and should not be merged.
-- [ ] PR #43 was an accidental duplicate of the already-merged OCR contract branch. It should remain unmerged unless manually closed outside the current Ralph Bridge capability set.
+- [x] Do not use the abandoned scratch branch `ralph/m11-ocr-search-index-slice`; it contains an early bad `Cargo.lock` edit and is explicitly excluded from the merged M11 chain.
+- [x] PR #43 was an accidental duplicate of the already-merged OCR contract branch and is explicitly excluded from the M11 merge chain; no merge is required for closeout.
 
 ## Current stopping condition
 
-Continue implementing the checklist until all tasks/subtasks are completed and verified, or until a concrete blocker requires user assistance.
+Only the final documentation PR qualification/merge and post-merge `master` CI verification remain before Milestone 11 is closed.
