@@ -26,6 +26,11 @@ mod integrity;
 mod json_columns;
 mod migration_history;
 mod migrations;
+mod ocr_job_repository;
+pub use ocr_job_repository::{
+    OcrJobRepository, PersistedOcrInputKind, PersistedOcrJob, PersistedOcrJobStatus,
+    PersistedOcrProviderAvailability,
+};
 mod ocr_readback_repository;
 mod ocr_search_repository;
 pub use ocr_search_repository::{

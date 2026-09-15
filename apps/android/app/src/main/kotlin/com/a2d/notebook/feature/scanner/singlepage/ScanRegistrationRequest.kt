@@ -7,6 +7,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.a2d.notebook.feature.ocr.AndroidOcrQueueRuntime
 import com.a2d.notebook.feature.scanner.camera.CameraAdapterState
 import com.a2d.notebook.feature.scanner.camera.CameraCaptureResult
 import com.a2d.notebook.feature.scanner.camera.LiveQrCodeEvent
@@ -374,68 +375,86 @@ internal class BatchScannerViewModel(application: Application) : AndroidViewMode
 
     private suspend fun processEntry(session: BatchScanSession, entry: BatchScanEntry) {
         try {
-            withContext(Dispatchers.IO) {
-                val recovery = client.listScannerRecoveries().singleOrNull { it.token == entry.recoveryToken }
-                    ?: error("Queued capture has no scanner recovery record")
-                if (recovery.phase == ScannerRecoveryPhase.REGISTERING) {
-                    client.reconcileScannerRecovery(recovery.token)
-                    return@withContext
-                }
-                require(recovery.phase == ScannerRecoveryPhase.CAPTURED || recovery.phase == ScannerRecoveryPhase.PREVIEW_READY)
-                val file = File(recovery.stagingPath)
-                require(isFinalized(file)) { "Queued capture image is unavailable or incomplete" }
-                val policy = client.resolveStoredScanPolicy(entry.pageId)
-                require(policy.layoutId == recovery.layoutId) { "Stored page layout changed after capture" }
-                require(policy.processingPolicyVersion.toUInt() == recovery.processingPolicyVersion) {
-                    "Stored processing policy changed after capture"
-                }
-                val rotation = imageRotation(file)
-                val bytes = readBounded(file, policy)
-                val preview = PolicyPagePreviewCancellation().use { cancellation ->
-                    when (
-                        val outcome = client.processPolicyPagePreview(
-                            PolicyPagePreviewProcessingRequest(bytes, EncodedPageFormat.JPEG, rotation.first, policy),
-                            cancellation,
-                        )
-                    ) {
-                        is PolicyPagePreviewProcessingOutcome.Completed -> outcome.result
-                        PolicyPagePreviewProcessingOutcome.Cancelled -> error("Batch preview processing was cancelled")
+            val ocrQueueFailure: String? =
+                withContext(Dispatchers.IO) {
+                    val recovery = client.listScannerRecoveries().singleOrNull { it.token == entry.recoveryToken }
+                        ?: error("Queued capture has no scanner recovery record")
+                    if (recovery.phase == ScannerRecoveryPhase.REGISTERING) {
+                        client.reconcileScannerRecovery(recovery.token)
+                        return@withContext null
                     }
+                    require(recovery.phase == ScannerRecoveryPhase.CAPTURED || recovery.phase == ScannerRecoveryPhase.PREVIEW_READY)
+                    val file = File(recovery.stagingPath)
+                    require(isFinalized(file)) { "Queued capture image is unavailable or incomplete" }
+                    val policy = client.resolveStoredScanPolicy(entry.pageId)
+                    require(policy.layoutId == recovery.layoutId) { "Stored page layout changed after capture" }
+                    require(policy.processingPolicyVersion.toUInt() == recovery.processingPolicyVersion) {
+                        "Stored processing policy changed after capture"
+                    }
+                    val rotation = imageRotation(file)
+                    val bytes = readBounded(file, policy)
+                    val preview = PolicyPagePreviewCancellation().use { cancellation ->
+                        when (
+                            val outcome = client.processPolicyPagePreview(
+                                PolicyPagePreviewProcessingRequest(bytes, EncodedPageFormat.JPEG, rotation.first, policy),
+                                cancellation,
+                            )
+                        ) {
+                            is PolicyPagePreviewProcessingOutcome.Completed -> outcome.result
+                            PolicyPagePreviewProcessingOutcome.Cancelled -> error("Batch preview processing was cancelled")
+                        }
+                    }
+                    val payload = decodeQr(file, policy)
+                    val resolution = client.resolvePageCode(payload, session.notebookId)
+                    val resolved = resolution as? PageResolution.Resolved
+                        ?: error("Final captured Page Code no longer resolves")
+                    require(resolved.pageId == entry.pageId && resolved.notebookId == session.notebookId) {
+                        "Final captured Page Code conflicts with queued identity"
+                    }
+                    if (recovery.phase == ScannerRecoveryPhase.CAPTURED) {
+                        client.markScannerRecoveryPreviewReady(recovery.token)
+                    }
+                    val registered =
+                        client.registerBatchScan(
+                            session.sessionId,
+                            RegisterScanRequest(
+                                stagingPath = recovery.stagingPath,
+                                pageCodePayload = payload,
+                                expectedPageId = entry.pageId,
+                                activeNotebookId = session.notebookId,
+                                captureSource = ScanCaptureSource.CAMERA,
+                                imageFormat = RegistrationImageFormat.JPEG,
+                                imageRotation = rotation.second,
+                                capturedAtMs = recovery.capturedAtMs,
+                                observedMarkers = preview.analysis.markers.toRegistrationMarkers(),
+                                previewWarnings = listOf(
+                                    "A2D_POLICY_LAYOUT=${policy.layoutId}",
+                                    "A2D_POLICY_VERSION=${policy.processingPolicyVersion}",
+                                    "A2D_PIPELINE_VERSION=${policy.pipelineVersion}",
+                                ),
+                                recoveryToken = recovery.token,
+                                userApproved = false,
+                            ),
+                        )
+                    AndroidOcrQueueRuntime
+                        .enqueueRegisteredScan(
+                            context = getApplication(),
+                            client = client,
+                            libraryRoot = A2dBridge.libraryDirectory(getApplication()),
+                            scan = registered,
+                        ).exceptionOrNull()
+                        ?.message
                 }
-                val payload = decodeQr(file, policy)
-                val resolution = client.resolvePageCode(payload, session.notebookId)
-                val resolved = resolution as? PageResolution.Resolved
-                    ?: error("Final captured Page Code no longer resolves")
-                require(resolved.pageId == entry.pageId && resolved.notebookId == session.notebookId) {
-                    "Final captured Page Code conflicts with queued identity"
-                }
-                if (recovery.phase == ScannerRecoveryPhase.CAPTURED) {
-                    client.markScannerRecoveryPreviewReady(recovery.token)
-                }
-                client.registerBatchScan(
-                    session.sessionId,
-                    RegisterScanRequest(
-                        stagingPath = recovery.stagingPath,
-                        pageCodePayload = payload,
-                        expectedPageId = entry.pageId,
-                        activeNotebookId = session.notebookId,
-                        captureSource = ScanCaptureSource.CAMERA,
-                        imageFormat = RegistrationImageFormat.JPEG,
-                        imageRotation = rotation.second,
-                        capturedAtMs = recovery.capturedAtMs,
-                        observedMarkers = preview.analysis.markers.toRegistrationMarkers(),
-                        previewWarnings = listOf(
-                            "A2D_POLICY_LAYOUT=${policy.layoutId}",
-                            "A2D_POLICY_VERSION=${policy.processingPolicyVersion}",
-                            "A2D_PIPELINE_VERSION=${policy.pipelineVersion}",
-                        ),
-                        recoveryToken = recovery.token,
-                        userApproved = false,
-                    ),
+            val changed = withContext(Dispatchers.IO) { client.reconcileBatchScanSession(session.sessionId) }
+            update {
+                it.copy(
+                    session = changed,
+                    notice =
+                        ocrQueueFailure?.let { message -> "Saved; OCR queue unavailable: $message" }
+                            ?: "Saved; OCR queued",
+                    error = null,
                 )
             }
-            val changed = withContext(Dispatchers.IO) { client.reconcileBatchScanSession(session.sessionId) }
-            update { it.copy(session = changed, notice = "Saved", error = null) }
         } catch (failure: CancellationException) {
             throw failure
         } catch (failure: Exception) {

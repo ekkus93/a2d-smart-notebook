@@ -8,6 +8,10 @@ use a2d_storage::{NotebookDesignRepository, PageRepository};
 
 use super::A2dCore;
 
+#[path = "ocr_queue.rs"]
+mod ocr_queue;
+pub use ocr_queue::*;
+
 #[path = "generation_policy.rs"]
 mod generation_policy;
 pub use generation_policy::*;

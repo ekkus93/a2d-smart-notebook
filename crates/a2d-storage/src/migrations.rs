@@ -58,4 +58,9 @@ pub static MIGRATIONS: &[Migration] = &[
         name: "ocr_search_index",
         sql: include_str!("migrations/0010_ocr_search_index.sql"),
     },
+    Migration {
+        version: 11,
+        name: "ocr_job_queue",
+        sql: include_str!("migrations/0011_ocr_job_queue.sql"),
+    },
 ];

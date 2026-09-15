@@ -205,6 +205,7 @@ define_id!(PhysicalCopyId, "PHYSICAL_COPY_ID");
 define_id!(ScanId, "SCAN_ID");
 define_id!(AssetId, "ASSET_ID");
 define_id!(OcrRunId, "OCR_RUN_ID");
+define_id!(OcrJobId, "OCR_JOB_ID");
 define_id!(TextRegionId, "TEXT_REGION_ID");
 define_id!(TextCorrectionId, "TEXT_CORRECTION_ID");
 define_id!(CollectionId, "COLLECTION_ID");
