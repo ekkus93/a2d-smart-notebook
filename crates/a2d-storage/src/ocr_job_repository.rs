@@ -298,8 +298,7 @@ impl OcrJobRepository for Connection {
     }
 }
 
-const OCR_JOB_SELECT: &str =
-    "SELECT id, scan_id, input_asset_id, input_kind, media_type, relative_path, byte_length, \
+const OCR_JOB_SELECT: &str = "SELECT id, scan_id, input_asset_id, input_kind, media_type, relative_path, byte_length, \
      width_px, height_px, status, created_at_ms, updated_at_ms, last_started_at_ms, completed_at_ms, \
      attempt_count, retryable, next_retry_at_ms, last_error_code, last_error_message, provider, \
      provider_version, model_name, provider_availability, last_ocr_run_id, cancellation_requested \
@@ -336,10 +335,30 @@ type OcrJobRow = (
 
 fn decode_job_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OcrJobRow> {
     Ok((
-        row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?,
-        row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?, row.get(11)?,
-        row.get(12)?, row.get(13)?, row.get(14)?, row.get(15)?, row.get(16)?, row.get(17)?,
-        row.get(18)?, row.get(19)?, row.get(20)?, row.get(21)?, row.get(22)?, row.get(23)?,
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get(6)?,
+        row.get(7)?,
+        row.get(8)?,
+        row.get(9)?,
+        row.get(10)?,
+        row.get(11)?,
+        row.get(12)?,
+        row.get(13)?,
+        row.get(14)?,
+        row.get(15)?,
+        row.get(16)?,
+        row.get(17)?,
+        row.get(18)?,
+        row.get(19)?,
+        row.get(20)?,
+        row.get(21)?,
+        row.get(22)?,
+        row.get(23)?,
         row.get(24)?,
     ))
 }
