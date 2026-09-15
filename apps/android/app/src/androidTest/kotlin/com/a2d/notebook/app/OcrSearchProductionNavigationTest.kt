@@ -4,19 +4,33 @@ import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.a2d.notebook.feature.home.HomeScreenTestTags
 import com.a2d.notebook.feature.library.LibraryHubTestTags
+import com.a2d.notebook.feature.library.PageViewerScreen
 import com.a2d.notebook.feature.library.PageViewerTestTags
+import com.a2d.notebook.feature.ocr.AndroidOcrSearchController
+import com.a2d.notebook.feature.ocr.AndroidOcrSearchDocumentKind
+import com.a2d.notebook.feature.ocr.AndroidOcrSearchGateway
+import com.a2d.notebook.feature.ocr.AndroidOcrSearchHit
+import com.a2d.notebook.feature.ocr.AndroidOcrSearchRequest
+import com.a2d.notebook.feature.ocr.AndroidOcrSearchResults
+import com.a2d.notebook.feature.ocr.OcrSearchScreen
 import com.a2d.notebook.feature.ocr.OcrSearchTestTags
 import com.a2d.notebook.navigation.A2dNavHost
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,47 +80,47 @@ class OcrSearchProductionNavigationTest {
     fun searchHitSelectionUsesRealNavGraphToOpenPageViewer() {
         val pageId = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
         val controller =
-            com.a2d.notebook.feature.ocr.AndroidOcrSearchController(
+            AndroidOcrSearchController(
                 gateway =
-                    object : com.a2d.notebook.feature.ocr.AndroidOcrSearchGateway {
-                        override fun searchOcrText(request: com.a2d.notebook.feature.ocr.AndroidOcrSearchRequest) =
-                            com.a2d.notebook.feature.ocr.AndroidOcrSearchResults(
+                    object : AndroidOcrSearchGateway {
+                        override fun searchOcrText(request: AndroidOcrSearchRequest) =
+                            AndroidOcrSearchResults(
                                 query = request.query,
                                 hits =
                                     listOf(
-                                        com.a2d.notebook.feature.ocr.AndroidOcrSearchHit(
+                                        AndroidOcrSearchHit(
                                             pageId = pageId,
                                             scanId = "01ARZ3NDEKTSV4RRFFQ69G5FB0",
                                             ocrRunId = "01ARZ3NDEKTSV4RRFFQ69G5FB1",
                                             textRegionId = "01ARZ3NDEKTSV4RRFFQ69G5FB2",
-                                            documentKind = com.a2d.notebook.feature.ocr.AndroidOcrSearchDocumentKind.TextRegion,
+                                            documentKind = AndroidOcrSearchDocumentKind.TextRegion,
                                             snippet = "known [notebook] hit",
                                         ),
                                     ),
                             )
                     },
-                searchDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
+                searchDispatcher = Dispatchers.Unconfined,
             )
 
         composeRule.activity.setContent {
             MaterialTheme {
                 val navController = rememberNavController()
-                androidx.navigation.compose.NavHost(
+                NavHost(
                     navController = navController,
                     startDestination = "search",
                 ) {
-                    androidx.navigation.compose.composable("search") {
-                        com.a2d.notebook.feature.ocr.OcrSearchScreen(
+                    composable("search") {
+                        OcrSearchScreen(
                             onBack = {},
                             onOpenPage = { navController.navigate("page/$it") },
                             searchController = controller,
                         )
                     }
-                    androidx.navigation.compose.composable(
+                    composable(
                         route = "page/{pageId}",
-                        arguments = listOf(androidx.navigation.navArgument("pageId") { type = androidx.navigation.NavType.StringType }),
+                        arguments = listOf(navArgument("pageId") { type = NavType.StringType }),
                     ) { entry ->
-                        com.a2d.notebook.feature.library.PageViewerScreen(
+                        PageViewerScreen(
                             pageId = requireNotNull(entry.arguments?.getString("pageId")),
                             onBack = {},
                             onOpenVersions = {},
