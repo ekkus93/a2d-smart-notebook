@@ -8,7 +8,7 @@
 
 ## Implemented behavior
 
-This slice replaces the previous placeholder Home surface with a reusable local-first dashboard presentation model. It intentionally does not invent persistence, search, OCR, backup, restore, collection, or trash backends that are still tracked as future roadmap work.
+This slice replaces the previous placeholder Home surface with a reusable local-first dashboard presentation model. At the time of this slice it intentionally did not invent persistence, search, OCR, backup, restore, collection, or trash backends. OCR and local OCR search were subsequently implemented and closed out under Milestone 11; backup/restore, collection, and trash work remain future roadmap items.
 
 The Home screen now exposes:
 
@@ -34,8 +34,8 @@ Permanent CI run `34718419554` passed on exact code head `2ad9acb6a696760bd36dce
 Milestone 10 remains partial. The following stay open:
 
 - Data-backed Home ViewModel wired to Rust library summaries.
-- Library hub for Notebooks, Smart Pages, Page Sets, Collections, imports, Needs Review, and Trash.
+- Library hub completion for remaining Notebooks, Smart Pages, Page Sets, Collections, imports, Needs Review, and Trash surfaces; the OCR Search entry was added later under Milestone 11.
 - Notebook detail with logical page slots and no scan-order renumbering.
 - Smart Page/Page Set/Collection browsing.
-- Page viewer for original/corrected/text/split/metadata/versions/annotations/related/skill results.
+- Remaining Page Viewer modes beyond the OCR/readback/correction/region-overlay surfaces added later under Milestone 11.
 - Trash, restore, and permanent-delete flows.
