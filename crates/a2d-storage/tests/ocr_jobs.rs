@@ -140,7 +140,10 @@ fn retry_delay_and_fifo_claiming_are_persisted() {
     storage.insert_ocr_job(&first).unwrap();
     storage.insert_ocr_job(&second).unwrap();
 
-    assert_eq!(storage.next_due_ocr_job(300).unwrap().unwrap().id, second.id);
+    assert_eq!(
+        storage.next_due_ocr_job(300).unwrap().unwrap().id,
+        second.id
+    );
     assert_eq!(storage.next_due_ocr_job(500).unwrap().unwrap().id, first.id);
 }
 
