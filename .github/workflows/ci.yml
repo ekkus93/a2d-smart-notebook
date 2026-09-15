@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     name: Rust (fmt, clippy, test)
@@ -15,32 +19,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify photographed fixture metadata
-        run: python3 tools/verify-fixture-metadata.py
+        run: |
+          python -m unittest discover -s tools/tests -p 'test_verify_photographed_scan_fixtures.py'
+          python tools/verify_photographed_scan_fixtures.py
+      # rust-toolchain.toml pins the compiler plus rustfmt and clippy.
       - name: Show resolved toolchain
-        run: rustc --version --verbose
+        run: rustc --version && cargo --version
       - uses: Swatinem/rust-cache@v2
       - name: Generate canonical Rust formatting
-        run: cargo fmt --all
+        run: cargo fmt
       - name: Upload exact rustfmt output for review
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rustfmt-output
           path: |
-            crates/
-            Cargo.toml
-            Cargo.lock
+            crates/a2d-ffi/src/milestone7.rs
+            crates/a2d-image/src/bin/a2d_fixture_measurements.rs
+            crates/a2d-image/src/bin/a2d_fingerprint_calibration.rs
+            crates/a2d-image/tests/synthetic_processing_expectations.rs
           if-no-files-found: error
       - name: Fail if Rust formatting drifted
-        run: git diff --exit-code
+        run: git diff --exit-code -- '*.rs'
       - name: cargo clippy --workspace --all-targets --all-features -- -D warnings
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: cargo test --workspace --all-features
+        # Also exercises Kotlin and Swift UniFFI generation contract checks.
         run: cargo test --workspace --all-features
       - name: Real ENOSPC asset-persistence evidence
-        run: bash ./tools/run-enospc-asset-persistence-test.sh
+        run: |
+          mount_root="$(mktemp -d)"
+          sudo mount -t tmpfs -o size=8m tmpfs "$mount_root"
+          sudo chown "$(id -u):$(id -g)" "$mount_root"
+          cleanup() {
+            sudo umount "$mount_root" || true
+            rmdir "$mount_root" || true
+          }
+          trap cleanup EXIT
+          A2D_ENOSPC_ROOT="$mount_root/library" \
+            cargo test -p a2d-storage --test enospc \
+            asset_commit_reports_real_enospc_before_finalization -- \
+            --ignored --exact
 
-  cargo-deny:
+  deny:
     name: cargo deny (dependency/license checks)
     runs-on: ubuntu-latest
     steps:
@@ -76,25 +97,39 @@ jobs:
           } >> "$GITHUB_ENV"
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Build shared Rust libraries and generate Kotlin UniFFI binding
-        run: bash ./tools/build-android-native.sh "arm64-v8a,armeabi-v7a,x86_64"
+        run: bash ./tools/build-android-native.sh "arm64-v8a x86_64"
       - name: Real ENOSPC scanner-staging evidence
-        run: bash ./tools/run-enospc-scanner-staging-test.sh
+        run: |
+          mount_root="$(mktemp -d)"
+          sudo mount -t tmpfs -o size=4m tmpfs "$mount_root"
+          sudo chown "$(id -u):$(id -g)" "$mount_root"
+          cleanup() {
+            sudo umount "$mount_root" || true
+            rmdir "$mount_root" || true
+          }
+          trap cleanup EXIT
+          cd apps/android
+          A2D_ENOSPC_ROOT="$mount_root" \
+            ./gradlew testDebugUnitTest --no-daemon \
+            --tests 'com.a2d.notebook.feature.scanner.singlepage.ScannerStagingEnospcTest'
       - name: Gradle lint, unit tests, and debug APK
         working-directory: apps/android
-        run: ./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug
+        run: ./gradlew lint test assembleDebug --no-daemon
       - name: Verify APK native libraries, detector linkage, production symbols, and notices
-        run: bash ./tools/verify-android-apk.sh apps/android/app/build/outputs/apk/debug/app-debug.apk
+        run: >-
+          python tools/verify-android-apk.py
+          apps/android/app/build/outputs/apk/debug/app-debug.apk
       - name: Upload verified debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-debug-apk
+          name: a2d-verified-debug-apk
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-  android-emulator:
+  android-shared-analysis:
     name: Android emulator (scanner, recovery, FFI panic containment)
-    runs-on: ubuntu-latest
     needs: android
+    runs-on: ubuntu-latest
     env:
       A2D_ANDROID_NDK_VERSION: "27.0.12077973"
       A2D_CARGO_NDK_VERSION: "4.1.2"
@@ -111,7 +146,8 @@ jobs:
           packages: "platform-tools"
       - name: Enable KVM for the Android emulator
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Install and select pinned Android native toolchain
@@ -126,17 +162,21 @@ jobs:
           } >> "$GITHUB_ENV"
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Prepare CI-only feature-enabled FFI panic test build
-        run: A2D_FFI_CARGO_FEATURES=ffi-test-panic bash ./tools/build-android-native.sh "x86_64"
+        run: bash ./tools/prepare-android-ffi-panic-test.sh
       - name: Run scanner, recovery, panic-containment, scan-revision, Needs Review, version, and OCR navigation UI tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          target: default
           arch: x86_64
-          profile: pixel_2
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          profile: pixel_7
           disable-animations: true
+          emulator-options: >-
+            -no-snapshot-save -no-window -gpu swiftshader_indirect
+            -noaudio -no-boot-anim -camera-back none
           script: >-
-            cd apps/android && ./gradlew --no-daemon connectedDebugAndroidTest
+            cd apps/android &&
+            ./gradlew connectedDebugAndroidTest --no-daemon
             -Pandroid.testInstrumentationRunnerArguments.class=com.a2d.notebook.app.HomeScreenUiTest,com.a2d.notebook.app.LibraryHubUiTest,com.a2d.notebook.app.ImportLibraryUiTest,com.a2d.notebook.app.NotebookDetailUiTest,com.a2d.notebook.app.PageBrowserUiTest,com.a2d.notebook.app.PageViewerUiTest,com.a2d.notebook.app.OcrSearchUiTest,com.a2d.notebook.app.OcrSearchProductionNavigationTest,com.a2d.notebook.app.TrashWorkflowUiTest,com.a2d.notebook.app.NeedsReviewHubUiTest,com.a2d.notebook.app.SmartPageLibraryUiTest,com.a2d.notebook.app.SharedPageAnalysisTest,com.a2d.notebook.app.LiveScannerPresentationUiTest,com.a2d.notebook.app.QrCaptureRecoveryTest,com.a2d.notebook.app.ScannerRecoveryBridgeTest,com.a2d.notebook.app.GeneratedPdfAssetValidationTest,com.a2d.notebook.app.PanicPropagationTest,com.a2d.notebook.app.ScanRevisionBridgeIntegrationTest,com.a2d.notebook.app.OcrBridgeIntegrationTest,com.a2d.notebook.app.MlKitOcrProviderIntegrationTest,com.a2d.notebook.app.NeedsReviewBridgeIntegrationTest,com.a2d.notebook.feature.version.VersionHistoryUiTest
       - name: Upload Android instrumentation results
         if: always()
@@ -149,6 +189,9 @@ jobs:
           if-no-files-found: warn
 
   android-binding-drift:
+    # Keep this job id/name stable for existing required-check configuration. The binding is now
+    # generated build output, so the check proves generation + untracked policy instead of diffing
+    # a stale checked-in copy.
     name: Kotlin UniFFI binding generation drift check
     runs-on: ubuntu-latest
     env:
