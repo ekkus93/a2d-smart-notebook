@@ -8,6 +8,10 @@ use a2d_core as core;
 
 use super::{A2dClient, A2dFfiError};
 
+#[path = "ocr_queue.rs"]
+mod ocr_queue;
+pub use ocr_queue::*;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
 pub enum OcrInputKind {
     Original,
