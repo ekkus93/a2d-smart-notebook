@@ -8,7 +8,7 @@
 
 ## Implemented behavior
 
-This slice replaces the previous placeholder Home surface with a reusable local-first dashboard presentation model. It intentionally does not invent persistence, search, OCR, backup, restore, collection, or trash backends that are still tracked as future roadmap work.
+This slice replaces the previous placeholder Home surface with a reusable local-first dashboard presentation model. At the time this slice was merged it intentionally did not invent persistence, search, OCR, backup, restore, collection, or trash backends that were then future roadmap work. OCR and local OCR search were subsequently implemented under Milestone 11; backup/restore, collection, and trash work remain governed by their current roadmap status.
 
 The Home screen now exposes:
 
@@ -37,5 +37,5 @@ Milestone 10 remains partial. The following stay open:
 - Library hub for Notebooks, Smart Pages, Page Sets, Collections, imports, Needs Review, and Trash.
 - Notebook detail with logical page slots and no scan-order renumbering.
 - Smart Page/Page Set/Collection browsing.
-- Page viewer for original/corrected/text/split/metadata/versions/annotations/related/skill results.
+- Page viewer completeness across all original/corrected/text/split/metadata/versions/annotations/related/skill-result surfaces; later milestones have added some Page Viewer OCR/version capabilities without closing the whole Milestone 10 surface.
 - Trash, restore, and permanent-delete flows.
