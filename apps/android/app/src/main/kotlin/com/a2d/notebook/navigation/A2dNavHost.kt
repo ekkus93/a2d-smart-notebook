@@ -1,6 +1,7 @@
 package com.a2d.notebook.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -16,6 +17,8 @@ import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
+import com.a2d.notebook.feature.ocr.AndroidOcrSearchController
+import com.a2d.notebook.feature.ocr.FfiAndroidOcrSearchGateway
 import com.a2d.notebook.feature.ocr.OcrSearchScreen
 import com.a2d.notebook.feature.review.NeedsReviewScreen
 import com.a2d.notebook.feature.scanner.singlepage.PolicyAwareBatchScannerRoute
@@ -23,6 +26,7 @@ import com.a2d.notebook.feature.scanner.singlepage.SinglePageScannerScreen
 import com.a2d.notebook.feature.smartpage.SmartPageLibraryScreen
 import com.a2d.notebook.feature.smartpage.SmartPagesScreen
 import com.a2d.notebook.feature.version.VersionHistoryScreen
+import uniffi.a2d_ffi.A2dClient
 
 object A2dDestinations {
     const val HOME = "home"
@@ -44,16 +48,21 @@ object A2dDestinations {
     const val VERSION_HISTORY_PATTERN = "versions/{pageId}"
 
     fun pageViewer(pageId: String) = "library/pages/$pageId"
-
     fun pageCode(notebookId: String) = "page-code/$notebookId"
-
     fun notebookDetail(notebookId: String) = "notebooks/detail/$notebookId"
-
     fun versionHistory(pageId: String) = "versions/$pageId"
 }
 
 @Composable
-fun A2dNavHost(navController: NavHostController) {
+fun A2dNavHost(
+    navController: NavHostController,
+    client: A2dClient? = null,
+) {
+    val ocrSearchController =
+        remember(client) {
+            client?.let { AndroidOcrSearchController(FfiAndroidOcrSearchGateway(it)) }
+        }
+
     NavHost(navController = navController, startDestination = A2dDestinations.HOME) {
         composable(A2dDestinations.HOME) {
             HomeScreen(
@@ -81,20 +90,15 @@ fun A2dNavHost(navController: NavHostController) {
         composable(A2dDestinations.PAGES) {
             PageBrowserScreen(
                 onBack = { navController.navigateUp() },
-                onOpenPage = { pageId ->
-                    navController.navigate(A2dDestinations.pageViewer(pageId))
-                },
-                onOpenVersions = { pageId ->
-                    navController.navigate(A2dDestinations.versionHistory(pageId))
-                },
+                onOpenPage = { pageId -> navController.navigate(A2dDestinations.pageViewer(pageId)) },
+                onOpenVersions = { pageId -> navController.navigate(A2dDestinations.versionHistory(pageId)) },
             )
         }
         composable(A2dDestinations.OCR_SEARCH) {
             OcrSearchScreen(
                 onBack = { navController.navigateUp() },
-                onOpenPage = { pageId ->
-                    navController.navigate(A2dDestinations.pageViewer(pageId))
-                },
+                onOpenPage = { pageId -> navController.navigate(A2dDestinations.pageViewer(pageId)) },
+                searchController = ocrSearchController,
             )
         }
         composable(
@@ -104,18 +108,14 @@ fun A2dNavHost(navController: NavHostController) {
             PageViewerScreen(
                 pageId = requireNotNull(entry.arguments?.getString("pageId")),
                 onBack = { navController.navigateUp() },
-                onOpenVersions = { pageId ->
-                    navController.navigate(A2dDestinations.versionHistory(pageId))
-                },
+                onOpenVersions = { pageId -> navController.navigate(A2dDestinations.versionHistory(pageId)) },
                 onOpenNeedsReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
             )
         }
         composable(A2dDestinations.NEEDS_REVIEW) {
             NeedsReviewScreen(
                 onBack = { navController.navigateUp() },
-                onOpenVersions = { pageId ->
-                    navController.navigate(A2dDestinations.versionHistory(pageId))
-                },
+                onOpenVersions = { pageId -> navController.navigate(A2dDestinations.versionHistory(pageId)) },
             )
         }
         composable(A2dDestinations.SMART_PAGE_LIBRARY) {
@@ -127,26 +127,20 @@ fun A2dNavHost(navController: NavHostController) {
         composable(A2dDestinations.IMPORTS) {
             ImportLibraryScreen(
                 onBack = { navController.navigateUp() },
-                onOpenPage = { pageId ->
-                    navController.navigate(A2dDestinations.pageViewer(pageId))
-                },
+                onOpenPage = { pageId -> navController.navigate(A2dDestinations.pageViewer(pageId)) },
                 onMoveToReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
             )
         }
         composable(A2dDestinations.TRASH) {
             TrashScreen(
                 onBack = { navController.navigateUp() },
-                onOpenPage = { pageId ->
-                    navController.navigate(A2dDestinations.pageViewer(pageId))
-                },
+                onOpenPage = { pageId -> navController.navigate(A2dDestinations.pageViewer(pageId)) },
             )
         }
         composable(A2dDestinations.SINGLE_PAGE_SCANNER) {
             SinglePageScannerScreen(
                 onBack = { navController.navigateUp() },
-                onOpenVersions = { pageId ->
-                    navController.navigate(A2dDestinations.versionHistory(pageId))
-                },
+                onOpenVersions = { pageId -> navController.navigate(A2dDestinations.versionHistory(pageId)) },
             )
         }
         composable(A2dDestinations.BATCH_SCANNER) {
@@ -156,9 +150,7 @@ fun A2dNavHost(navController: NavHostController) {
             NotebookLibraryScreen(
                 onBack = { navController.navigateUp() },
                 onAddNotebook = { navController.navigate(A2dDestinations.ADD_NOTEBOOK) },
-                onOpenNotebook = { notebookId ->
-                    navController.navigate(A2dDestinations.notebookDetail(notebookId))
-                },
+                onOpenNotebook = { notebookId -> navController.navigate(A2dDestinations.notebookDetail(notebookId)) },
             )
         }
         composable(
@@ -175,9 +167,7 @@ fun A2dNavHost(navController: NavHostController) {
         composable(A2dDestinations.ADD_NOTEBOOK) {
             NotebookSetupScreen(
                 onBack = { navController.navigateUp() },
-                onResolveFirstPage = { notebookId ->
-                    navController.navigate(A2dDestinations.pageCode(notebookId))
-                },
+                onResolveFirstPage = { notebookId -> navController.navigate(A2dDestinations.pageCode(notebookId)) },
             )
         }
         composable(A2dDestinations.SMART_PAGES) {

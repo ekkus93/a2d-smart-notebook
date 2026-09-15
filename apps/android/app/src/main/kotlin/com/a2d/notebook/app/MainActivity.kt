@@ -11,8 +11,8 @@ import com.a2d.notebook.navigation.A2dNavHost
 import com.a2d.notebook.rustbridge.A2dBridge
 
 /**
- * Placeholder shell (TODO 1.2). Rust owns persistent/business state (spec section 25); this
- * Activity only hosts the Compose navigation graph.
+ * Android composition root. Rust owns persistent/business state; this Activity owns the
+ * app-lifetime native client and passes that same open-library handle into production navigation.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,7 +26,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface {
-                    A2dNavHost(navController = rememberNavController())
+                    A2dNavHost(
+                        navController = rememberNavController(),
+                        client = client,
+                    )
                 }
             }
         }
