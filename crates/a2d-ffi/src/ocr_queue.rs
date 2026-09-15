@@ -139,10 +139,7 @@ impl A2dClient {
             .map_err(Into::into)
     }
 
-    pub fn request_ocr_job_cancellation(
-        &self,
-        job_id: String,
-    ) -> Result<OcrQueueJob, A2dFfiError> {
+    pub fn request_ocr_job_cancellation(&self, job_id: String) -> Result<OcrQueueJob, A2dFfiError> {
         self.core
             .request_ocr_job_cancellation(&job_id)
             .map(Into::into)
