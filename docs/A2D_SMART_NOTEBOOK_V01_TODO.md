@@ -1,8 +1,8 @@
 # A2D Smart Notebook v0.1 — Authoritative Implementation Roadmap
 
-**Status:** Reconciled through Milestone 9.5 and Milestone 8.5 closeout on 2026-09-12. Milestones 1–6 have substantial production implementation but are not blanket release-complete; Milestone 7 is software/synthetic-evidence complete with photographed and physical-device calibration evidence pending; Milestone 8.1–8.5 and scanner recovery are implemented while part of 8.6 remains open; Milestone 9.1–9.5 are implemented without calibrated duplicate/revision classification; Milestones 10–19 remain partial or open as stated below.  
+**Status:** Reconciled through Milestone 11 closeout on 2026-09-15. Milestones 1–6 have substantial production implementation but are not blanket release-complete; Milestone 7 is software/synthetic-evidence complete with photographed and physical-device calibration evidence pending; Milestone 8.1–8.5 and scanner recovery are implemented while part of 8.6 remains open; Milestone 9.1–9.5 are implemented without calibrated duplicate/revision classification; Milestone 10 is partial; Milestone 11 OCR and its local OCR-search surface are implemented; Milestone 12 retains broader search scale/integrity work; Milestones 13–19 remain partial or open as stated below.  
 **Version:** 0.1  
-**Date:** 2026-09-12  
+**Date:** 2026-09-15  
 **Repository:** `ekkus93/a2d-smart-notebook`  
 **Authoritative specification:** `docs/A2D_SMART_NOTEBOOK_V01_SPEC.md`  
 **Remediation plan:** `docs/A2D_SMART_NOTEBOOK_CODE_REVIEW_FIX_TODO_2026-07-28.md`  
@@ -10,7 +10,7 @@
 
 This file is the authoritative execution roadmap. A checked item means production code and focused evidence exist. A milestone marked **Partial** may contain many checked implementation items while still having explicit evidence, physical-validation, workflow, or product-scope gaps.
 
-The last code-bearing remediation candidate, `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`, passed permanent CI run `30673255456` and Milestone 7 native validation run `30673255457`. Milestone 9.3's code-bearing closeout head, `e3984b8261de80c0c542c3dba5657c6914cef2bb`, passed permanent CI run `31652574271`. The combined batch-scanner, Needs Review, and Version UI source head `3e9ddf6b2043c374a91abb02304a41bbbb970a72` passed permanent CI run `31738664552`, including Rust format/Clippy/tests, dependency policy, generated Kotlin UniFFI contract validation, Android lint/JVM tests/APK verification, and packaged-native emulator coverage. Future code-bearing completion claims require permanent CI on the exact claimed source head.
+The last code-bearing remediation candidate, `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`, passed permanent CI run `30673255456` and Milestone 7 native validation run `30673255457`. Milestone 9.3's code-bearing closeout head, `e3984b8261de80c0c542c3dba5657c6914cef2bb`, passed permanent CI run `31652574271`. The combined batch-scanner, Needs Review, and Version UI source head `3e9ddf6b2043c374a91abb02304a41bbbb970a72` passed permanent CI run `31738664552`. Milestone 11 queue/retry orchestration merged through PR #60 to `38a1bae9713df6b805ed11f2ad4d579130d35b52`, which passed permanent CI run `34958132321`. Future code-bearing completion claims require permanent CI on the exact claimed source head.
 
 ---
 
@@ -50,23 +50,23 @@ Do not:
 |---|---|---|---|
 | 1 — Repository, Android shell, CI | **Implementation complete** | Workspace, Android shell, permanent CI, generated-at-build Kotlin binding contract, Swift generation smoke | Release-wide exact-head signoff remains Milestone 19 work |
 | 2 — Domain, errors, UniFFI | **Partial** | Typed IDs/entities, structured FFI errors including details, fallible production ID generation, test-only panic injection | Diagnostic redaction enforcement, full failure-erasure audit, trash lifecycle |
-| 3 — SQLite and assets | **Partial** | Migrations with digests, atomic preferred-scan workflow, no-replace durable asset finalization, orphan discovery, integrity checker | Real ENOSPC testing, later reviewed repair UX, future restore workflows |
+| 3 — SQLite and assets | **Partial** | Migrations with digests, atomic preferred-scan workflow, no-replace durable asset finalization, orphan discovery, integrity checker | Later reviewed repair UX and future restore workflows |
 | 4 — QR and designs | **Partial** | QR v1, permanent fixtures, strict parsing, development manifest registry | Initial official physical Notebook Design manifests |
 | 5 — Layout and PDF | **Software complete / physical evidence pending** | Layouts, official markers, QR, PDF generation, raster compatibility, Rust limits, hardened finalization | Real printer/paper/camera acceptance |
 | 6 — Notebook and Smart Pages | **Implementation complete / release evidence pending** | Rust workflows, Android UI, Rust-owned limits, cancellation and recreation hardening | Broader release walkthrough and physical workflows |
 | 7 — Detection and image processing | **Software and synthetic evidence complete** | AprilTag, image inputs, QR boundary, rectification, metrics, derived images, deterministic corpus | Photographed fixtures, physical `arm64-v8a` measurements, calibrated thresholds, ADR 0002 acceptance |
-| 8 — CameraX scanning | **Partial** | 8.1–8.5, process-death recovery, durable batch-session semantics, duplicate/session summary and Needs Review integration | Remaining 8.6/FIX-111 matrix cases and real low-storage evidence |
+| 8 — CameraX scanning | **Partial** | 8.1–8.5, process-death recovery, durable batch-session semantics, duplicate/session summary and Needs Review integration | Remaining 8.6/FIX-111 matrix cases and physical low-storage evidence |
 | 9 — Durable scans and revisions | **Partial** | 9.1 durable registration; 9.2 asset-backed fingerprints/changed regions; 9.3 safe audited revision decisions; 9.4 Needs Review; 9.5 Version UI | Calibrated duplicate/revision thresholds from reviewed physical evidence |
-| 10 — Library UI | **Not implemented** | — | Entire milestone |
-| 11 — OCR | **Not implemented** | Domain/storage scaffolding only | Provider, queue, persistence workflow, correction UI |
-| 12 — Search | **Not implemented** | Crate scaffolding only | FTS, API, UI, scale tests |
+| 10 — Library UI | **Partial** | Home dashboard, Library Hub integrations, Page Viewer/version/OCR surfaces used by completed slices | Complete data-backed browsing surface, collections, trash lifecycle and remaining Page Viewer modes |
+| 11 — OCR | **Implementation complete** | Durable OCR runs/regions/corrections, readback, local OCR search/UI, bundled ML Kit provider, durable queue/retry/cancellation/diagnostics | Broader release/physical-quality evidence; corrected+original unified search ranking is deferred |
+| 12 — Search | **Partial** | Rust-owned local OCR text index/API and Android OCR search UI | Broader filters/pagination/syntax contract, 10,000-page scale evidence, integrity-report integration |
 | 13 — Backup/restore/export | **Not implemented** | Crate scaffolding only | `.atnb`, encryption, create/inspect/restore/export workflows |
 | 14 — Models and skills | **Not implemented** | Crate scaffolding only | Providers, runtime, permissions, tools, built-ins and UI |
 | 15 — iOS readiness | **Partial** | Swift binding generation smoke and Apple target compile feasibility | Swift harness, mapping review, XCFramework and adapter inventory |
 | 16 — Security and diagnostics | **Partial** | Many input limits, dependency policy, migration integrity, bounded non-destructive library integrity report | Redaction, diagnostic export, remaining parser/provider limits and failure injection |
 | 17 — Physical print validation | **Not implemented** | Deterministic raster tests only | Physical printer/KDP/device matrix and measured thresholds |
-| 18 — UX/accessibility | **Partial** | Implemented scanner/notebook/Smart Page screens have explicit states | Full screen set, accessibility and product-wide UX acceptance |
-| 19 — Release validation | **Partial** | Core permanent CI gates exist | Full product workflows, backup/search/OCR/skills/manual release walkthrough |
+| 18 — UX/accessibility | **Partial** | Implemented scanner/notebook/Smart Page/OCR/search screens have explicit states | Full screen set, accessibility and product-wide UX acceptance |
+| 19 — Release validation | **Partial** | Core permanent CI gates and focused OCR/search validation exist | Full product workflows, backup/search scale/OCR physical evidence/skills/manual release walkthrough |
 
 ---
 
@@ -146,7 +146,7 @@ Do not:
 - [x] Constraint failures map to structured errors.
 - [x] Preferred-scan mutation is gated behind one audited transaction workflow.
 - [x] Page pointer and scan flags remain synchronized; cross-page selection and contradictory legacy state fail closed.
-- [ ] OCR replacement and restore merge transactions remain future milestone work.
+- [ ] Restore merge transactions remain future milestone work.
 
 ## 3.3 Asset repository
 
@@ -163,10 +163,9 @@ Do not:
 
 ## 3.4 Integrity and interruption evidence
 
-- [x] Transaction rollback, collision, missing/tampered asset, directory-sync, permission, and migration integrity tests.
+- [x] Transaction rollback, collision, missing/tampered asset, directory-sync, permission, migration integrity, and CI size-limited-filesystem/ENOSPC paths have focused evidence.
 - [x] Bounded non-destructive integrity report covers foreign keys, migration identity/digests, relational invariants, asset existence/hashes, temp files, and orphan finalized assets.
-- [ ] Add real size-limited-filesystem/ENOSPC evidence.
-- [ ] Search-index integrity remains unavailable until Milestone 12 exists.
+- [ ] Integrate search-index consistency once the broader Milestone 12 integrity contract is closed.
 
 ---
 
@@ -265,7 +264,7 @@ Do not:
 
 - [x] Keep the active Notebook fixed until the batch is explicitly completed and a new session is started.
 - [x] Capture and return immediately to camera once the JPEG is finalized into durable recoverable staging; Saved is shown only after Rust registration succeeds.
-- [x] Queue final processing and preserve OCR-ready derived assets; persistent OCR execution remains a Milestone 11 dependency rather than a Kotlin-only placeholder queue.
+- [x] Queue final processing and preserve OCR-ready derived assets; persistent OCR execution is now supplied by the Milestone 11 durable OCR queue.
 - [x] Nonblocking saved confirmation with durable queued/saved/review counts.
 - [x] Duplicate-page detection and persisted session summary without deleting either capture.
 - [x] Review-item integration for duplicate, revision, identity, quality, and processing outcomes.
@@ -287,7 +286,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 - [ ] Full unavailable/bind-failure matrix with exact state/file/retry/UI outcomes.
 - [ ] Background during every capture/finalization boundary.
 - [ ] Batch out-of-order behavior.
-- [ ] Real low-storage staging and asset-finalization evidence.
+- [ ] Physical-device low-storage staging and asset-finalization evidence.
 - [ ] One consolidated matrix documenting exact phase, retained/deleted files, retry policy, and user-visible result for every FIX-111 case.
 
 ---
@@ -342,38 +341,45 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 # Milestone 10 — Library and page presentation
 
-**Status: Not implemented.**
+**Status: Partial. Several later slices now use the Library Hub and Page Viewer, but the complete Milestone 10 browsing/lifecycle surface is not closed.**
 
-- [ ] Home populated/empty states, recent Notebooks, scanning continuation, Smart Pages, review count, backup state, and primary actions.
-- [ ] Library hub for Notebooks, Smart Pages, Page Sets, Collections, imports, Needs Review, and Trash with pagination/sorting.
+- [x] Home populated/empty presentation states, recent Notebook cards, scanning actions, Smart Pages, review and backup-status slots.
+- [ ] Complete data-backed Home summaries for every dashboard slot.
+- [ ] Complete Library hub coverage for Notebooks, Smart Pages, Page Sets, Collections, imports, Needs Review, and Trash with pagination/sorting. (Library Hub destinations required by completed slices, including OCR Search, exist.)
 - [ ] Notebook detail with logical unscanned slots, statuses, scan actions, rename/archive, and no scan-order renumbering.
 - [ ] Smart Page/Page Set/Collection browsing and immutable identity behavior.
-- [ ] Page viewer for original/corrected/text/split/metadata/versions/annotations/related/skill results.
+- [ ] Complete Page Viewer across original/corrected/text/split/metadata/versions/annotations/related/skill results. (Version comparison and persisted OCR/text-region presentation are implemented.)
 - [ ] Trash/restore/permanent-delete workflows with consequence display and no ID reuse.
 
 ---
 
 # Milestone 11 — OCR and correction
 
-**Status: Not implemented beyond domain/storage scaffolding.**
+**Status: Implementation complete for the M11 scope. See `docs/M11_OCR_CLOSEOUT_2026-09-15.md`.**
 
-- [ ] Rust OCR contract, bounded adapter validation, canonical coordinates, provenance, status, warnings, retry, and unavailable confidence.
-- [ ] Android ML Kit adapter selection, model-unavailable/cancellation/resource handling, and known-image tests.
-- [ ] Persistent background OCR queue after durable scan save with restart-safe deduplication and Needs Review failures.
-- [ ] Full-text/region correction UI, low-confidence highlighting, source linking, correction history, and corrected-text preference.
-- [ ] OCR failure must not block scan saving or browsing.
+- [x] Rust OCR request/result/provider contract with bounded input validation, explicit terminal status, provenance, warnings, cancellation/unavailable semantics, and immutable scan-owned input selection.
+- [x] Durable Rust-owned OCR run and text-region persistence plus Page Viewer readback.
+- [x] Bundled local Android ML Kit provider with explicit model/provider unavailable, failure, cancellation, and resource outcomes.
+- [x] Durable OCR queue after scan registration with persisted queued/running/terminal transitions, restart reconciliation, bounded active queue/retries, cancellation, and provider diagnostics.
+- [x] Android queue execution is off-main-thread and resumes durable due work at app startup; OCR failure does not block or undo scan saving/browsing.
+- [x] User correction records preserve original OCR and correction provenance separately; Android correction entry/review is implemented.
+- [x] Stored text-region polygons drive selectable Page Viewer overlays with text/confidence presentation.
+- [x] Rust-owned local OCR search index/API and Android OCR Search UI are implemented.
+- [x] Current M11 search precedence intentionally indexes original OCR text; unified original+corrected ranking/source labels are deferred rather than hiding immutable provenance.
 
 ---
 
 # Milestone 12 — Local search
 
-**Status: Not implemented.**
+**Status: Partial. The OCR text index/API/UI are implemented under M11; broader release search scope remains open.**
 
-- [ ] Rust-owned FTS schema and transactional reindexing.
-- [ ] Typed search API with filters, pagination, stable sorting, excerpts, and explicit syntax failures.
-- [ ] Android search UI and source-region navigation.
-- [ ] 10,000-page scale fixture and latency/memory evidence.
-- [ ] Integrate search-index consistency into the integrity report after the index exists.
+- [x] Rust-owned local OCR text index and transactional indexing of persisted OCR output.
+- [x] Typed `searchOcrText` API and Android OCR search UI with source-region/page navigation.
+- [x] Explicit no-query/no-results/Rust-error presentation states; no server index or account is required.
+- [ ] Complete the broader Milestone 12 filter/pagination/stable-sorting/syntax contract beyond the current OCR search surface.
+- [ ] Add the 10,000-page scale fixture and latency/memory evidence.
+- [ ] Integrate search-index consistency into the library integrity report.
+- [ ] Design unified original+corrected-text ranking/source labels before adding corrected text to search.
 
 ---
 
@@ -451,7 +457,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 - [x] AprilTag and UniFFI pinned.
 - [x] AprilTag license review and packaged notices.
-- [x] PDF, QR, image, and transitive dependency/license policy enforced through `cargo-deny` and APK verification.
+- [x] PDF, QR, image, OCR-provider, and transitive dependency/license policy enforced through `cargo-deny` and APK verification.
 - [ ] Document a complete dependency-update and portable-format fixture-review procedure.
 
 ## 16.4 Library integrity check
@@ -462,15 +468,16 @@ Still incomplete or not yet demonstrated at the required specificity:
 - [x] Referenced asset existence and optional full hashes.
 - [x] Orphan temporary and finalized asset reporting.
 - [x] No automatic destructive repair.
-- [ ] Search-index consistency after Milestone 12.
+- [ ] Search-index consistency integration for the broader Milestone 12 contract.
 - [ ] Android diagnostics UI after the Rust report contract is finalized.
 
 ## 16.5 Failure injection
 
-- [x] Missing/tampered asset, image decode, native processing, permission denial, cancellation, cleanup, migration tamper, and scanner process-death paths have focused tests.
-- [ ] Real disk-full evidence.
+- [x] Missing/tampered asset, image decode, native processing, permission denial, cancellation, cleanup, migration tamper, scanner process-death, and focused OCR provider/queue failures have tests.
+- [x] CI exercises size-limited-filesystem ENOSPC paths for asset persistence/scanner staging.
+- [ ] Physical-device low-storage evidence.
 - [ ] Corrupt-database policy beyond migration/integrity findings.
-- [ ] OCR/model/backup/restore failures after those systems exist.
+- [ ] Model/backup/restore failures after those systems exist.
 
 ---
 
@@ -490,8 +497,8 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 **Status: Partial.**
 
-- [x] Implemented Notebook, Smart Page, and scanner flows have explicit loading/error/retry/review states and preserve destination visibility.
-- [x] Original, corrected, warning, and provisional-quality states are distinguished in implemented scanner UI.
+- [x] Implemented Notebook, Smart Page, scanner, OCR correction/search, and Page Viewer OCR flows have explicit loading/error/retry/review states where applicable.
+- [x] Original, corrected, warning, provisional-quality, OCR-unavailable, and no-search-result states are distinguished in implemented UI.
 - [ ] Implement every v0.1 screen.
 - [ ] Product-wide terminology, accessibility labels, font scaling, contrast, touch targets, non-color cues, haptic/audio preferences, backup visibility, and model-provider disclosures.
 - [ ] Never require an account for core workflows.
@@ -508,8 +515,10 @@ Still incomplete or not yet demonstrated at the required specificity:
 - [x] Android lint, JVM tests, debug APK, required native ABIs, symbol/notices verification, and emulator integration.
 - [x] Kotlin generated-binding contract and Swift binding generation smoke.
 - [x] QR/layout/scan synthetic compatibility fixtures.
+- [x] Focused OCR/search persistence/provider/queue/UI tests are included in permanent validation.
 - [ ] Backup compatibility fixtures.
-- [ ] Automated checks for future OCR/search/backup/model/skill workflows.
+- [ ] Release-scale search and physical OCR-quality evidence.
+- [ ] Automated checks for future backup/model/skill workflows.
 
 ## 19.2 Manual acceptance
 
@@ -517,7 +526,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 - [ ] Two identical physical Notebooks and separated page identity.
 - [ ] Wrong-design handling and batch out-of-order scanning.
 - [ ] Physical Smart Page print/scan.
-- [ ] Revision preservation, OCR correction, search, backup Replace/Merge, exporters, and skills.
+- [ ] Revision preservation, OCR correction/search, backup Replace/Merge, exporters, and skills.
 - [ ] Complete core workflow offline.
 
 ## 19.3 Release blockers
@@ -529,12 +538,13 @@ Still incomplete or not yet demonstrated at the required specificity:
 - [ ] Skill permissions exist and are Rust-enforced.
 - [ ] Provider secrets use secure storage.
 - [x] Scanner cannot claim save before durable Rust registration.
+- [x] OCR failure cannot undo a durably registered scan.
 - [x] Production artifacts omit intentional panic-test exports.
 - [x] Core implemented behavior does not require A2D servers.
 
 ## 19.4 Documentation
 
-- [x] Core build/test/native/binding/QR/layout/storage decisions are documented.
+- [x] Core build/test/native/binding/QR/layout/storage and M11 OCR/search decisions are documented.
 - [ ] Backup format, physical validation, provider/skill, and full release procedures.
 - [ ] Complete FIX-151 repository-path validation.
 
@@ -553,17 +563,15 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 # Recommended execution order from the reconciled state
 
-1. [x] **Milestone 9.3 — Safe revision rules.**
-2. [x] **Milestone 9.4 — Needs Review APIs.**
-3. [x] **Milestone 9.5 — Version UI.**
-4. [x] **Milestone 8.5 — Batch scanner**, with persistent OCR execution intentionally delegated to Milestone 11.
-5. [ ] Complete the consolidated **Milestone 8.6 / FIX-111 camera failure matrix**.
-6. [ ] In parallel, collect **Milestone 7/17 photographed and physical-device evidence** and calibrate versioned capture/comparison thresholds.
-7. [ ] Implement Milestones 10–12: Library, OCR, and search.
-8. [ ] Implement Milestone 13: manual backup/restore/export.
-9. [ ] Implement Milestone 14 and the remaining Milestone 16 security controls.
-10. [ ] Complete Milestones 15, 17, 18, and 19 release readiness.
-11. [ ] Complete remediation FIX-130/131, FIX-140–142, and FIX-150/151 as their prerequisite implementation surfaces stabilize.
+1. [x] **Milestones 9.3–9.5 and 8.5** — safe revisions, Needs Review, Version UI, and batch scanner.
+2. [x] **Milestone 11 — OCR closeout** — durable OCR persistence/readback, correction, real local provider, OCR search surface, and queue/retry orchestration.
+3. [ ] Complete the consolidated **Milestone 8.6 / FIX-111 camera failure matrix**.
+4. [ ] In parallel, collect **Milestone 7/17 photographed and physical-device evidence** and calibrate versioned capture/comparison/OCR-quality thresholds.
+5. [ ] Complete remaining **Milestone 10 Library** and **Milestone 12 broader search** scope.
+6. [ ] Implement Milestone 13: manual backup/restore/export.
+7. [ ] Implement Milestone 14 and the remaining Milestone 16 security controls.
+8. [ ] Complete Milestones 15, 17, 18, and 19 release readiness.
+9. [ ] Complete remediation FIX-130/131, FIX-140–142, and FIX-150/151 as their prerequisite implementation surfaces stabilize.
 
 ---
 
