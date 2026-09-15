@@ -16,6 +16,6 @@ pub use entities::{
 pub use error::{A2dError, A2dErrorFields, ErrorCategory, ErrorCode, ErrorSeverity, Outcome};
 pub use id::{
     AnnotationId, AssetId, AuditEventId, BackupId, CollectionId, InstallationId, NotebookDesignId,
-    NotebookId, OcrRunId, PageId, PageSetId, PhysicalCopyId, ReviewItemId, ScanId, SkillId,
+    NotebookId, OcrJobId, OcrRunId, PageId, PageSetId, PhysicalCopyId, ReviewItemId, ScanId, SkillId,
     SkillRunId, SmartPageId, TextCorrectionId, TextRegionId,
 };
