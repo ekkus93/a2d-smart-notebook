@@ -143,9 +143,9 @@ class OcrSearchProductionNavigationTest {
                 client.prepareOcrInput(
                     PrepareOcrInputRequest(
                         scanId = registered.scanId,
-                        inputKind = OcrInputKind.OCR_OPTIMIZED,
-                        widthPx = 1080u,
-                        heightPx = 1440u,
+                        inputKind = OcrInputKind.ORIGINAL,
+                        widthPx = 1400u,
+                        heightPx = 1900u,
                     ),
                 )
             val recorded =
