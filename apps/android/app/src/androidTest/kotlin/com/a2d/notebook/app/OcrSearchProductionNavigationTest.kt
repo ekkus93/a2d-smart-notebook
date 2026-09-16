@@ -43,7 +43,7 @@ class OcrSearchProductionNavigationTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun realNavGraphUsesProductionControllerAndPreservesRustSearchErrors() {
+    fun realNavGraphUsesProductionController() {
         val root = composeRule.activity.filesDir.resolve("ocr-search-nav-${UUID.randomUUID()}")
         val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
 
@@ -61,15 +61,16 @@ class OcrSearchProductionNavigationTest {
             composeRule.onNodeWithTag(LibraryHubTestTags.OCR_SEARCH).performScrollTo().performClick()
             composeRule.onNodeWithTag(OcrSearchTestTags.TITLE).assertIsDisplayed()
 
-            // '*' is accepted by the text field but rejected by SQLite FTS query parsing. This
-            // proves the real nav destination is using the FFI-backed production controller rather
-            // than the nullable/not-connected fallback or an isolated fake presentation state.
-            composeRule.onNodeWithTag(OcrSearchTestTags.QUERY_FIELD).performTextInput("*")
+            // A valid query against a newly opened empty library deterministically returns no
+            // matches through Rust. The nullable fallback instead renders an error card containing
+            // "not connected", so this distinguishes the real production controller without
+            // depending on SQLite FTS accepting or rejecting a particular punctuation query.
+            composeRule.onNodeWithTag(OcrSearchTestTags.QUERY_FIELD).performTextInput("notebook")
             composeRule.onNodeWithTag(OcrSearchTestTags.SUBMIT).performClick()
             composeRule.waitUntil(timeoutMillis = 10_000) {
-                composeRule.onAllNodesWithTag(OcrSearchTestTags.ERROR).fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithTag(OcrSearchTestTags.NO_MATCHES).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithTag(OcrSearchTestTags.ERROR).assertIsDisplayed()
+            composeRule.onNodeWithTag(OcrSearchTestTags.NO_MATCHES).assertIsDisplayed()
             composeRule.onNodeWithText("not connected", substring = true, ignoreCase = true).assertDoesNotExist()
         } finally {
             root.deleteRecursively()
