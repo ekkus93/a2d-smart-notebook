@@ -313,7 +313,13 @@ impl AssetStore {
         kind: AssetKind,
         media_type: impl Into<String>,
     ) -> Result<Asset, A2dError> {
-        self.commit_with_id_and_fault(id, data, kind, media_type.into(), CommitFault::PermissionSet)
+        self.commit_with_id_and_fault(
+            id,
+            data,
+            kind,
+            media_type.into(),
+            CommitFault::PermissionSet,
+        )
     }
 
     fn commit_with_id_and_fault(
