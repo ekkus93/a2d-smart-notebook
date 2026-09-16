@@ -10,8 +10,21 @@ use std::path::Path;
 
 #[cfg(target_os = "android")]
 pub(super) fn finalize_no_replace(temp_path: &Path, final_path: &Path) -> io::Result<()> {
-    use std::ffi::CString;
+    use std::ffi::{c_char, c_int, c_uint, CString};
     use std::os::unix::ffi::OsStrExt;
+
+    unsafe extern "C" {
+        fn renameat2(
+            olddirfd: c_int,
+            oldpath: *const c_char,
+            newdirfd: c_int,
+            newpath: *const c_char,
+            flags: c_uint,
+        ) -> c_int;
+    }
+
+    const AT_FDCWD: c_int = -100;
+    const RENAME_NOREPLACE: c_uint = 1;
 
     let temp = CString::new(temp_path.as_os_str().as_bytes())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "temp path contains NUL"))?;
@@ -21,12 +34,12 @@ pub(super) fn finalize_no_replace(temp_path: &Path, final_path: &Path) -> io::Re
     // permission bit has been applied. renameat2(RENAME_NOREPLACE) provides the same required
     // same-filesystem atomic no-replace finalization without creating a second hard link.
     let result = unsafe {
-        libc::renameat2(
-            libc::AT_FDCWD,
+        renameat2(
+            AT_FDCWD,
             temp.as_ptr(),
-            libc::AT_FDCWD,
+            AT_FDCWD,
             final_path.as_ptr(),
-            libc::RENAME_NOREPLACE as u32,
+            RENAME_NOREPLACE,
         )
     };
     if result == 0 {
