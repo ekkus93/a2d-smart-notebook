@@ -79,11 +79,9 @@ class OcrSearchProductionNavigationTest {
         val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
 
         try {
-            // Use the bundled notebook design rather than Smart Page PDF generation here. The
-            // production asset store's no-replace finalization is intentionally stricter than the
-            // Android emulator's app-private filesystem permits for hard-linked export assets;
-            // notebook registration creates the real persisted Page without needing an export.
-            val setupPayload = "A2D:1:S:6DE28E53DBKPXCWWNHPC8T7QJX"
+            // These are canonical v1 payloads for the bundled notebook design, including the
+            // CRC-32C field required by the accepted QR wire format.
+            val setupPayload = "A2D:1:S:6DE28E53DBKPXCWWNHPC8T7QJX:0V10W2Y"
             val notebook =
                 client.createNotebook(
                     CreateNotebookRequest(
@@ -95,7 +93,7 @@ class OcrSearchProductionNavigationTest {
                         makeActive = true,
                     ),
                 )
-            val pagePayload = "A2D:1:B:6DE28E53DBKPXCWWNHPC8T7QJX:1:USLETTER-LINED"
+            val pagePayload = "A2D:1:B:6DE28E53DBKPXCWWNHPC8T7QJX:1:USLETTER-LINED:3ATFTZA"
             val staging = root.resolve("tmp/ocr-search-persisted.png")
             staging.parentFile?.mkdirs()
             composeRule.activity.resources.assets.open("base-page.png").use { source ->
