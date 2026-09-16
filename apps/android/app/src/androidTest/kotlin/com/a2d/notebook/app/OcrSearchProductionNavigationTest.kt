@@ -19,6 +19,8 @@ import com.a2d.notebook.feature.library.PageViewerTestTags
 import com.a2d.notebook.feature.ocr.OcrSearchTestTags
 import com.a2d.notebook.navigation.A2dNavHost
 import java.util.UUID
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,6 +29,7 @@ import uniffi.a2d_ffi.CreateNotebookRequest
 import uniffi.a2d_ffi.OcrInputKind
 import uniffi.a2d_ffi.OcrRunStatus
 import uniffi.a2d_ffi.OpenLibraryRequest
+import uniffi.a2d_ffi.PageResolution
 import uniffi.a2d_ffi.PrepareOcrInputRequest
 import uniffi.a2d_ffi.RecordOcrRunRequest
 import uniffi.a2d_ffi.RegistrationImageFormat
@@ -80,8 +83,10 @@ class OcrSearchProductionNavigationTest {
         val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
 
         try {
-            // These are canonical v1 payloads for the bundled notebook design, including the
-            // CRC-32C field required by the accepted QR wire format.
+            // Use the bundled notebook design rather than Smart Page PDF generation here. The
+            // production asset store's no-replace finalization is intentionally stricter than the
+            // Android emulator's app-private filesystem permits for hard-linked export assets;
+            // notebook registration creates the real persisted Page without needing an export.
             val setupPayload = "A2D:1:S:6DE28E53DBKPXCWWNHPC8T7QJX:0V10W2Y"
             val notebook =
                 client.createNotebook(
@@ -95,6 +100,12 @@ class OcrSearchProductionNavigationTest {
                     ),
                 )
             val pagePayload = "A2D:1:B:6DE28E53DBKPXCWWNHPC8T7QJX:1:USLETTER-LINED:3ATFTZA"
+            val resolution = client.resolvePageCode(pagePayload, notebook.notebook.id)
+            assertTrue(resolution is PageResolution.Resolved)
+            val resolved = resolution as PageResolution.Resolved
+            assertEquals(notebook.notebook.id, resolved.notebookId)
+            val pageId = resolved.pageId
+
             val staging = root.resolve("tmp/ocr-search-persisted.png")
             staging.parentFile?.mkdirs()
             InstrumentationRegistry.getInstrumentation().context.assets.open("base-page.png").use { source ->
@@ -105,7 +116,7 @@ class OcrSearchProductionNavigationTest {
                     RegisterScanRequest(
                         stagingPath = staging.canonicalPath,
                         pageCodePayload = pagePayload,
-                        expectedPageId = "",
+                        expectedPageId = pageId,
                         activeNotebookId = notebook.notebook.id,
                         captureSource = ScanCaptureSource.IMPORT,
                         imageFormat = RegistrationImageFormat.PNG,
@@ -117,7 +128,7 @@ class OcrSearchProductionNavigationTest {
                         userApproved = true,
                     ),
                 )
-            val pageId = registered.pageId
+            assertEquals(pageId, registered.pageId)
             val prepared =
                 client.prepareOcrInput(
                     PrepareOcrInputRequest(
