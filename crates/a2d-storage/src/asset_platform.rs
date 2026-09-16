@@ -26,7 +26,7 @@ pub(super) fn finalize_no_replace(temp_path: &Path, final_path: &Path) -> io::Re
             temp.as_ptr(),
             libc::AT_FDCWD,
             final_path.as_ptr(),
-            libc::RENAME_NOREPLACE,
+            libc::RENAME_NOREPLACE as u32,
         )
     };
     if result == 0 {
