@@ -1,5 +1,8 @@
 package com.a2d.notebook.app
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
@@ -103,15 +106,39 @@ class OcrSearchProductionNavigationTest {
             assertEquals(notebook.notebook.id, resolved.notebookId)
             val pageId = resolved.pageId
 
-            // Use a scene fixture with real margin around the page. The bare base-page bitmap ends
-            // exactly at its synthetic page boundary, while DEV-PAGE-V1's asymmetric notebook
-            // gutter makes page-corner extrapolation correctly require source pixels outside that
-            // cropped bitmap. The perspective scene preserves all four canonical marker IDs and
-            // gives registration enough surrounding image to execute the production rectifier.
+            // The photographed-analysis fixture is intentionally tight around its synthetic page.
+            // DEV-PAGE-V1 has an asymmetric notebook gutter, so production rectification can
+            // legitimately extrapolate beyond that crop. Embed the unchanged photographed fixture
+            // in a generous white camera-frame margin: marker pixels and perspective stay real,
+            // while the source image now contains the physical-page extent implied by the layout.
             val staging = root.resolve("tmp/scanner-staging/ocr-search-persisted.png")
             staging.parentFile?.mkdirs()
-            InstrumentationRegistry.getInstrumentation().context.assets.open("perspective-mild.png").use { source ->
-                staging.outputStream().use(source::copyTo)
+            val instrumentationAssets = InstrumentationRegistry.getInstrumentation().context.assets
+            val sourceBitmap =
+                instrumentationAssets.open("perspective-mild.png").use { input ->
+                    requireNotNull(BitmapFactory.decodeStream(input))
+                }
+            try {
+                val padX = sourceBitmap.width
+                val padY = sourceBitmap.height
+                val framed =
+                    Bitmap.createBitmap(
+                        sourceBitmap.width + (padX * 2),
+                        sourceBitmap.height + (padY * 2),
+                        Bitmap.Config.ARGB_8888,
+                    )
+                try {
+                    val canvas = Canvas(framed)
+                    canvas.drawColor(android.graphics.Color.WHITE)
+                    canvas.drawBitmap(sourceBitmap, padX.toFloat(), padY.toFloat(), null)
+                    staging.outputStream().use { output ->
+                        check(framed.compress(Bitmap.CompressFormat.PNG, 100, output))
+                    }
+                } finally {
+                    framed.recycle()
+                }
+            } finally {
+                sourceBitmap.recycle()
             }
             val registered =
                 client.registerScan(
