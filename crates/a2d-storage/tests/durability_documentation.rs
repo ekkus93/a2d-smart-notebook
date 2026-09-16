@@ -66,8 +66,6 @@ fn platform_adapter_retains_explicit_no_replace_and_unsupported_semantics() {
 #[test]
 fn sqlite_configuration_matches_the_documented_transaction_contract() {
     assert!(STORAGE_IMPLEMENTATION.contains("pragma_update(None, \"journal_mode\", \"WAL\")"));
-    assert!(STORAGE_IMPLEMENTATION.contains(
-        "pragma_update(None, \"synchronous\", \"NORMAL\")"
-    ));
+    assert!(STORAGE_IMPLEMENTATION.contains("pragma_update(None, \"synchronous\", \"NORMAL\")"));
     assert!(STORAGE_IMPLEMENTATION.contains("TransactionBehavior::Immediate"));
 }

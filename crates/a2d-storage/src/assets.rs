@@ -621,8 +621,8 @@ impl AssetStore {
         }
         match std::fs::remove_file(&tmp_path) {
             Ok(()) => {}
-            Err(error) if cfg!(target_os = "android") && error.kind() == io::ErrorKind::NotFound => {
-            }
+            Err(error)
+                if cfg!(target_os = "android") && error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => {
                 return Err(with_persistence_details(
                     map_io_error("removing the finalized asset temp link", error)
