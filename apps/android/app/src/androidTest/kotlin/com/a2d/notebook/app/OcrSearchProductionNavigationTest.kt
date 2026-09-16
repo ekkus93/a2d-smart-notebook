@@ -89,9 +89,9 @@ class OcrSearchProductionNavigationTest {
                     CreateNotebookRequest(
                         setupPayload = setupPayload,
                         displayName = "OCR production navigation fixture",
-                        optionalColor = null,
-                        optionalIcon = null,
-                        optionalUserNotes = null,
+                        optionalColor = "blue",
+                        optionalIcon = "notebook",
+                        optionalUserNotes = "R1 persisted OCR search fixture",
                         makeActive = true,
                     ),
                 )
@@ -106,7 +106,7 @@ class OcrSearchProductionNavigationTest {
                     RegisterScanRequest(
                         stagingPath = staging.canonicalPath,
                         pageCodePayload = pagePayload,
-                        expectedPageId = null,
+                        expectedPageId = "",
                         activeNotebookId = notebook.notebook.id,
                         captureSource = ScanCaptureSource.IMPORT,
                         imageFormat = RegistrationImageFormat.PNG,
