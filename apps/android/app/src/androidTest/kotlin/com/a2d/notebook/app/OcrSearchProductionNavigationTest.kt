@@ -109,7 +109,9 @@ class OcrSearchProductionNavigationTest {
             assertEquals(notebook.notebook.id, resolved.notebookId)
             val pageId = resolved.pageId
 
-            val staging = root.resolve("tmp/ocr-search-persisted.png")
+            // Registration deliberately rejects arbitrary caller-owned paths. Mirror production
+            // scanner ownership by staging the imported image under Rust's canonical scanner root.
+            val staging = root.resolve("tmp/scanner-staging/ocr-search-persisted.png")
             staging.parentFile?.mkdirs()
             InstrumentationRegistry.getInstrumentation().context.assets.open("base-page.png").use { source ->
                 staging.outputStream().use(source::copyTo)
