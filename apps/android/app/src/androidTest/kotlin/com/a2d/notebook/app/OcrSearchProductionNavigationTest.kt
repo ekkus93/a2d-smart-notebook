@@ -10,32 +10,33 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.a2d.notebook.feature.home.HomeScreenTestTags
 import com.a2d.notebook.feature.library.LibraryHubTestTags
-import com.a2d.notebook.feature.library.PageViewerScreen
 import com.a2d.notebook.feature.library.PageViewerTestTags
-import com.a2d.notebook.feature.ocr.AndroidOcrSearchController
-import com.a2d.notebook.feature.ocr.AndroidOcrSearchDocumentKind
-import com.a2d.notebook.feature.ocr.AndroidOcrSearchGateway
-import com.a2d.notebook.feature.ocr.AndroidOcrSearchHit
-import com.a2d.notebook.feature.ocr.AndroidOcrSearchRequest
-import com.a2d.notebook.feature.ocr.AndroidOcrSearchResults
-import com.a2d.notebook.feature.ocr.OcrSearchScreen
 import com.a2d.notebook.feature.ocr.OcrSearchTestTags
 import com.a2d.notebook.navigation.A2dNavHost
 import java.util.UUID
-import kotlinx.coroutines.Dispatchers
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import uniffi.a2d_ffi.A2dClient
+import uniffi.a2d_ffi.CreateNotebookRequest
+import uniffi.a2d_ffi.OcrInputKind
+import uniffi.a2d_ffi.OcrRunStatus
 import uniffi.a2d_ffi.OpenLibraryRequest
+import uniffi.a2d_ffi.PageResolution
+import uniffi.a2d_ffi.PrepareOcrInputRequest
+import uniffi.a2d_ffi.RecordOcrRunRequest
+import uniffi.a2d_ffi.RegistrationImageFormat
+import uniffi.a2d_ffi.RegistrationImageRotation
+import uniffi.a2d_ffi.RegistrationMarker
+import uniffi.a2d_ffi.RegisterScanRequest
+import uniffi.a2d_ffi.ScanCaptureSource
 
 @RunWith(AndroidJUnit4::class)
 class OcrSearchProductionNavigationTest {
@@ -78,67 +79,117 @@ class OcrSearchProductionNavigationTest {
     }
 
     @Test
-    fun searchHitSelectionUsesRealNavGraphToOpenPageViewer() {
-        val pageId = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-        val controller =
-            AndroidOcrSearchController(
-                gateway =
-                    object : AndroidOcrSearchGateway {
-                        override fun searchOcrText(request: AndroidOcrSearchRequest) =
-                            AndroidOcrSearchResults(
-                                query = request.query,
-                                hits =
-                                    listOf(
-                                        AndroidOcrSearchHit(
-                                            pageId = pageId,
-                                            scanId = "01ARZ3NDEKTSV4RRFFQ69G5FB0",
-                                            ocrRunId = "01ARZ3NDEKTSV4RRFFQ69G5FB1",
-                                            textRegionId = "01ARZ3NDEKTSV4RRFFQ69G5FB2",
-                                            documentKind = AndroidOcrSearchDocumentKind.TextRegion,
-                                            snippet = "known [notebook] hit",
-                                        ),
-                                    ),
-                            )
-                    },
-                searchDispatcher = Dispatchers.Unconfined,
-            )
+    fun persistedRustOcrSearchHitUsesProductionNavGraphToOpenPageViewer() {
+        val root = composeRule.activity.filesDir.resolve("ocr-search-persisted-${UUID.randomUUID()}")
+        val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
 
-        composeRule.activity.setContent {
-            MaterialTheme {
-                val navController = rememberNavController()
-                NavHost(
-                    navController = navController,
-                    startDestination = "search",
-                ) {
-                    composable("search") {
-                        OcrSearchScreen(
-                            onBack = {},
-                            onOpenPage = { navController.navigate("page/$it") },
-                            searchController = controller,
-                        )
-                    }
-                    composable(
-                        route = "page/{pageId}",
-                        arguments = listOf(navArgument("pageId") { type = NavType.StringType }),
-                    ) { entry ->
-                        PageViewerScreen(
-                            pageId = requireNotNull(entry.arguments?.getString("pageId")),
-                            onBack = {},
-                            onOpenVersions = {},
-                            onOpenNeedsReview = {},
-                        )
-                    }
+        try {
+            val setupPayload = "A2D:1:S:6DE28E53DBKPXCWWNHPC8T7QJX:0V10W2Y"
+            val notebook =
+                client.createNotebook(
+                    CreateNotebookRequest(
+                        setupPayload = setupPayload,
+                        displayName = "OCR production navigation fixture",
+                        optionalColor = "blue",
+                        optionalIcon = "notebook",
+                        optionalUserNotes = "R1 persisted OCR search fixture",
+                        makeActive = true,
+                    ),
+                )
+            val pagePayload = "A2D:1:B:6DE28E53DBKPXCWWNHPC8T7QJX:1:DEV-PAGE-V1:02V2GRM"
+            val resolution = client.resolvePageCode(pagePayload, notebook.notebook.id)
+            assertTrue(resolution is PageResolution.Resolved)
+            val resolved = resolution as PageResolution.Resolved
+            assertEquals(notebook.notebook.id, resolved.notebookId)
+            val pageId = resolved.pageId
+
+            // Use a scene fixture with real margin around the page. The bare base-page bitmap ends
+            // exactly at its synthetic page boundary, while DEV-PAGE-V1's asymmetric notebook
+            // gutter makes page-corner extrapolation correctly require source pixels outside that
+            // cropped bitmap. The perspective scene preserves all four canonical marker IDs and
+            // gives registration enough surrounding image to execute the production rectifier.
+            val staging = root.resolve("tmp/scanner-staging/ocr-search-persisted.png")
+            staging.parentFile?.mkdirs()
+            InstrumentationRegistry.getInstrumentation().context.assets.open("perspective-mild.png").use { source ->
+                staging.outputStream().use(source::copyTo)
+            }
+            val registered =
+                client.registerScan(
+                    RegisterScanRequest(
+                        stagingPath = staging.canonicalPath,
+                        pageCodePayload = pagePayload,
+                        expectedPageId = pageId,
+                        activeNotebookId = notebook.notebook.id,
+                        captureSource = ScanCaptureSource.IMPORT,
+                        imageFormat = RegistrationImageFormat.PNG,
+                        imageRotation = RegistrationImageRotation.DEGREES0,
+                        capturedAtMs = System.currentTimeMillis(),
+                        observedMarkers =
+                            listOf(
+                                RegistrationMarker(role = "TL", id = 0u),
+                                RegistrationMarker(role = "TR", id = 1u),
+                                RegistrationMarker(role = "BR", id = 2u),
+                                RegistrationMarker(role = "BL", id = 3u),
+                            ),
+                        previewWarnings =
+                            listOf(
+                                "A2D_POLICY_LAYOUT=DEV-PAGE-V1",
+                                "A2D_POLICY_VERSION=1",
+                                "A2D_PIPELINE_VERSION=1",
+                            ),
+                        recoveryToken = null,
+                        userApproved = true,
+                    ),
+                )
+            assertEquals(pageId, registered.pageId)
+            val prepared =
+                client.prepareOcrInput(
+                    PrepareOcrInputRequest(
+                        scanId = registered.scanId,
+                        inputKind = OcrInputKind.ORIGINAL,
+                        widthPx = 1800u,
+                        heightPx = 2200u,
+                    ),
+                )
+            val recorded =
+                client.recordOcrRun(
+                    RecordOcrRunRequest(
+                        scanId = registered.scanId,
+                        inputAssetId = prepared.inputAssetId,
+                        provider = "instrumentation-fixture",
+                        providerVersion = "1",
+                        modelName = "deterministic",
+                        status = OcrRunStatus.DETECTED,
+                        fullText = "persisted production notebook sentinel",
+                        unavailableReason = null,
+                        unavailableMessage = null,
+                        completedAtMs = System.currentTimeMillis(),
+                        warnings = emptyList(),
+                    ),
+                )
+
+            composeRule.activity.setContent {
+                MaterialTheme {
+                    A2dNavHost(
+                        navController = rememberNavController(),
+                        client = client,
+                    )
                 }
             }
+            composeRule.onNodeWithTag(HomeScreenTestTags.LIBRARY).performScrollTo().performClick()
+            composeRule.onNodeWithTag(LibraryHubTestTags.OCR_SEARCH).performScrollTo().performClick()
+            composeRule.onNodeWithTag(OcrSearchTestTags.QUERY_FIELD).performTextInput("sentinel")
+            composeRule.onNodeWithTag(OcrSearchTestTags.SUBMIT).performClick()
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithTag(OcrSearchTestTags.OPEN_PAGE).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText(registered.scanId, substring = true).assertIsDisplayed()
+            composeRule.onNodeWithText(recorded.ocrRunId, substring = true).assertIsDisplayed()
+            composeRule.onNodeWithTag(OcrSearchTestTags.OPEN_PAGE).performScrollTo().performClick()
+            composeRule.onNodeWithTag(PageViewerTestTags.TITLE).assertIsDisplayed()
+            composeRule.onNodeWithText("Page ID: $pageId").assertIsDisplayed()
+        } finally {
+            root.deleteRecursively()
         }
-
-        composeRule.onNodeWithTag(OcrSearchTestTags.QUERY_FIELD).performTextInput("notebook")
-        composeRule.onNodeWithTag(OcrSearchTestTags.SUBMIT).performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag(OcrSearchTestTags.OPEN_PAGE).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithTag(OcrSearchTestTags.OPEN_PAGE).performScrollTo().performClick()
-        composeRule.onNodeWithTag(PageViewerTestTags.TITLE).assertIsDisplayed()
-        composeRule.onNodeWithText("Page ID: $pageId").assertIsDisplayed()
     }
 }
