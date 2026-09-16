@@ -106,11 +106,11 @@ class OcrSearchProductionNavigationTest {
             assertEquals(notebook.notebook.id, resolved.notebookId)
             val pageId = resolved.pageId
 
-            // DEV-PAGE-V1's asymmetric gutter needs source pixels outside the photographed
-            // fixture's tight crop. Keep the photographed pixels at their original resolution so
-            // AprilTag corner localization remains stable, and add a 50%-of-source white camera
-            // margin on every side. This leaves substantial extrapolation room while keeping both
-            // decoded pixels and PNG decoder working memory comfortably below production limits.
+            // DEV-PAGE-V1's gutter-side marker inset is wider than this photographed fixture's
+            // symmetric crop. Preserve every photographed pixel and AprilTag at native resolution,
+            // but add a bounded 20%-of-source camera margin on each side. That is enough room for
+            // the layout's roughly 9% additional gutter extrapolation without the much larger
+            // coordinate translation and decoder working set produced by the earlier 50% frame.
             val staging = root.resolve("tmp/scanner-staging/ocr-search-persisted.png")
             staging.parentFile?.mkdirs()
             val instrumentationAssets = InstrumentationRegistry.getInstrumentation().context.assets
@@ -119,8 +119,8 @@ class OcrSearchProductionNavigationTest {
                     requireNotNull(BitmapFactory.decodeStream(input))
                 }
             try {
-                val padX = sourceBitmap.width / 2
-                val padY = sourceBitmap.height / 2
+                val padX = sourceBitmap.width / 5
+                val padY = sourceBitmap.height / 5
                 val framed =
                     Bitmap.createBitmap(
                         sourceBitmap.width + (padX * 2),
