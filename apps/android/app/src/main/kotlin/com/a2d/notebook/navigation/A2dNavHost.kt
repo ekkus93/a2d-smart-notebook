@@ -1,7 +1,12 @@
 package com.a2d.notebook.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -12,13 +17,17 @@ import com.a2d.notebook.feature.library.ImportLibraryScreen
 import com.a2d.notebook.feature.library.LibraryHubScreen
 import com.a2d.notebook.feature.library.PageBrowserScreen
 import com.a2d.notebook.feature.library.PageViewerScreen
+import com.a2d.notebook.feature.library.PageViewerState
 import com.a2d.notebook.feature.library.TrashScreen
 import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
 import com.a2d.notebook.feature.ocr.AndroidOcrSearchController
+import com.a2d.notebook.feature.ocr.FfiAndroidOcrReadback
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrSearchGateway
+import com.a2d.notebook.feature.ocr.OcrPresentationState
+import com.a2d.notebook.feature.ocr.OcrPresentationStatus
 import com.a2d.notebook.feature.ocr.OcrSearchScreen
 import com.a2d.notebook.feature.review.NeedsReviewScreen
 import com.a2d.notebook.feature.scanner.singlepage.PolicyAwareBatchScannerRoute
@@ -26,6 +35,8 @@ import com.a2d.notebook.feature.scanner.singlepage.SinglePageScannerScreen
 import com.a2d.notebook.feature.smartpage.SmartPageLibraryScreen
 import com.a2d.notebook.feature.smartpage.SmartPagesScreen
 import com.a2d.notebook.feature.version.VersionHistoryScreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.A2dClient
 
 object A2dDestinations {
@@ -33,7 +44,7 @@ object A2dDestinations {
     const val LIBRARY = "library"
     const val PAGES = "library/pages"
     const val OCR_SEARCH = "library/ocr-search"
-    const val PAGE_VIEWER_PATTERN = "library/pages/{pageId}"
+    const val PAGE_VIEWER_PATTERN = "library/pages/{pageId}?scanId={scanId}"
     const val NEEDS_REVIEW = "library/needs-review"
     const val SMART_PAGE_LIBRARY = "library/smart-pages"
     const val IMPORTS = "library/imports"
@@ -47,7 +58,13 @@ object A2dDestinations {
     const val PAGE_CODE_PATTERN = "page-code/{notebookId}"
     const val VERSION_HISTORY_PATTERN = "versions/{pageId}"
 
-    fun pageViewer(pageId: String) = "library/pages/$pageId"
+    fun pageViewer(pageId: String, scanId: String? = null): String =
+        if (scanId == null) {
+            "library/pages/$pageId"
+        } else {
+            "library/pages/$pageId?scanId=${Uri.encode(scanId)}"
+        }
+
     fun pageCode(notebookId: String) = "page-code/$notebookId"
     fun notebookDetail(notebookId: String) = "notebooks/detail/$notebookId"
     fun versionHistory(pageId: String) = "versions/$pageId"
@@ -62,6 +79,7 @@ fun A2dNavHost(
         remember(client) {
             client?.let { AndroidOcrSearchController(FfiAndroidOcrSearchGateway(it)) }
         }
+    val ocrReadback = remember(client) { client?.let(::FfiAndroidOcrReadback) }
 
     NavHost(navController = navController, startDestination = A2dDestinations.HOME) {
         composable(A2dDestinations.HOME) {
@@ -98,18 +116,67 @@ fun A2dNavHost(
             OcrSearchScreen(
                 onBack = { navController.navigateUp() },
                 onOpenPage = { pageId -> navController.navigate(A2dDestinations.pageViewer(pageId)) },
+                onOpenOcrHit = { hit ->
+                    navController.navigate(A2dDestinations.pageViewer(hit.pageId, hit.scanId))
+                },
                 searchController = ocrSearchController,
             )
         }
         composable(
             route = A2dDestinations.PAGE_VIEWER_PATTERN,
-            arguments = listOf(navArgument("pageId") { type = NavType.StringType }),
+            arguments =
+                listOf(
+                    navArgument("pageId") { type = NavType.StringType },
+                    navArgument("scanId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
         ) { entry ->
+            val pageId = requireNotNull(entry.arguments?.getString("pageId"))
+            val scanId = entry.arguments?.getString("scanId")
+            var viewerState by
+                remember(pageId, scanId, client) {
+                    mutableStateOf(
+                        PageViewerState(
+                            pageId = pageId,
+                            preferredScanId = scanId,
+                            viewerApiConnected = client != null,
+                        ),
+                    )
+                }
+            LaunchedEffect(pageId, scanId, ocrReadback) {
+                if (scanId != null && ocrReadback != null) {
+                    viewerState =
+                        try {
+                            val presentation =
+                                withContext(Dispatchers.IO) {
+                                    ocrReadback.loadPresentationState(scanId)
+                                }
+                            viewerState.copy(
+                                ocrState = presentation,
+                                hasRecognizedText = presentation.status == OcrPresentationStatus.Detected,
+                                viewerApiConnected = true,
+                            )
+                        } catch (failure: Exception) {
+                            viewerState.copy(
+                                ocrState =
+                                    OcrPresentationState(
+                                        status = OcrPresentationStatus.Failed,
+                                        message = failure.message ?: failure::class.java.simpleName,
+                                    ),
+                                viewerApiConnected = true,
+                            )
+                        }
+                }
+            }
             PageViewerScreen(
-                pageId = requireNotNull(entry.arguments?.getString("pageId")),
+                pageId = pageId,
                 onBack = { navController.navigateUp() },
-                onOpenVersions = { pageId -> navController.navigate(A2dDestinations.versionHistory(pageId)) },
+                onOpenVersions = { id -> navController.navigate(A2dDestinations.versionHistory(id)) },
                 onOpenNeedsReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
+                state = viewerState,
             )
         }
         composable(A2dDestinations.NEEDS_REVIEW) {
