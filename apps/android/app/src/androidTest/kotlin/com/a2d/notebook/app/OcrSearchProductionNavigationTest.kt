@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.a2d.notebook.feature.home.HomeScreenTestTags
 import com.a2d.notebook.feature.library.LibraryHubTestTags
 import com.a2d.notebook.feature.library.PageViewerTestTags
@@ -96,7 +97,7 @@ class OcrSearchProductionNavigationTest {
             val pagePayload = "A2D:1:B:6DE28E53DBKPXCWWNHPC8T7QJX:1:USLETTER-LINED:3ATFTZA"
             val staging = root.resolve("tmp/ocr-search-persisted.png")
             staging.parentFile?.mkdirs()
-            composeRule.activity.resources.assets.open("base-page.png").use { source ->
+            InstrumentationRegistry.getInstrumentation().context.assets.open("base-page.png").use { source ->
                 staging.outputStream().use(source::copyTo)
             }
             val registered =
