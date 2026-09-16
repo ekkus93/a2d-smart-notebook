@@ -22,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import uniffi.a2d_ffi.A2dClient
+import uniffi.a2d_ffi.CreateNotebookRequest
 import uniffi.a2d_ffi.OcrInputKind
 import uniffi.a2d_ffi.OcrRunStatus
 import uniffi.a2d_ffi.OpenLibraryRequest
@@ -31,9 +32,6 @@ import uniffi.a2d_ffi.RegistrationImageFormat
 import uniffi.a2d_ffi.RegistrationImageRotation
 import uniffi.a2d_ffi.RegisterScanRequest
 import uniffi.a2d_ffi.ScanCaptureSource
-import uniffi.a2d_ffi.SmartPageContentStyle
-import uniffi.a2d_ffi.SmartPageGenerationRequest
-import uniffi.a2d_ffi.SmartPagePaperSize
 
 @RunWith(AndroidJUnit4::class)
 class OcrSearchProductionNavigationTest {
@@ -81,17 +79,23 @@ class OcrSearchProductionNavigationTest {
         val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
 
         try {
-            val generated =
-                client.generateSmartPages(
-                    SmartPageGenerationRequest(
-                        paperSize = SmartPagePaperSize.A4,
-                        style = SmartPageContentStyle.BLANK,
-                        pageCount = 1u,
-                        startingVisiblePage = 1u,
+            // Use the bundled notebook design rather than Smart Page PDF generation here. The
+            // production asset store's no-replace finalization is intentionally stricter than the
+            // Android emulator's app-private filesystem permits for hard-linked export assets;
+            // notebook registration creates the real persisted Page without needing an export.
+            val setupPayload = "A2D:1:S:6DE28E53DBKPXCWWNHPC8T7QJX"
+            val notebook =
+                client.createNotebook(
+                    CreateNotebookRequest(
+                        setupPayload = setupPayload,
+                        displayName = "OCR production navigation fixture",
+                        optionalColor = null,
+                        optionalIcon = null,
+                        optionalUserNotes = null,
+                        makeActive = true,
                     ),
                 )
-            val pageId = generated.pageIds.single()
-            val smartPageId = generated.smartPageIds.single()
+            val pagePayload = "A2D:1:B:6DE28E53DBKPXCWWNHPC8T7QJX:1:USLETTER-LINED"
             val staging = root.resolve("tmp/ocr-search-persisted.png")
             staging.parentFile?.mkdirs()
             composeRule.activity.resources.assets.open("base-page.png").use { source ->
@@ -101,9 +105,9 @@ class OcrSearchProductionNavigationTest {
                 client.registerScan(
                     RegisterScanRequest(
                         stagingPath = staging.canonicalPath,
-                        pageCodePayload = "A2D:1:M:$smartPageId:A4-BLANK:1:${generated.pageSetId}",
-                        expectedPageId = pageId,
-                        activeNotebookId = null,
+                        pageCodePayload = pagePayload,
+                        expectedPageId = null,
+                        activeNotebookId = notebook.notebook.id,
                         captureSource = ScanCaptureSource.IMPORT,
                         imageFormat = RegistrationImageFormat.PNG,
                         imageRotation = RegistrationImageRotation.DEGREES0,
@@ -114,6 +118,7 @@ class OcrSearchProductionNavigationTest {
                         userApproved = true,
                     ),
                 )
+            val pageId = registered.pageId
             val prepared =
                 client.prepareOcrInput(
                     PrepareOcrInputRequest(
