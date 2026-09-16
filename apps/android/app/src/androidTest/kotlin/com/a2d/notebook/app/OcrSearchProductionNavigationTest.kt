@@ -99,7 +99,10 @@ class OcrSearchProductionNavigationTest {
                         makeActive = true,
                     ),
                 )
-            val pagePayload = "A2D:1:B:6DE28E53DBKPXCWWNHPC8T7QJX:1:USLETTER-LINED:3ATFTZA"
+            // Keep the page QR aligned with the bundled development manifest. Its writable layout
+            // is DEV-PAGE-V1; using an unrelated Smart Page layout would correctly be rejected by
+            // Rust's current layout registry before registration.
+            val pagePayload = "A2D:1:B:6DE28E53DBKPXCWWNHPC8T7QJX:1:DEV-PAGE-V1:02V2GRM"
             val resolution = client.resolvePageCode(pagePayload, notebook.notebook.id)
             assertTrue(resolution is PageResolution.Resolved)
             val resolved = resolution as PageResolution.Resolved
