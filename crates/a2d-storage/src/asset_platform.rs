@@ -10,7 +10,7 @@ use std::path::Path;
 
 #[cfg(target_os = "android")]
 pub(super) fn finalize_no_replace(temp_path: &Path, final_path: &Path) -> io::Result<()> {
-    use std::ffi::{c_char, c_int, c_uint, CString};
+    use std::ffi::{CString, c_char, c_int, c_uint};
     use std::os::unix::ffi::OsStrExt;
 
     unsafe extern "C" {
