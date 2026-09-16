@@ -3,7 +3,6 @@ package com.a2d.notebook.app
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Matrix
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
@@ -108,10 +107,10 @@ class OcrSearchProductionNavigationTest {
             val pageId = resolved.pageId
 
             // DEV-PAGE-V1's asymmetric gutter needs source pixels outside the photographed
-            // fixture's tight crop. Preserve the photographed marker/perspective evidence, but
-            // first scale it down and then place it in a white camera frame. The resulting frame
-            // stays below the production 32 MP decode limit while leaving ample rectification
-            // margin around all four markers.
+            // fixture's tight crop. Keep the photographed pixels at their original resolution so
+            // AprilTag corner localization remains stable, and add a 75%-of-source white camera
+            // margin on every side. This is enough extrapolation room for the gutter while the
+            // resulting frame remains below the production 32 MP decoded-image limit.
             val staging = root.resolve("tmp/scanner-staging/ocr-search-persisted.png")
             staging.parentFile?.mkdirs()
             val instrumentationAssets = InstrumentationRegistry.getInstrumentation().context.assets
@@ -120,25 +119,18 @@ class OcrSearchProductionNavigationTest {
                     requireNotNull(BitmapFactory.decodeStream(input))
                 }
             try {
-                val scale = 0.5f
-                val scaledWidth = (sourceBitmap.width * scale).toInt()
-                val scaledHeight = (sourceBitmap.height * scale).toInt()
-                val padX = scaledWidth
-                val padY = scaledHeight
+                val padX = (sourceBitmap.width * 3) / 4
+                val padY = (sourceBitmap.height * 3) / 4
                 val framed =
                     Bitmap.createBitmap(
-                        scaledWidth + (padX * 2),
-                        scaledHeight + (padY * 2),
+                        sourceBitmap.width + (padX * 2),
+                        sourceBitmap.height + (padY * 2),
                         Bitmap.Config.ARGB_8888,
                     )
                 try {
                     val canvas = Canvas(framed)
                     canvas.drawColor(android.graphics.Color.WHITE)
-                    val matrix = Matrix().apply {
-                        setScale(scale, scale)
-                        postTranslate(padX.toFloat(), padY.toFloat())
-                    }
-                    canvas.drawBitmap(sourceBitmap, matrix, null)
+                    canvas.drawBitmap(sourceBitmap, padX.toFloat(), padY.toFloat(), null)
                     staging.outputStream().use { output ->
                         check(framed.compress(Bitmap.CompressFormat.PNG, 100, output))
                     }
