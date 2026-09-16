@@ -56,6 +56,8 @@ fn asset_implementation_retains_the_documented_filesystem_ordering_markers() {
 fn platform_adapter_retains_explicit_no_replace_and_unsupported_semantics() {
     assert!(PLATFORM_IMPLEMENTATION.contains("target_os = \"android\""));
     assert!(PLATFORM_IMPLEMENTATION.contains("target_os = \"linux\""));
+    assert!(PLATFORM_IMPLEMENTATION.contains("libc::renameat2"));
+    assert!(PLATFORM_IMPLEMENTATION.contains("libc::RENAME_NOREPLACE"));
     assert!(PLATFORM_IMPLEMENTATION.contains("std::fs::hard_link(temp_path, final_path)"));
     assert!(PLATFORM_IMPLEMENTATION.contains("ErrorKind::Unsupported"));
     assert!(!PLATFORM_IMPLEMENTATION.contains("std::fs::rename"));
