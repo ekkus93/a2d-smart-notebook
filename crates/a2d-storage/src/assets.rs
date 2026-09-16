@@ -158,9 +158,6 @@ fn maybe_inject_fault(
 }
 
 impl AssetStore {
-    /// `root` is the library directory (containing `library.sqlite`), not the `assets/`
-    /// subdirectory itself. Creates `assets/{originals,corrected,ocr,thumbnails,exports}/` and
-    /// `tmp/` if they don't already exist.
     pub fn open(root: &Path) -> Result<Self, A2dError> {
         let store = Self {
             root: root.to_path_buf(),
@@ -187,8 +184,6 @@ impl AssetStore {
         self.root.join("assets").join(asset_kind_dir(kind))
     }
 
-    /// Resolves a relative path stored in the database back to the canonical absolute path,
-    /// rejecting missing files, symlinks, and anything that escapes `root`.
     pub fn resolve(&self, relative_path: &str) -> Result<PathBuf, A2dError> {
         let candidate = self.root.join(relative_path);
         let metadata = std::fs::symlink_metadata(&candidate).map_err(|error| {
@@ -239,9 +234,6 @@ impl AssetStore {
         Ok(canonical_candidate)
     }
 
-    /// Runs the no-replace asset filesystem commit protocol for in-memory `data`, returning an
-    /// `Asset` value the caller may insert into SQLite only after every required synchronization
-    /// and verification step succeeds.
     pub fn commit(
         &self,
         data: &[u8],
@@ -257,8 +249,6 @@ impl AssetStore {
         )
     }
 
-    /// Test-only deterministic entry point for collision and interruption coverage. Production
-    /// callers cannot select an asset ID.
     #[cfg(feature = "test-util")]
     pub fn commit_with_id_for_test(
         &self,
@@ -352,7 +342,6 @@ impl AssetStore {
         let tmp_path = self.tmp_dir().join(format!("{id}.tmp"));
         let relative_path = format!("assets/{}/{id}", asset_kind_dir(kind));
         let final_path = self.root.join(&relative_path);
-
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -391,7 +380,6 @@ impl AssetStore {
                     false,
                 )
             })?;
-
         if let Err(error) = file.write_all(data) {
             drop(file);
             return Err(with_persistence_details(
@@ -426,7 +414,6 @@ impl AssetStore {
                 false,
             ));
         }
-
         let immutable = kind == AssetKind::Original;
         if immutable {
             let metadata = match file.metadata() {
@@ -480,7 +467,6 @@ impl AssetStore {
                 ));
             }
         }
-
         let file_sync_result = maybe_inject_fault(
             fault,
             CommitFault::FileSync,
@@ -509,7 +495,6 @@ impl AssetStore {
             ));
         }
         drop(file);
-
         let on_disk = std::fs::read(&tmp_path).map_err(|error| {
             with_persistence_details(
                 with_cleanup_result(
@@ -591,7 +576,6 @@ impl AssetStore {
                 false,
             ));
         }
-
         if let Err(error) = platform::finalize_no_replace(&tmp_path, &final_path) {
             return Err(with_persistence_details(
                 with_cleanup_result(
@@ -608,7 +592,6 @@ impl AssetStore {
                 false,
             ));
         }
-
         if let Err(error) = verify_finalized_metadata(&final_path, byte_length, immutable) {
             return Err(with_persistence_details(
                 error
@@ -624,7 +607,6 @@ impl AssetStore {
                 false,
             ));
         }
-
         let destination_directory = self.kind_dir(kind);
         let destination_sync_result = maybe_inject_fault(
             fault,
@@ -652,24 +634,27 @@ impl AssetStore {
                 false,
             ));
         }
-
-        if let Err(error) = std::fs::remove_file(&tmp_path) {
-            return Err(with_persistence_details(
-                map_io_error("removing the finalized asset temp link", error)
-                    .with_detail("temp_path", tmp_path.to_string_lossy())
-                    .with_detail("final_path", final_path.to_string_lossy())
-                    .with_detail("temp_cleanup_completed", "false"),
-                AssetPersistenceFailureStage::FinalizedUnregistered,
-                &id,
-                kind,
-                &relative_path,
-                &expected_hash,
-                byte_length,
-                true,
-                true,
-            ));
+        match std::fs::remove_file(&tmp_path) {
+            Ok(()) => {}
+            Err(error)
+                if cfg!(target_os = "android") && error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(with_persistence_details(
+                    map_io_error("removing the finalized asset temp link", error)
+                        .with_detail("temp_path", tmp_path.to_string_lossy())
+                        .with_detail("final_path", final_path.to_string_lossy())
+                        .with_detail("temp_cleanup_completed", "false"),
+                    AssetPersistenceFailureStage::FinalizedUnregistered,
+                    &id,
+                    kind,
+                    &relative_path,
+                    &expected_hash,
+                    byte_length,
+                    true,
+                    true,
+                ));
+            }
         }
-
         let temp_directory = self.tmp_dir();
         let temp_sync_result = maybe_inject_fault(
             fault,
@@ -699,7 +684,6 @@ impl AssetStore {
                 true,
             ));
         }
-
         Ok(Asset::new(
             id,
             kind,
@@ -713,7 +697,6 @@ impl AssetStore {
         ))
     }
 
-    /// Re-verifies a previously committed asset against the filesystem.
     pub fn verify(&self, asset: &Asset) -> Result<(), A2dError> {
         let path = self.resolve(&asset.relative_path).map_err(|error| {
             error
@@ -751,8 +734,6 @@ impl AssetStore {
         Ok(())
     }
 
-    /// Lists files under `tmp/` without deleting anything. Results are sorted for deterministic
-    /// diagnostics and tests.
     pub fn list_orphaned_temp_files(&self) -> Result<Vec<PathBuf>, A2dError> {
         let mut orphans = Vec::new();
         let entries =

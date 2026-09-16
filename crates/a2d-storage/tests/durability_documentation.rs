@@ -36,7 +36,7 @@ fn durability_contract_defines_each_required_layer_separately() {
 
 #[test]
 fn asset_implementation_retains_the_documented_filesystem_ordering_markers() {
-    for required_source_marker in [
+    for marker in [
         "file.flush()",
         "file.sync_all()",
         "platform::finalize_no_replace(&tmp_path, &final_path)",
@@ -46,8 +46,8 @@ fn asset_implementation_retains_the_documented_filesystem_ordering_markers() {
         "platform::sync_directory(&temp_directory)",
     ] {
         assert!(
-            ASSET_IMPLEMENTATION.contains(required_source_marker),
-            "asset implementation no longer contains documented ordering marker: {required_source_marker}"
+            ASSET_IMPLEMENTATION.contains(marker),
+            "asset implementation no longer contains documented ordering marker: {marker}"
         );
     }
 }
@@ -56,6 +56,8 @@ fn asset_implementation_retains_the_documented_filesystem_ordering_markers() {
 fn platform_adapter_retains_explicit_no_replace_and_unsupported_semantics() {
     assert!(PLATFORM_IMPLEMENTATION.contains("target_os = \"android\""));
     assert!(PLATFORM_IMPLEMENTATION.contains("target_os = \"linux\""));
+    assert!(PLATFORM_IMPLEMENTATION.contains("renameat2"));
+    assert!(PLATFORM_IMPLEMENTATION.contains("RENAME_NOREPLACE"));
     assert!(PLATFORM_IMPLEMENTATION.contains("std::fs::hard_link(temp_path, final_path)"));
     assert!(PLATFORM_IMPLEMENTATION.contains("ErrorKind::Unsupported"));
     assert!(!PLATFORM_IMPLEMENTATION.contains("std::fs::rename"));
