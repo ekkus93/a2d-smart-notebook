@@ -377,7 +377,10 @@ impl AssetStore {
         if let Err(error) = file.write_all(data) {
             drop(file);
             return Err(with_persistence_details(
-                with_cleanup_result(map_io_error("writing the asset temp file", error), &tmp_path),
+                with_cleanup_result(
+                    map_io_error("writing the asset temp file", error),
+                    &tmp_path,
+                ),
                 AssetPersistenceFailureStage::BeforeFinalization,
                 &id,
                 kind,
