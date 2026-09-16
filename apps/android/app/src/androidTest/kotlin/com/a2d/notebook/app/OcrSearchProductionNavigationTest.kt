@@ -126,7 +126,12 @@ class OcrSearchProductionNavigationTest {
                         imageRotation = RegistrationImageRotation.DEGREES0,
                         capturedAtMs = System.currentTimeMillis(),
                         observedMarkers = emptyList(),
-                        previewWarnings = emptyList(),
+                        previewWarnings =
+                            listOf(
+                                "A2D_POLICY_LAYOUT=DEV-PAGE-V1",
+                                "A2D_POLICY_VERSION=1",
+                                "A2D_PIPELINE_VERSION=1",
+                            ),
                         recoveryToken = null,
                         userApproved = true,
                     ),
