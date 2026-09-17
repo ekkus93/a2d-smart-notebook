@@ -153,9 +153,9 @@ fun A2dNavHost(
                         ),
                     )
                 }
-            LaunchedEffect(pageId, scanId, ocrReadback) {
-                if (scanId != null && ocrReadback != null) {
-                    viewerState = hydrateOcrReadback(viewerState, scanId, ocrReadback)
+            LaunchedEffect(pageId, scanId, client, ocrReadback) {
+                if (scanId != null && client != null && ocrReadback != null) {
+                    viewerState = hydrateOcrForViewer(viewerState, scanId, client, ocrReadback)
                 }
             }
             PageViewerScreen(
@@ -262,6 +262,42 @@ fun A2dNavHost(
         }
     }
 }
+
+private suspend fun hydrateOcrForViewer(
+    current: PageViewerState,
+    scanId: String,
+    client: A2dClient,
+    ocrReadback: FfiAndroidOcrReadback,
+): PageViewerState =
+    try {
+        val activeJob =
+            withContext(Dispatchers.IO) {
+                client.findActiveOcrJobForScan(
+                    EnqueueOcrJobRequest(
+                        scanId = scanId,
+                        inputKind = OcrInputKind.ORIGINAL,
+                        widthPx = DEFAULT_OCR_INPUT_WIDTH_PX,
+                        heightPx = DEFAULT_OCR_INPUT_HEIGHT_PX,
+                    ),
+                )
+            }
+        if (activeJob != null) {
+            current.copy(
+                preferredScanId = scanId,
+                activeOcrJobId = activeJob.jobId,
+                ocrState = activeJob.toViewerOcrPresentationState(),
+                viewerApiConnected = true,
+            )
+        } else {
+            hydrateOcrReadback(current, scanId, ocrReadback)
+        }
+    } catch (failure: Exception) {
+        current.copy(
+            ocrState = failure.toOcrPresentationState(),
+            activeOcrJobId = null,
+            viewerApiConnected = true,
+        )
+    }
 
 private suspend fun hydrateOcrReadback(
     current: PageViewerState,

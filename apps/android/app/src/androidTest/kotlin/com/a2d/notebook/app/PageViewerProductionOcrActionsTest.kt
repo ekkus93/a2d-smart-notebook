@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -30,6 +31,7 @@ import org.junit.runner.RunWith
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.CompleteOcrJobRequest
 import uniffi.a2d_ffi.CreateNotebookRequest
+import uniffi.a2d_ffi.EnqueueOcrJobRequest
 import uniffi.a2d_ffi.OcrInputKind
 import uniffi.a2d_ffi.OcrQueueJobStatus
 import uniffi.a2d_ffi.OcrRunStatus
@@ -91,6 +93,34 @@ class PageViewerProductionOcrActionsTest {
             assertEquals(runningJob.jobId, cancelledJob.jobId)
             assertEquals(OcrQueueJobStatus.RUNNING, cancelledJob.status)
             assertTrue(cancelledJob.cancellationRequested)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun pageViewerRouteOpenHydratesQueuedOcrJobFromRustQueue() {
+        val root = composeRule.activity.filesDir.resolve("page-viewer-ocr-queued-${UUID.randomUUID()}")
+        val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
+
+        try {
+            val scan = registerRealScan(client = client, root = root)
+            val queuedJob =
+                client.enqueueOcrJob(
+                    EnqueueOcrJobRequest(
+                        scanId = scan.scanId,
+                        inputKind = OcrInputKind.ORIGINAL,
+                        widthPx = 1800u,
+                        heightPx = 2200u,
+                    ),
+                )
+            assertEquals(OcrQueueJobStatus.QUEUED, queuedJob.status)
+
+            openProductionPageViewer(client = client, scan = scan)
+
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("OCR queued as durable job ${queuedJob.jobId}").assertIsDisplayed()
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_CANCEL).performScrollTo().assertIsEnabled()
         } finally {
             root.deleteRecursively()
         }

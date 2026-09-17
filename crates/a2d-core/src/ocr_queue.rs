@@ -196,6 +196,25 @@ impl A2dCore {
             .ok_or_else(|| missing_job_error(&job_id))
     }
 
+    pub fn find_active_ocr_job_for_scan(
+        &self,
+        request: EnqueueOcrJobRequest,
+    ) -> Result<Option<OcrJobSnapshot>, A2dError> {
+        let prepared = self.prepare_ocr_input(PrepareOcrInputRequest {
+            scan_id: request.scan_id,
+            input_kind: request.input_kind,
+            width_px: request.width_px,
+            height_px: request.height_px,
+        })?;
+        let scan_id = a2d_domain::ScanId::parse(&prepared.scan_id)?;
+        let input_asset_id = a2d_domain::AssetId::parse(&prepared.input_asset_id)?;
+        let input_kind = to_persisted_input_kind(prepared.input_kind);
+        let storage = self.lock_storage()?;
+        storage
+            .find_active_ocr_job(&scan_id, &input_asset_id, input_kind)
+            .map(|job| job.map(Into::into))
+    }
+
     pub fn request_ocr_job_cancellation(&self, job_id: &str) -> Result<OcrJobSnapshot, A2dError> {
         let job_id = OcrJobId::parse(job_id)?;
         let now_ms = system_now_ms()?;
