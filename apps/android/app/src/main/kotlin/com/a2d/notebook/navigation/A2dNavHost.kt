@@ -155,8 +155,11 @@ fun A2dNavHost(
                     )
                 }
             LaunchedEffect(pageId, scanId, client, ocrReadback) {
-                if (scanId != null && client != null && ocrReadback != null) {
-                    viewerState = hydrateOcrForViewer(viewerState, scanId, client, ocrReadback)
+                if (client != null && ocrReadback != null) {
+                    viewerState = hydratePageViewerMetadata(viewerState, pageId, scanId, client)
+                    viewerState.preferredScanId?.let { selectedScanId ->
+                        viewerState = hydrateOcrForViewer(viewerState, selectedScanId, client, ocrReadback)
+                    }
                 }
             }
             PageViewerScreen(
