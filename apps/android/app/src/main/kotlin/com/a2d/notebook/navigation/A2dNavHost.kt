@@ -29,6 +29,7 @@ import com.a2d.notebook.feature.ocr.FfiAndroidOcrReadback
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrSearchGateway
 import com.a2d.notebook.feature.ocr.OcrPresentationState
 import com.a2d.notebook.feature.ocr.OcrPresentationStatus
+import com.a2d.notebook.feature.ocr.OcrRegionOverlayState
 import com.a2d.notebook.feature.ocr.OcrSearchScreen
 import com.a2d.notebook.feature.review.NeedsReviewScreen
 import com.a2d.notebook.feature.scanner.singlepage.PolicyAwareBatchScannerRoute
@@ -305,12 +306,17 @@ private suspend fun hydrateOcrReadback(
     ocrReadback: FfiAndroidOcrReadback,
 ): PageViewerState =
     try {
-        val presentation =
+        val output =
             withContext(Dispatchers.IO) {
-                ocrReadback.loadPresentationState(scanId)
+                ocrReadback.loadLatestOcrOutput(
+                    scanId = scanId,
+                    regionLimit = VIEWER_OCR_REGION_LIMIT,
+                )
             }
+        val presentation = output.toPresentationState()
         current.copy(
             ocrState = presentation,
+            ocrRegionOverlay = OcrRegionOverlayState.fromPersisted(output),
             hasRecognizedText = presentation.status == OcrPresentationStatus.Detected,
             activeOcrJobId = null,
             viewerApiConnected = true,
@@ -472,3 +478,4 @@ private fun Exception.toOcrPresentationState(): OcrPresentationState =
 
 private const val DEFAULT_OCR_INPUT_WIDTH_PX: UInt = 1_800u
 private const val DEFAULT_OCR_INPUT_HEIGHT_PX: UInt = 2_200u
+private const val VIEWER_OCR_REGION_LIMIT: UInt = 1_000u
