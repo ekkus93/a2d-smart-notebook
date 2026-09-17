@@ -28,6 +28,7 @@ object OcrRegionOverlayTestTags {
     const val CARD = "ocr_region_overlay_card"
     const val CANVAS = "ocr_region_overlay_canvas"
     const val DISABLED = "ocr_region_overlay_disabled"
+    const val PARTIAL = "ocr_region_overlay_partial"
     const val SELECTED = "ocr_region_overlay_selected"
 }
 
@@ -63,6 +64,12 @@ fun OcrRegionOverlayCard(
                     overlay.renderableRegions.size,
                 ),
             )
+            if (overlay.isPartial) {
+                Text(
+                    text = "Showing ${overlay.regions.size} of ${overlay.totalRegionCount} persisted OCR regions; this overlay is partial.",
+                    modifier = Modifier.testTag(OcrRegionOverlayTestTags.PARTIAL),
+                )
+            }
             val outlineColor = MaterialTheme.colorScheme.primary
             val selectedFillColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
             Canvas(
