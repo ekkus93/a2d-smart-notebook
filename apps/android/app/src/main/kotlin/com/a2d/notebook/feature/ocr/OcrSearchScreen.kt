@@ -45,6 +45,7 @@ fun OcrSearchScreen(
     onOpenPage: (String) -> Unit,
     modifier: Modifier = Modifier,
     searchController: AndroidOcrSearchController? = null,
+    onOpenOcrHit: ((OcrSearchHitState) -> Unit)? = null,
 ) {
     var state by remember { mutableStateOf(OcrSearchPresentationState.noQuery()) }
     val scope = rememberCoroutineScope()
@@ -68,6 +69,7 @@ fun OcrSearchScreen(
             }
         },
         onOpenPage = onOpenPage,
+        onOpenOcrHit = onOpenOcrHit,
         modifier = modifier,
     )
 }
@@ -80,6 +82,7 @@ fun OcrSearchContent(
     onSubmitSearch: (String) -> Unit,
     onOpenPage: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenOcrHit: ((OcrSearchHitState) -> Unit)? = null,
 ) {
     Column(
         modifier =
@@ -121,7 +124,8 @@ fun OcrSearchContent(
             OcrSearchPresentationStatus.NoQuery -> OcrSearchNoQueryCard()
             OcrSearchPresentationStatus.NoMatches -> OcrSearchNoMatchesCard(state.query)
             OcrSearchPresentationStatus.Error -> OcrSearchErrorCard(state.errorMessage)
-            OcrSearchPresentationStatus.Results -> OcrSearchResultsList(state, onOpenPage)
+            OcrSearchPresentationStatus.Results ->
+                OcrSearchResultsList(state, onOpenPage, onOpenOcrHit)
         }
     }
 }
@@ -187,6 +191,7 @@ private fun OcrSearchErrorCard(errorMessage: String?) {
 private fun OcrSearchResultsList(
     state: OcrSearchPresentationState,
     onOpenPage: (String) -> Unit,
+    onOpenOcrHit: ((OcrSearchHitState) -> Unit)?,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().testTag(OcrSearchTestTags.RESULTS),
@@ -194,7 +199,7 @@ private fun OcrSearchResultsList(
     ) {
         Text(stringResource(R.string.ocr_search_result_count, state.hits.size))
         state.hits.forEach { hit ->
-            OcrSearchResultRow(hit, onOpenPage)
+            OcrSearchResultRow(hit, onOpenPage, onOpenOcrHit)
         }
     }
 }
@@ -203,6 +208,7 @@ private fun OcrSearchResultsList(
 private fun OcrSearchResultRow(
     hit: OcrSearchHitState,
     onOpenPage: (String) -> Unit,
+    onOpenOcrHit: ((OcrSearchHitState) -> Unit)?,
 ) {
     Card(modifier = Modifier.fillMaxWidth().testTag(OcrSearchTestTags.RESULT_ROW)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -215,7 +221,7 @@ private fun OcrSearchResultRow(
                 Text(stringResource(R.string.ocr_search_hit_region, regionId))
             }
             OutlinedButton(
-                onClick = { onOpenPage(hit.pageId) },
+                onClick = { onOpenOcrHit?.invoke(hit) ?: onOpenPage(hit.pageId) },
                 modifier = Modifier.fillMaxWidth().testTag(OcrSearchTestTags.OPEN_PAGE),
             ) {
                 Text(stringResource(R.string.ocr_search_open_page))
