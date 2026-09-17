@@ -31,7 +31,7 @@ class OcrReadbackTest {
                         status = OcrRunStatus.Detected,
                         fullText = "hello notebook",
                         textRegionCount = 12,
-                        textRegions = listOf(loadedRegion("hello")),
+                        textRegions = List(12) { loadedRegion("hello-$it", "text-region-$it") },
                     ),
             )
 
@@ -43,8 +43,31 @@ class OcrReadbackTest {
         assertEquals("latin-v1", state.modelName)
         assertEquals("hello notebook", state.textPreview)
         assertEquals(12, state.recognizedRegionCount)
+        assertNull(state.message)
         assertFalse(state.retryAvailable)
         assertFalse(state.cancelAvailable)
+    }
+
+    @Test
+    fun detectedRunDisclosesPartialOverlayInsteadOfPresentingTruncationAsComplete() {
+        val output =
+            LoadedAndroidOcrOutput(
+                scanId = "scan-1",
+                latestRun =
+                    loadedRun(
+                        status = OcrRunStatus.Detected,
+                        fullText = "many regions",
+                        textRegionCount = 75,
+                        textRegions = List(60) { loadedRegion("region-$it", "text-region-$it") },
+                    ),
+            )
+
+        val run = requireNotNull(output.latestRun)
+        val state = output.toPresentationState()
+
+        assertTrue(run.regionsTruncated)
+        assertEquals(75, state.recognizedRegionCount)
+        assertEquals("OCR overlay is partial: loaded 60 of 75 persisted regions", state.message)
     }
 
     @Test
@@ -140,9 +163,12 @@ class OcrReadbackTest {
             textRegions = textRegions,
         )
 
-    private fun loadedRegion(text: String): LoadedAndroidOcrTextRegion =
+    private fun loadedRegion(
+        text: String,
+        textRegionId: String = "text-region-1",
+    ): LoadedAndroidOcrTextRegion =
         LoadedAndroidOcrTextRegion(
-            textRegionId = "text-region-1",
+            textRegionId = textRegionId,
             ocrRunId = "ocr-run-1",
             polygon =
                 listOf(

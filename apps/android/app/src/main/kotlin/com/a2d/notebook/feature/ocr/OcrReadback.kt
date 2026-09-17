@@ -16,7 +16,7 @@ import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
 class FfiAndroidOcrReadback(private val client: A2dClient) {
     fun loadLatestOcrOutput(
         scanId: String,
-        regionLimit: UInt = 50u,
+        regionLimit: UInt = MAX_COMPLETE_REGION_READBACK,
     ): LoadedAndroidOcrOutput {
         val loaded =
             client.loadLatestOcrOutput(
@@ -61,7 +61,7 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
 
     fun loadPresentationState(
         scanId: String,
-        regionLimit: UInt = 50u,
+        regionLimit: UInt = MAX_COMPLETE_REGION_READBACK,
     ): OcrPresentationState = loadLatestOcrOutput(scanId, regionLimit).toPresentationState()
 }
 
@@ -89,6 +89,9 @@ data class LoadedAndroidOcrRun(
     val textRegionCount: Int,
     val textRegions: List<LoadedAndroidOcrTextRegion>,
 ) {
+    val regionsTruncated: Boolean
+        get() = status == OcrRunStatus.Detected && textRegions.size < textRegionCount
+
     fun toPresentationState(): OcrPresentationState =
         OcrPresentationState(
             status = toPresentationStatus(),
@@ -108,7 +111,12 @@ data class LoadedAndroidOcrRun(
                     0
                 },
             unavailableReason = unavailableReason?.label,
-            message = unavailableMessage,
+            message =
+                if (regionsTruncated) {
+                    "OCR overlay is partial: loaded ${textRegions.size} of $textRegionCount persisted regions"
+                } else {
+                    unavailableMessage
+                },
             retryAvailable = unavailableReason.isRetryableReadbackUnavailableReason(),
             cancelAvailable = false,
         )
@@ -171,3 +179,4 @@ private fun OcrUnavailableReason?.isRetryableReadbackUnavailableReason(): Boolea
     }
 
 private const val TEXT_PREVIEW_LIMIT = 240
+private const val MAX_COMPLETE_REGION_READBACK: UInt = 1_000u
