@@ -89,6 +89,9 @@ class PageViewerProductionOcrActionsTest {
             val queuedJob = client.enqueueOcrJob(EnqueueOcrJobRequest(scanId = scan.scanId, inputKind = OcrInputKind.ORIGINAL, widthPx = 1800u, heightPx = 2200u))
             assertEquals(OcrQueueJobStatus.QUEUED, queuedJob.status)
             openProductionPageViewer(client = client, scan = scan)
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("OCR queued as durable job ${queuedJob.jobId}").fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("OCR queued as durable job ${queuedJob.jobId}").assertIsDisplayed()
             composeRule.onNodeWithTag(PageViewerTestTags.OCR_CANCEL).performScrollTo().assertIsEnabled()
