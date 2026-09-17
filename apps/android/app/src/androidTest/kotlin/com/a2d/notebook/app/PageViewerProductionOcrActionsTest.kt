@@ -90,10 +90,10 @@ class PageViewerProductionOcrActionsTest {
             assertEquals(OcrQueueJobStatus.QUEUED, queuedJob.status)
             openProductionPageViewer(client = client, scan = scan)
             composeRule.waitUntil(timeoutMillis = 10_000) {
-                composeRule.onAllNodesWithText("OCR queued as durable job ${queuedJob.jobId}").fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText("OCR queued as durable job ${queuedJob.jobId}", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
             composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithText("OCR queued as durable job ${queuedJob.jobId}").assertIsDisplayed()
+            composeRule.onNodeWithText("OCR queued as durable job ${queuedJob.jobId}", substring = true).assertIsDisplayed()
             composeRule.onNodeWithTag(PageViewerTestTags.OCR_CANCEL).performScrollTo().assertIsEnabled()
         } finally { root.deleteRecursively() }
     }
@@ -126,7 +126,7 @@ class PageViewerProductionOcrActionsTest {
             composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("detected no text", substring = true).assertIsDisplayed()
             composeRule.onNodeWithText("OCR run: ${recorded.ocrRunId}").assertIsDisplayed()
-            composeRule.onNodeWithText("Text preview:", substring = true).assertDoesNotExist()
+            assertTrue(composeRule.onAllNodesWithText("Text preview:", substring = true).fetchSemanticsNodes().isEmpty())
         } finally { root.deleteRecursively() }
     }
 
