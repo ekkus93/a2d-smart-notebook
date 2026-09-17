@@ -19,9 +19,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
 import com.a2d.notebook.feature.ocr.OcrPresentationState
+import com.a2d.notebook.feature.ocr.OcrPresentationStatus
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayCard
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayState
-import com.a2d.notebook.feature.ocr.OcrPresentationStatus
 
 object PageViewerTestTags {
     const val TITLE = "page_viewer_title"
@@ -51,6 +51,7 @@ data class PageViewerState(
     val statusLabel: String = "unknown",
     val updatedSummary: String? = null,
     val preferredScanId: String? = null,
+    val activeOcrJobId: String? = null,
     val hasOriginalImage: Boolean = false,
     val hasCorrectedImage: Boolean = false,
     val hasRecognizedText: Boolean = false,
@@ -299,7 +300,7 @@ private fun PageViewerOcrTextSection(
                 }
                 if (state.ocrState.cancelAvailable) {
                     OutlinedButton(
-                        enabled = state.preferredScanId != null,
+                        enabled = state.preferredScanId != null && state.activeOcrJobId != null,
                         onClick = { state.preferredScanId?.let(onCancelOcr) },
                         modifier = Modifier.testTag(PageViewerTestTags.OCR_CANCEL),
                     ) {
