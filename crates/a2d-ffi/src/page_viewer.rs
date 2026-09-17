@@ -4,7 +4,6 @@ use super::{A2dClient, A2dFfiError};
 pub struct PageViewerAsset {
     pub asset_id: String,
     pub kind: String,
-    pub relative_path: String,
     pub media_type: String,
     pub byte_length: u64,
 }
@@ -26,7 +25,6 @@ impl From<a2d_core::PageViewerAsset> for PageViewerAsset {
         Self {
             asset_id: value.asset_id,
             kind: value.kind,
-            relative_path: value.relative_path,
             media_type: value.media_type,
             byte_length: value.byte_length,
         }
