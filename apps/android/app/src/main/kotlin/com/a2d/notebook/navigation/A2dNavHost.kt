@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -36,8 +37,13 @@ import com.a2d.notebook.feature.smartpage.SmartPageLibraryScreen
 import com.a2d.notebook.feature.smartpage.SmartPagesScreen
 import com.a2d.notebook.feature.version.VersionHistoryScreen
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.A2dClient
+import uniffi.a2d_ffi.EnqueueOcrJobRequest
+import uniffi.a2d_ffi.OcrInputKind
+import uniffi.a2d_ffi.OcrQueueJob
+import uniffi.a2d_ffi.OcrQueueJobStatus
 
 object A2dDestinations {
     const val HOME = "home"
@@ -136,6 +142,7 @@ fun A2dNavHost(
         ) { entry ->
             val pageId = requireNotNull(entry.arguments?.getString("pageId"))
             val scanId = entry.arguments?.getString("scanId")
+            val scope = rememberCoroutineScope()
             var viewerState by
                 remember(pageId, scanId, client) {
                     mutableStateOf(
@@ -148,27 +155,7 @@ fun A2dNavHost(
                 }
             LaunchedEffect(pageId, scanId, ocrReadback) {
                 if (scanId != null && ocrReadback != null) {
-                    viewerState =
-                        try {
-                            val presentation =
-                                withContext(Dispatchers.IO) {
-                                    ocrReadback.loadPresentationState(scanId)
-                                }
-                            viewerState.copy(
-                                ocrState = presentation,
-                                hasRecognizedText = presentation.status == OcrPresentationStatus.Detected,
-                                viewerApiConnected = true,
-                            )
-                        } catch (failure: Exception) {
-                            viewerState.copy(
-                                ocrState =
-                                    OcrPresentationState(
-                                        status = OcrPresentationStatus.Failed,
-                                        message = failure.message ?: failure::class.java.simpleName,
-                                    ),
-                                viewerApiConnected = true,
-                            )
-                        }
+                    viewerState = hydrateOcrReadback(viewerState, scanId, ocrReadback)
                 }
             }
             PageViewerScreen(
@@ -177,6 +164,21 @@ fun A2dNavHost(
                 onOpenVersions = { id -> navController.navigate(A2dDestinations.versionHistory(id)) },
                 onOpenNeedsReview = { navController.navigate(A2dDestinations.NEEDS_REVIEW) },
                 state = viewerState,
+                onStartOcr = { selectedScanId ->
+                    scope.launch {
+                        viewerState = enqueueOcrJobForViewer(viewerState, selectedScanId, client)
+                    }
+                },
+                onRetryOcr = { selectedScanId ->
+                    scope.launch {
+                        viewerState = enqueueOcrJobForViewer(viewerState, selectedScanId, client)
+                    }
+                },
+                onCancelOcr = {
+                    scope.launch {
+                        viewerState = cancelOcrJobForViewer(viewerState, client)
+                    }
+                },
             )
         }
         composable(A2dDestinations.NEEDS_REVIEW) {
@@ -260,3 +262,177 @@ fun A2dNavHost(
         }
     }
 }
+
+private suspend fun hydrateOcrReadback(
+    current: PageViewerState,
+    scanId: String,
+    ocrReadback: FfiAndroidOcrReadback,
+): PageViewerState =
+    try {
+        val presentation =
+            withContext(Dispatchers.IO) {
+                ocrReadback.loadPresentationState(scanId)
+            }
+        current.copy(
+            ocrState = presentation,
+            hasRecognizedText = presentation.status == OcrPresentationStatus.Detected,
+            activeOcrJobId = null,
+            viewerApiConnected = true,
+        )
+    } catch (failure: Exception) {
+        current.copy(
+            ocrState = failure.toOcrPresentationState(),
+            activeOcrJobId = null,
+            viewerApiConnected = true,
+        )
+    }
+
+private suspend fun enqueueOcrJobForViewer(
+    current: PageViewerState,
+    scanId: String,
+    client: A2dClient?,
+): PageViewerState {
+    if (client == null) {
+        return current.copy(
+            ocrState =
+                OcrPresentationState(
+                    status = OcrPresentationStatus.Failed,
+                    message = "No open local library is available for OCR",
+                ),
+            viewerApiConnected = false,
+        )
+    }
+    return try {
+        val job =
+            withContext(Dispatchers.IO) {
+                client.enqueueOcrJob(
+                    EnqueueOcrJobRequest(
+                        scanId = scanId,
+                        inputKind = OcrInputKind.ORIGINAL,
+                        widthPx = DEFAULT_OCR_INPUT_WIDTH_PX,
+                        heightPx = DEFAULT_OCR_INPUT_HEIGHT_PX,
+                    ),
+                )
+            }
+        current.copy(
+            preferredScanId = scanId,
+            activeOcrJobId = job.jobId,
+            ocrState = job.toViewerOcrPresentationState(),
+            viewerApiConnected = true,
+        )
+    } catch (failure: Exception) {
+        current.copy(
+            ocrState = failure.toOcrPresentationState(),
+            viewerApiConnected = true,
+        )
+    }
+}
+
+private suspend fun cancelOcrJobForViewer(
+    current: PageViewerState,
+    client: A2dClient?,
+): PageViewerState {
+    if (client == null) {
+        return current.copy(
+            ocrState =
+                OcrPresentationState(
+                    status = OcrPresentationStatus.Failed,
+                    message = "No open local library is available for OCR cancellation",
+                ),
+            viewerApiConnected = false,
+        )
+    }
+    val jobId = current.activeOcrJobId
+        ?: return current.copy(
+            ocrState =
+                current.ocrState.copy(
+                    status = OcrPresentationStatus.Failed,
+                    message = "No active durable OCR job is available to cancel",
+                    cancelAvailable = false,
+                ),
+            viewerApiConnected = true,
+        )
+    return try {
+        val job = withContext(Dispatchers.IO) { client.requestOcrJobCancellation(jobId) }
+        current.copy(
+            activeOcrJobId = job.jobId,
+            ocrState = job.toViewerOcrPresentationState(),
+            viewerApiConnected = true,
+        )
+    } catch (failure: Exception) {
+        current.copy(
+            ocrState = failure.toOcrPresentationState(),
+            viewerApiConnected = true,
+        )
+    }
+}
+
+private fun OcrQueueJob.toViewerOcrPresentationState(): OcrPresentationState =
+    when (status) {
+        OcrQueueJobStatus.QUEUED ->
+            OcrPresentationState(
+                status = OcrPresentationStatus.Preparing,
+                message = "OCR queued as durable job $jobId",
+                retryAvailable = false,
+                cancelAvailable = true,
+            )
+
+        OcrQueueJobStatus.RUNNING ->
+            OcrPresentationState(
+                status = OcrPresentationStatus.Recognizing,
+                message =
+                    if (cancellationRequested) {
+                        "OCR cancellation requested for durable job $jobId"
+                    } else {
+                        "OCR running as durable job $jobId"
+                    },
+                retryAvailable = false,
+                cancelAvailable = !cancellationRequested,
+            )
+
+        OcrQueueJobStatus.RECOGNIZED ->
+            OcrPresentationState(
+                status = OcrPresentationStatus.Recording,
+                runId = lastOcrRunId,
+                providerLabel = provider,
+                modelName = modelName,
+                message = "OCR job $jobId completed; persisted OCR readback will refresh on reopen",
+                retryAvailable = false,
+                cancelAvailable = false,
+            )
+
+        OcrQueueJobStatus.UNAVAILABLE ->
+            OcrPresentationState(
+                status = OcrPresentationStatus.Unavailable,
+                runId = lastOcrRunId,
+                providerLabel = provider,
+                modelName = modelName,
+                unavailableReason = lastErrorCode,
+                message = lastErrorMessage,
+                retryAvailable = retryable,
+                cancelAvailable = false,
+            )
+
+        OcrQueueJobStatus.CANCELLED ->
+            OcrPresentationState(
+                status = OcrPresentationStatus.Cancelled,
+                runId = lastOcrRunId,
+                providerLabel = provider,
+                modelName = modelName,
+                unavailableReason = lastErrorCode ?: "cancelled",
+                message = lastErrorMessage ?: "OCR job was cancelled durably",
+                retryAvailable = false,
+                cancelAvailable = false,
+            )
+    }
+
+private fun Exception.toOcrPresentationState(): OcrPresentationState =
+    OcrPresentationState(
+        status = OcrPresentationStatus.Failed,
+        message = message ?: javaClass.simpleName,
+        retryAvailable = false,
+        cancelAvailable = false,
+    )
+
+private const val DEFAULT_OCR_INPUT_WIDTH_PX: UInt = 1_800u
+private const val DEFAULT_OCR_INPUT_HEIGHT_PX: UInt = 2_200u
