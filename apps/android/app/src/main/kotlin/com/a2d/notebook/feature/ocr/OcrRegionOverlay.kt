@@ -24,12 +24,16 @@ data class OcrRegionOverlayRegion(
 
 data class OcrRegionOverlayState(
     val regions: List<OcrRegionOverlayRegion> = emptyList(),
+    val totalRegionCount: Int = regions.size,
 ) {
     val renderableRegions: List<OcrRegionOverlayRegion>
         get() = regions.filter(OcrRegionOverlayRegion::isRenderable)
 
     val enabled: Boolean
         get() = renderableRegions.isNotEmpty()
+
+    val isPartial: Boolean
+        get() = regions.size < totalRegionCount
 
     val coordinateFrame: OcrRegionCoordinateFrame?
         get() = OcrRegionCoordinateFrame.from(renderableRegions)
@@ -53,6 +57,7 @@ data class OcrRegionOverlayState(
                             confidence = region.confidence,
                         )
                     },
+                totalRegionCount = run.textRegionCount,
             )
         }
     }
