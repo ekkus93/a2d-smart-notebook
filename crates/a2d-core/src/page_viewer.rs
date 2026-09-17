@@ -1,4 +1,6 @@
-use a2d_domain::{A2dError, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, PageId, PageState, ScanId};
+use a2d_domain::{
+    A2dError, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, PageId, PageState, ScanId,
+};
 use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
 
 use crate::A2dCore;
@@ -19,7 +21,6 @@ pub struct PageViewerSnapshot {
 pub struct PageViewerAsset {
     pub asset_id: String,
     pub kind: String,
-    pub relative_path: String,
     pub media_type: String,
     pub byte_length: u64,
 }
@@ -99,8 +100,8 @@ impl A2dCore {
                     AssetKind::Ocr => "ocr",
                     AssetKind::Thumbnail => "thumbnail",
                     AssetKind::Export => "export",
-                }.to_string(),
-                relative_path: asset.relative_path,
+                }
+                .to_string(),
                 media_type: asset.media_type,
                 byte_length: asset.byte_length,
             })
@@ -125,14 +126,17 @@ impl A2dCore {
                 PageState::NeedsReview => "needs_review",
                 PageState::Archived => "archived",
                 PageState::Trashed => "trashed",
-            }.to_string(),
+            }
+            .to_string(),
             updated_at_ms: page.updated_at_ms,
             selected_scan_id: scan.as_ref().map(|scan| scan.id().to_string()),
             original_asset,
             corrected_asset,
             display_asset,
             needs_review: page.state == PageState::NeedsReview
-                || scan.as_ref().is_some_and(|scan| matches!(scan.quality_status, a2d_domain::QualityStatus::NeedsReview)),
+                || scan.as_ref().is_some_and(|scan| {
+                    matches!(scan.quality_status, a2d_domain::QualityStatus::NeedsReview)
+                }),
         })
     }
 }
@@ -144,8 +148,13 @@ mod tests {
     #[test]
     fn missing_page_is_rejected() {
         let dir = std::env::temp_dir().join(format!("a2d-page-viewer-{}", PageId::generate()));
-        let core = A2dCore::open(crate::OpenLibraryRequest { library_path: dir.to_string_lossy().into_owned() }).unwrap();
-        let err = core.load_page_viewer_snapshot(&PageId::generate().to_string(), None).unwrap_err();
+        let core = A2dCore::open(crate::OpenLibraryRequest {
+            library_path: dir.to_string_lossy().into_owned(),
+        })
+        .unwrap();
+        let err = core
+            .load_page_viewer_snapshot(&PageId::generate().to_string(), None)
+            .unwrap_err();
         assert_eq!(err.code.to_string(), "CORE_PAGE_VIEWER_PAGE_MISSING");
         std::fs::remove_dir_all(dir).ok();
     }
