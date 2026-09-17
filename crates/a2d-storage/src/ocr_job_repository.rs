@@ -77,6 +77,11 @@ pub trait OcrJobRepository {
         input_asset_id: &AssetId,
         input_kind: PersistedOcrInputKind,
     ) -> Result<Option<PersistedOcrJob>, A2dError>;
+    fn find_active_ocr_job_for_scan(
+        &self,
+        scan_id: &ScanId,
+        input_kind: PersistedOcrInputKind,
+    ) -> Result<Option<PersistedOcrJob>, A2dError>;
     fn count_active_ocr_jobs(&self) -> Result<usize, A2dError>;
     fn next_due_ocr_job(&self, now_ms: i64) -> Result<Option<PersistedOcrJob>, A2dError>;
     fn list_running_ocr_jobs(&self) -> Result<Vec<PersistedOcrJob>, A2dError>;
@@ -102,6 +107,14 @@ impl OcrJobRepository for Storage {
         input_kind: PersistedOcrInputKind,
     ) -> Result<Option<PersistedOcrJob>, A2dError> {
         OcrJobRepository::find_active_ocr_job(&self.conn, scan_id, input_asset_id, input_kind)
+    }
+
+    fn find_active_ocr_job_for_scan(
+        &self,
+        scan_id: &ScanId,
+        input_kind: PersistedOcrInputKind,
+    ) -> Result<Option<PersistedOcrJob>, A2dError> {
+        OcrJobRepository::find_active_ocr_job_for_scan(&self.conn, scan_id, input_kind)
     }
 
     fn count_active_ocr_jobs(&self) -> Result<usize, A2dError> {
@@ -241,6 +254,26 @@ impl OcrJobRepository for Connection {
         )
         .optional()
         .map_err(|error| map_rusqlite_error("finding active OCR job", error))?
+        .map(decode_job)
+        .transpose()
+    }
+
+    fn find_active_ocr_job_for_scan(
+        &self,
+        scan_id: &ScanId,
+        input_kind: PersistedOcrInputKind,
+    ) -> Result<Option<PersistedOcrJob>, A2dError> {
+        self.query_row(
+            &format!(
+                "{} WHERE scan_id = ?1 AND input_kind = ?2 \
+                 AND status IN ('Queued', 'Running') ORDER BY created_at_ms ASC, id ASC LIMIT 1",
+                OCR_JOB_SELECT
+            ),
+            params![scan_id.to_string(), input_kind_to_str(input_kind)],
+            decode_job_row,
+        )
+        .optional()
+        .map_err(|error| map_rusqlite_error("finding active OCR job for scan", error))?
         .map(decode_job)
         .transpose()
     }

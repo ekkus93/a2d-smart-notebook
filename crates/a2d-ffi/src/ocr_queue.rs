@@ -125,6 +125,21 @@ impl A2dClient {
             .map_err(Into::into)
     }
 
+    pub fn find_active_ocr_job_for_scan(
+        &self,
+        request: EnqueueOcrJobRequest,
+    ) -> Result<Option<OcrQueueJob>, A2dFfiError> {
+        self.core
+            .find_active_ocr_job_for_scan(core::EnqueueOcrJobRequest {
+                scan_id: request.scan_id,
+                input_kind: request.input_kind.into(),
+                width_px: request.width_px,
+                height_px: request.height_px,
+            })
+            .map(|job| job.map(Into::into))
+            .map_err(Into::into)
+    }
+
     pub fn claim_next_ocr_job(&self) -> Result<Option<OcrQueueJob>, A2dFfiError> {
         self.core
             .claim_next_ocr_job()
