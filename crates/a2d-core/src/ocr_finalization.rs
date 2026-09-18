@@ -81,6 +81,7 @@ impl A2dCore {
                 .get_ocr_job(&job_id)?
                 .ok_or_else(|| missing_job_error(&job_id))?;
             validate_running_claim(&job, request.attempt_count)?;
+            validate_source_dimensions(job.width_px, job.height_px)?;
 
             if job.cancellation_requested
                 || request.unavailable_reason == Some(OcrUnavailableReason::Cancelled)
@@ -153,7 +154,13 @@ impl A2dCore {
                 request.warnings.clone(),
                 provenance,
             )?;
-            let regions = build_text_regions(&run_id, &request.regions, completed_at_ms)?;
+            let regions = build_text_regions(
+                &run_id,
+                &request.regions,
+                job.width_px,
+                job.height_px,
+                completed_at_ms,
+            )?;
 
             tx.insert_ocr_run(&run)?;
             for region in &regions {
@@ -298,6 +305,19 @@ fn validate_running_claim(job: &PersistedOcrJob, attempt_count: u32) -> Result<(
     Ok(())
 }
 
+fn validate_source_dimensions(width_px: u32, height_px: u32) -> Result<(), A2dError> {
+    if width_px == 0 || height_px == 0 {
+        return Err(finalize_error(
+            "CORE_OCR_FINALIZE_SOURCE_DIMENSIONS_INVALID",
+            "OCR finalization requires positive source image dimensions",
+            false,
+        )
+        .with_detail("width_px", width_px.to_string())
+        .with_detail("height_px", height_px.to_string()));
+    }
+    Ok(())
+}
+
 fn expected_scan_asset_kind(
     scan: &Scan,
     input_asset_id: &a2d_domain::AssetId,
@@ -363,6 +383,8 @@ fn asset_kind_label(kind: AssetKind) -> &'static str {
 fn build_text_regions(
     run_id: &OcrRunId,
     regions: &[FinalizeOcrTextRegionRequest],
+    source_width_px: u32,
+    source_height_px: u32,
     fallback_created_at_ms: i64,
 ) -> Result<Vec<TextRegion>, A2dError> {
     let mut typed_regions = Vec::with_capacity(regions.len());
@@ -376,6 +398,7 @@ fn build_text_regions(
             )
             .with_detail("region_index", index.to_string()));
         }
+        validate_region_polygon_bounds(index, &region.polygon, source_width_px, source_height_px)?;
         let polygon = region
             .polygon
             .iter()
@@ -394,6 +417,52 @@ fn build_text_regions(
         );
     }
     Ok(typed_regions)
+}
+
+fn validate_region_polygon_bounds(
+    region_index: usize,
+    polygon: &[CoreOcrTextPoint],
+    source_width_px: u32,
+    source_height_px: u32,
+) -> Result<(), A2dError> {
+    let max_x = source_width_px as f32;
+    let max_y = source_height_px as f32;
+    for (point_index, point) in polygon.iter().enumerate() {
+        if !point.x.is_finite() || !point.y.is_finite() {
+            return Err(finalize_error(
+                "CORE_OCR_FINALIZE_TEXT_REGION_POINT_NOT_FINITE",
+                "OCR text-region polygon coordinates must be finite source-image pixels",
+                false,
+            )
+            .with_detail("region_index", region_index.to_string())
+            .with_detail("point_index", point_index.to_string()));
+        }
+        if point.x < 0.0 || point.y < 0.0 {
+            return Err(finalize_error(
+                "CORE_OCR_FINALIZE_TEXT_REGION_POINT_NEGATIVE",
+                "OCR text-region polygon coordinates must not be negative",
+                false,
+            )
+            .with_detail("region_index", region_index.to_string())
+            .with_detail("point_index", point_index.to_string())
+            .with_detail("x", point.x.to_string())
+            .with_detail("y", point.y.to_string()));
+        }
+        if point.x > max_x || point.y > max_y {
+            return Err(finalize_error(
+                "CORE_OCR_FINALIZE_TEXT_REGION_POINT_OUT_OF_BOUNDS",
+                "OCR text-region polygon coordinates must be inside the OCR source-image bounds",
+                false,
+            )
+            .with_detail("region_index", region_index.to_string())
+            .with_detail("point_index", point_index.to_string())
+            .with_detail("x", point.x.to_string())
+            .with_detail("y", point.y.to_string())
+            .with_detail("source_width_px", source_width_px.to_string())
+            .with_detail("source_height_px", source_height_px.to_string()));
+        }
+    }
+    Ok(())
 }
 
 fn apply_terminal_queue_transition(
@@ -628,6 +697,20 @@ mod tests {
         }
     }
 
+    fn edge_region(text: &str) -> FinalizeOcrTextRegionRequest {
+        FinalizeOcrTextRegionRequest {
+            polygon: vec![
+                CoreOcrTextPoint { x: 0.0, y: 0.0 },
+                CoreOcrTextPoint { x: 1_000.0, y: 0.0 },
+                CoreOcrTextPoint { x: 1_000.0, y: 1_400.0 },
+                CoreOcrTextPoint { x: 0.0, y: 1_400.0 },
+            ],
+            text: text.to_string(),
+            confidence: Some(0.85),
+            created_at_ms: Some(300),
+        }
+    }
+
     fn detected_request(job: &OcrJobSnapshot) -> FinalizeOcrJobRequest {
         FinalizeOcrJobRequest {
             job_id: job.job_id.clone(),
@@ -680,6 +763,71 @@ mod tests {
             })
             .unwrap();
         assert!(!search.hits.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn finalize_detected_ocr_accepts_inclusive_source_edge_coordinates() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let claimed = claim_job(&core, &fixture);
+        let mut request = detected_request(&claimed);
+        request.regions = vec![edge_region("edge text")];
+
+        let finalized = core.finalize_ocr_job(request).unwrap();
+
+        assert_eq!(
+            finalized.resolution,
+            CoreOcrFinalizationResolution::Completed
+        );
+        assert_eq!(finalized.recorded_region_count, 1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn finalize_detected_ocr_rejects_out_of_bounds_region_coordinates() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let claimed = claim_job(&core, &fixture);
+        let mut request = detected_request(&claimed);
+        request.regions[0].polygon[1].x = 1_000.01;
+
+        let err = core.finalize_ocr_job(request).unwrap_err();
+
+        assert_eq!(
+            err.code.to_string(),
+            "CORE_OCR_FINALIZE_TEXT_REGION_POINT_OUT_OF_BOUNDS"
+        );
+        let output = core
+            .load_latest_ocr_output(LoadLatestOcrOutputRequest {
+                scan_id: fixture.scan_id.to_string(),
+                region_limit: 10,
+            })
+            .unwrap();
+        assert!(output.latest_run.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn finalize_detected_ocr_rejects_non_finite_and_negative_coordinates() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let claimed = claim_job(&core, &fixture);
+        let mut non_finite = detected_request(&claimed);
+        non_finite.regions[0].polygon[0].x = f32::NAN;
+        let err = core.finalize_ocr_job(non_finite).unwrap_err();
+        assert_eq!(
+            err.code.to_string(),
+            "CORE_OCR_FINALIZE_TEXT_REGION_POINT_NOT_FINITE"
+        );
+
+        let mut negative = detected_request(&claimed);
+        negative.regions[0].polygon[0].y = -0.1;
+        let err = core.finalize_ocr_job(negative).unwrap_err();
+        assert_eq!(
+            err.code.to_string(),
+            "CORE_OCR_FINALIZE_TEXT_REGION_POINT_NEGATIVE"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
