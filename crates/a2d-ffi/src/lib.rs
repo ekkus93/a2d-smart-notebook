@@ -23,6 +23,8 @@ mod preview_processing;
 pub use preview_processing::*;
 mod milestone9;
 pub use milestone9::*;
+mod page_viewer;
+pub use page_viewer::*;
 mod ocr;
 pub use ocr::*;
 mod ocr_regions;

@@ -158,9 +158,17 @@ class PageViewerProductionOcrActionsTest {
             val scan = registerRealScan(client = client, root = root)
             recordTerminalOcr(client, scan, OcrRunStatus.DETECTED, "route reopen durable OCR sentinel", null, null)
             openProductionPageViewer(client = client, scan = scan)
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("route reopen durable OCR sentinel", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("route reopen durable OCR sentinel", substring = true).assertIsDisplayed()
             openProductionPageViewer(client = client, scan = scan)
-            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo()
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("route reopen durable OCR sentinel", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).assertIsDisplayed()
             composeRule.onNodeWithText("route reopen durable OCR sentinel", substring = true).assertIsDisplayed()
         } finally { root.deleteRecursively() }
     }
