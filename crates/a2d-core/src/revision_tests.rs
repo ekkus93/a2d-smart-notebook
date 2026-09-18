@@ -351,7 +351,10 @@ fn ocr_late_cancellation_after_successful_commit_cannot_rewrite_completion() {
         .core
         .finalize_ocr_job(detected_request(&claimed))
         .unwrap();
-    assert_eq!(finalized.resolution, CoreOcrFinalizationResolution::Completed);
+    assert_eq!(
+        finalized.resolution,
+        CoreOcrFinalizationResolution::Completed
+    );
     assert_eq!(finalized.job.status, CoreOcrJobStatus::Recognized);
     assert!(search_race_text(&fixture));
 
@@ -418,10 +421,15 @@ fn ocr_cancellation_racing_terminal_commit_always_resolves_to_one_coherent_winne
         }
         CoreOcrJobStatus::Recognized => {
             let finalized = finalize_result.unwrap();
-            assert_eq!(finalized.resolution, CoreOcrFinalizationResolution::Completed);
+            assert_eq!(
+                finalized.resolution,
+                CoreOcrFinalizationResolution::Completed
+            );
             assert!(cancel_result.is_err());
             assert_eq!(durable.last_ocr_run_id, finalized.ocr_run_id);
-            let run = output.latest_run.expect("recognized race winner must persist OCR");
+            let run = output
+                .latest_run
+                .expect("recognized race winner must persist OCR");
             assert_eq!(run.status, OcrRunStatus::Detected);
             assert_eq!(run.text_regions.len(), 1);
             assert!(search_race_text(&fixture));
