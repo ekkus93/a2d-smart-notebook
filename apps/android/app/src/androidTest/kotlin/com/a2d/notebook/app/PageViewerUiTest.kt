@@ -13,6 +13,7 @@ import com.a2d.notebook.feature.library.PageViewerState
 import com.a2d.notebook.feature.library.PageViewerTestTags
 import com.a2d.notebook.feature.ocr.OcrPresentationState
 import com.a2d.notebook.feature.ocr.OcrPresentationStatus
+import com.a2d.notebook.feature.ocr.OcrRegionCoordinateFrame
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayRegion
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayState
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayTestTags
@@ -109,13 +110,53 @@ class PageViewerUiTest {
     }
 
     @Test
-    fun pageViewerShowsPersistedOcrRegionOverlayWhenRowsExist() {
+    fun pageViewerShowsPersistedOcrRegionOverlayWhenSourceGeometryAndRowsExist() {
         composeRule.activity.setContent {
             MaterialTheme {
                 PageViewerContent(
                     state =
                         PageViewerState(
                             pageId = "page-regions",
+                            ocrRegionOverlay =
+                                OcrRegionOverlayState(
+                                    regions =
+                                        listOf(
+                                            OcrRegionOverlayRegion(
+                                                textRegionId = "region-1",
+                                                polygon =
+                                                    listOf(
+                                                        OcrTextPoint(0f, 0f),
+                                                        OcrTextPoint(100f, 0f),
+                                                        OcrTextPoint(100f, 50f),
+                                                        OcrTextPoint(0f, 50f),
+                                                    ),
+                                                text = "persisted region text",
+                                                confidence = 0.92f,
+                                            ),
+                                        ),
+                                    sourceFrame = OcrRegionCoordinateFrame(width = 200f, height = 100f),
+                                ),
+                        ),
+                    onBack = {},
+                    onOpenVersions = {},
+                    onOpenNeedsReview = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(OcrRegionOverlayTestTags.CARD).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(OcrRegionOverlayTestTags.CANVAS).assertIsDisplayed()
+        composeRule.onNodeWithText("1 selectable regions", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun pageViewerDoesNotInferOcrRegionOverlayFrameFromPolygonExtrema() {
+        composeRule.activity.setContent {
+            MaterialTheme {
+                PageViewerContent(
+                    state =
+                        PageViewerState(
+                            pageId = "page-regions-no-source-frame",
                             ocrRegionOverlay =
                                 OcrRegionOverlayState(
                                     regions =
@@ -143,8 +184,7 @@ class PageViewerUiTest {
         }
 
         composeRule.onNodeWithTag(OcrRegionOverlayTestTags.CARD).performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag(OcrRegionOverlayTestTags.CANVAS).assertIsDisplayed()
-        composeRule.onNodeWithText("1 selectable regions", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(OcrRegionOverlayTestTags.DISABLED).assertIsDisplayed()
     }
 
     @Test
