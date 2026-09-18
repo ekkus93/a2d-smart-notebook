@@ -1,16 +1,18 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
 
 use a2d_domain::{
-    AssetKind, CaptureSource, LayoutId, Page, PageId, PageKind, PageState, QualityStatus, Scan,
-    ScanId, SmartPageId,
+    AssetKind, CaptureSource, LayoutId, OcrRunStatus, Page, PageId, PageKind, PageState,
+    QualityStatus, Scan, ScanId, SmartPageId,
 };
 use a2d_image::PERCEPTUAL_FINGERPRINT_V1_CELL_COUNT;
 use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
 
 use super::{
-    A2dCore, GetScanRevisionProposalRequest, OpenLibraryRequest, ResolveScanRevisionRequest,
-    ScanRevisionDecision,
+    A2dCore, CoreOcrFinalizationResolution, CoreOcrInputKind, CoreOcrJobStatus, CoreOcrTextPoint,
+    EnqueueOcrJobRequest, FinalizeOcrJobRequest, FinalizeOcrTextRegionRequest,
+    GetScanRevisionProposalRequest, LoadLatestOcrOutputRequest, OpenLibraryRequest,
+    ResolveScanRevisionRequest, ScanRevisionDecision, SearchOcrTextRequest,
 };
 
 struct Fixture {
@@ -62,10 +64,11 @@ fn fixture(candidate_changed_cell: Option<(usize, u8)>) -> Fixture {
         .asset_store
         .commit(b"baseline-original", AssetKind::Original, "image/jpeg")
         .unwrap();
-    let baseline_corrected = core
+    let mut baseline_corrected = core
         .asset_store
         .commit(b"baseline-corrected", AssetKind::Corrected, "image/png")
         .unwrap();
+    baseline_corrected.immutable = true;
     let candidate_original = core
         .asset_store
         .commit(b"candidate-original", AssetKind::Original, "image/jpeg")
@@ -75,10 +78,11 @@ fn fixture(candidate_changed_cell: Option<(usize, u8)>) -> Fixture {
     } else {
         b"candidate-corrected"
     };
-    let candidate_corrected = core
+    let mut candidate_corrected = core
         .asset_store
         .commit(candidate_corrected_bytes, AssetKind::Corrected, "image/png")
         .unwrap();
+    candidate_corrected.immutable = true;
     let baseline_id = ScanId::generate();
     let candidate_id = ScanId::generate();
     let baseline = Scan::new(
@@ -145,6 +149,63 @@ fn proposal(fixture: &Fixture) -> super::ScanRevisionProposal {
             minimum_cell_absolute_difference: 20,
         })
         .unwrap()
+}
+
+fn enqueue_ocr(fixture: &Fixture) -> super::OcrJobSnapshot {
+    fixture
+        .core
+        .enqueue_ocr_job(EnqueueOcrJobRequest {
+            scan_id: fixture.baseline_id.to_string(),
+            input_kind: CoreOcrInputKind::Corrected,
+            width_px: 1_000,
+            height_px: 1_400,
+        })
+        .unwrap()
+}
+
+fn claim_ocr(fixture: &Fixture) -> super::OcrJobSnapshot {
+    enqueue_ocr(fixture);
+    fixture.core.claim_next_ocr_job().unwrap().unwrap()
+}
+
+fn detected_request(job: &super::OcrJobSnapshot) -> FinalizeOcrJobRequest {
+    FinalizeOcrJobRequest {
+        job_id: job.job_id.clone(),
+        attempt_count: job.attempt_count,
+        provider: "race-test-provider".to_string(),
+        provider_version: "1".to_string(),
+        model_name: Some("race-test-model".to_string()),
+        status: OcrRunStatus::Detected,
+        full_text: "commit point race text".to_string(),
+        unavailable_reason: None,
+        unavailable_message: None,
+        completed_at_ms: Some(500),
+        warnings: Vec::new(),
+        retryable: false,
+        regions: vec![FinalizeOcrTextRegionRequest {
+            polygon: vec![
+                CoreOcrTextPoint { x: 10.0, y: 10.0 },
+                CoreOcrTextPoint { x: 200.0, y: 10.0 },
+                CoreOcrTextPoint { x: 200.0, y: 50.0 },
+                CoreOcrTextPoint { x: 10.0, y: 50.0 },
+            ],
+            text: "commit point race text".to_string(),
+            confidence: Some(0.9),
+            created_at_ms: Some(500),
+        }],
+    }
+}
+
+fn search_race_text(fixture: &Fixture) -> bool {
+    !fixture
+        .core
+        .search_ocr_text(SearchOcrTextRequest {
+            query: "commit point race".to_string(),
+            limit: 10,
+        })
+        .unwrap()
+        .hits
+        .is_empty()
 }
 
 #[test]
@@ -237,6 +298,146 @@ fn replace_preferred_routes_through_the_atomic_preference_workflow() {
     assert!(!baseline.preferred);
     assert!(candidate.preferred);
     drop(storage);
+
+    std::fs::remove_dir_all(fixture.root).ok();
+}
+
+#[test]
+fn ocr_cancellation_before_provider_execution_is_terminal_and_unclaimable() {
+    let fixture = fixture(None);
+    let queued = enqueue_ocr(&fixture);
+
+    let cancelled = fixture
+        .core
+        .request_ocr_job_cancellation(&queued.job_id)
+        .unwrap();
+
+    assert_eq!(cancelled.status, CoreOcrJobStatus::Cancelled);
+    assert!(cancelled.cancellation_requested);
+    assert!(fixture.core.claim_next_ocr_job().unwrap().is_none());
+    assert!(!search_race_text(&fixture));
+    std::fs::remove_dir_all(fixture.root).ok();
+}
+
+#[test]
+fn ocr_cancellation_during_provider_execution_wins_before_commit() {
+    let fixture = fixture(None);
+    let claimed = claim_ocr(&fixture);
+
+    let requested = fixture
+        .core
+        .request_ocr_job_cancellation(&claimed.job_id)
+        .unwrap();
+    assert_eq!(requested.status, CoreOcrJobStatus::Running);
+    assert!(requested.cancellation_requested);
+
+    let finalized = fixture
+        .core
+        .finalize_ocr_job(detected_request(&claimed))
+        .unwrap();
+    assert_eq!(
+        finalized.resolution,
+        CoreOcrFinalizationResolution::CancelledBeforeCommit
+    );
+    assert_eq!(finalized.job.status, CoreOcrJobStatus::Cancelled);
+    assert!(finalized.ocr_run_id.is_none());
+    assert!(!search_race_text(&fixture));
+    std::fs::remove_dir_all(fixture.root).ok();
+}
+
+#[test]
+fn ocr_late_cancellation_after_successful_commit_cannot_rewrite_completion() {
+    let fixture = fixture(None);
+    let claimed = claim_ocr(&fixture);
+    let finalized = fixture
+        .core
+        .finalize_ocr_job(detected_request(&claimed))
+        .unwrap();
+    assert_eq!(
+        finalized.resolution,
+        CoreOcrFinalizationResolution::Completed
+    );
+    assert_eq!(finalized.job.status, CoreOcrJobStatus::Recognized);
+    assert!(search_race_text(&fixture));
+
+    let error = fixture
+        .core
+        .request_ocr_job_cancellation(&claimed.job_id)
+        .unwrap_err();
+    assert_eq!(
+        error.code.to_string(),
+        "CORE_OCR_JOB_TERMINAL_TRANSITION_INVALID"
+    );
+    let durable = fixture.core.get_ocr_job(&claimed.job_id).unwrap();
+    assert_eq!(durable.status, CoreOcrJobStatus::Recognized);
+    assert_eq!(durable.last_ocr_run_id, finalized.ocr_run_id);
+    assert!(search_race_text(&fixture));
+    std::fs::remove_dir_all(fixture.root).ok();
+}
+
+#[test]
+fn ocr_cancellation_racing_terminal_commit_always_resolves_to_one_coherent_winner() {
+    let fixture = fixture(None);
+    let claimed = claim_ocr(&fixture);
+    let barrier = Arc::new(Barrier::new(3));
+
+    let cancel_core = Arc::clone(&fixture.core);
+    let cancel_job_id = claimed.job_id.clone();
+    let cancel_barrier = Arc::clone(&barrier);
+    let cancel = std::thread::spawn(move || {
+        cancel_barrier.wait();
+        cancel_core.request_ocr_job_cancellation(&cancel_job_id)
+    });
+
+    let finalize_core = Arc::clone(&fixture.core);
+    let finalize_request = detected_request(&claimed);
+    let finalize_barrier = Arc::clone(&barrier);
+    let finalize = std::thread::spawn(move || {
+        finalize_barrier.wait();
+        finalize_core.finalize_ocr_job(finalize_request)
+    });
+
+    barrier.wait();
+    let cancel_result = cancel.join().unwrap();
+    let finalize_result = finalize.join().unwrap();
+    let durable = fixture.core.get_ocr_job(&claimed.job_id).unwrap();
+    let output = fixture
+        .core
+        .load_latest_ocr_output(LoadLatestOcrOutputRequest {
+            scan_id: fixture.baseline_id.to_string(),
+            region_limit: 10,
+        })
+        .unwrap();
+
+    match durable.status {
+        CoreOcrJobStatus::Cancelled => {
+            assert!(cancel_result.is_ok());
+            let finalized = finalize_result.unwrap();
+            assert_eq!(
+                finalized.resolution,
+                CoreOcrFinalizationResolution::CancelledBeforeCommit
+            );
+            assert!(durable.last_ocr_run_id.is_none());
+            assert!(output.latest_run.is_none());
+            assert!(!search_race_text(&fixture));
+        }
+        CoreOcrJobStatus::Recognized => {
+            let finalized = finalize_result.unwrap();
+            assert_eq!(
+                finalized.resolution,
+                CoreOcrFinalizationResolution::Completed
+            );
+            assert!(cancel_result.is_err());
+            assert_eq!(durable.last_ocr_run_id, finalized.ocr_run_id);
+            let run = output
+                .latest_run
+                .expect("recognized race winner must persist OCR");
+            assert_eq!(run.status, OcrRunStatus::Detected);
+            assert_eq!(run.text_regions.len(), 1);
+            assert!(search_race_text(&fixture));
+        }
+        other => panic!("race must resolve terminally, got {other:?}"),
+    }
 
     std::fs::remove_dir_all(fixture.root).ok();
 }
