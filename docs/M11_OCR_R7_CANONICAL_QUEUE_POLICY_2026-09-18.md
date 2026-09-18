@@ -32,7 +32,9 @@ Manual/user retry is a distinct product action, not permission for Android to re
 
 ## Database compatibility
 
-No schema change is justified solely by this policy consolidation. The durable schema already persists attempt/retry state. Migration `0011` remains immutable. R7 must verify that no persisted CHECK constraint encodes the conflicting legacy limit and must exercise existing-schema/open plus existing-row behavior. If implementation discovers a schema-level conflict, it requires a new forward migration rather than rewriting historical migration SQL.
+No schema change is justified solely by this policy consolidation. The durable schema already persists attempt/retry state. Migration `0011` remains immutable. Its `attempt_count <= 25` CHECK is intentionally retained as a historical storage-compatibility envelope, not a runtime retry policy: narrowing that CHECK to three would reject pre-existing rows that were valid under the shipped schema. Rust core therefore remains responsible for failing closed when a persisted row is already at or above the canonical three-attempt limit.
+
+R7 compatibility tests must prove that an existing-schema row with a legacy-valid attempt count (including 25) still opens and round-trips through storage. Such a row does not thereby gain permission for additional automatic claims. If a future schema-level invariant truly requires narrowing the persisted envelope, it requires a new forward migration rather than rewriting historical migration SQL.
 
 ## Compatibility rule for `a2d-ocr`
 
