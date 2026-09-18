@@ -110,7 +110,10 @@ impl A2dCore {
         let (original_asset, corrected_asset) = if let Some(scan) = scan.as_ref() {
             (
                 Some(load_asset(&scan.original_asset_id)?),
-                scan.corrected_asset_id.as_ref().map(load_asset).transpose()?,
+                scan.corrected_asset_id
+                    .as_ref()
+                    .map(load_asset)
+                    .transpose()?,
             )
         } else {
             (None, None)
