@@ -127,13 +127,17 @@ impl A2dCore {
     /// Corrections are append-only rows in `text_corrections`: the original `ocr_runs.full_text`
     /// and `text_regions.text` values are preserved as immutable OCR provenance. If `text_region_id`
     /// is provided, the region must belong to a detected OCR run for the same scan. If it is absent,
-    /// the scan must already have a latest detected OCR run. The previous text defaults to the
-    /// source OCR text so the correction record carries reviewable before/after evidence.
+    /// the scan must already have a latest detected OCR run. The previous text is always derived
+    /// from durable source OCR text so the correction record carries reviewable before/after
+    /// evidence without trusting caller-supplied original text.
     pub fn record_ocr_correction(
         &self,
         request: RecordOcrCorrectionRequest,
     ) -> Result<RecordedOcrCorrection, A2dError> {
         validate_correction_text("corrected_text", &request.corrected_text)?;
+        // `previous_text` remains on the request for FFI/API compatibility, but Rust derives the
+        // stored previous text from the durable OCR source below. Android callers must not be able
+        // to spoof original OCR provenance.
         if let Some(previous_text) = &request.previous_text {
             validate_optional_previous_text(previous_text)?;
         }
@@ -191,7 +195,7 @@ impl A2dCore {
                     )
                     .with_detail("ocr_run_id", run.id().to_string()));
                 }
-                request.previous_text.clone().or(Some(region.text))
+                Some(region.text)
             }
             None => {
                 let run = storage
@@ -201,7 +205,7 @@ impl A2dCore {
                     return Err(detected_run_missing_error(&scan_id)
                         .with_detail("latest_ocr_run_id", run.id().to_string()));
                 }
-                request.previous_text.clone().or(Some(run.full_text))
+                Some(run.full_text)
             }
         };
 
@@ -490,6 +494,27 @@ mod tests {
         let original = storage.get_ocr_run(&run_id).unwrap().unwrap();
         assert_eq!(original.full_text, "helo notebook");
 
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_ocr_correction_ignores_spoofed_scan_previous_text() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        insert_detected_ocr_run(&core, &fixture, "helo notebook");
+
+        let recorded = core
+            .record_ocr_correction(RecordOcrCorrectionRequest {
+                scan_id: fixture.scan_id.to_string(),
+                text_region_id: None,
+                corrected_text: "hello notebook".to_string(),
+                previous_text: Some("caller supplied spoofed previous text".to_string()),
+                created_at_ms: Some(300),
+            })
+            .unwrap();
+
+        assert_eq!(recorded.corrected_text, "hello notebook");
+        assert_eq!(recorded.previous_text.as_deref(), Some("helo notebook"));
         std::fs::remove_dir_all(&dir).ok();
     }
 
