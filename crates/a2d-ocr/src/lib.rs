@@ -399,13 +399,17 @@ impl OcrJobRecord {
         next.status = OcrJobStatus::Running;
         next.updated_at_ms = now_ms;
         next.last_started_at_ms = Some(now_ms);
-        next.retry_state.attempt_count = next.retry_state.attempt_count.checked_add(1).ok_or_else(|| {
-            ocr_contract_error(
-                "OCR_ATTEMPT_COUNT_OVERFLOW",
-                "OCR attempt count overflowed",
-                false,
-            )
-        })?;
+        next.retry_state.attempt_count = next
+            .retry_state
+            .attempt_count
+            .checked_add(1)
+            .ok_or_else(|| {
+                ocr_contract_error(
+                    "OCR_ATTEMPT_COUNT_OVERFLOW",
+                    "OCR attempt count overflowed",
+                    false,
+                )
+            })?;
         next.validate(&OcrQueueLimits::default())?;
         Ok(next)
     }
@@ -442,7 +446,8 @@ impl OcrJobRecord {
         next.retry_state.retryable = matches!(
             &result.body,
             OcrAdapterOutput::Unavailable(unavailable)
-                if unavailable.retryable && self.retry_state.attempt_count < limits.max_attempt_count
+                if unavailable.retryable
+                    && self.retry_state.attempt_count < limits.max_attempt_count
         );
         next.retry_state.next_retry_at_ms = None;
         next.retry_state.last_error_code = match &result.body {
@@ -551,7 +556,8 @@ impl OcrJobRecord {
                 }
             },
             OcrJobStatus::Unavailable => match &self.result {
-                Some(result) if result.is_unavailable() && self.work_key.matches_result(result) => {}
+                Some(result) if result.is_unavailable() && self.work_key.matches_result(result) => {
+                }
                 _ => {
                     return Err(ocr_contract_error(
                         "OCR_JOB_UNAVAILABLE_STATE_INVALID",
@@ -1234,7 +1240,10 @@ mod tests {
                     points: vec![
                         OcrPoint { x: 10.0, y: 10.0 },
                         OcrPoint { x: 20.0, y: 10.0 },
-                        OcrPoint { x: 2_000.0, y: 10.0 },
+                        OcrPoint {
+                            x: 2_000.0,
+                            y: 10.0,
+                        },
                     ],
                 },
                 bounding_box: None,
