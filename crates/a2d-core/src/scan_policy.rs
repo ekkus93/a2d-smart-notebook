@@ -12,6 +12,10 @@ use super::A2dCore;
 mod ocr_queue;
 pub use ocr_queue::*;
 
+#[cfg(test)]
+#[path = "ocr_retry_policy_tests.rs"]
+mod ocr_retry_policy_tests;
+
 #[path = "generation_policy.rs"]
 mod generation_policy;
 pub use generation_policy::*;
