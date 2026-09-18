@@ -1,10 +1,9 @@
-//! Provider-adapter and queue-status contracts for OCR.
+//! Provider-adapter and compatibility queue-status contracts for OCR.
 //!
-//! Rust owns the normalized OCR request/result shape. Platform adapters such as Android ML Kit
-//! may recognize text, but they must report bounded, explicit outcomes through this contract:
-//! successful recognition, successful no-text detection, OCR unavailability/failure, or
-//! cancellation. A failed OCR run must never be converted into a fabricated empty successful
-//! transcription.
+//! Rust core owns durable OCR queue state and retry eligibility. This crate owns the normalized
+//! provider request/result shape used by platform adapters. Its queue record types are retained as
+//! compatibility/provider-contract helpers only; they must not promise retry behavior beyond the
+//! canonical durable core policy.
 
 use std::collections::BTreeMap;
 
@@ -14,6 +13,14 @@ const MAX_LABEL_BYTES: usize = 120;
 const MAX_WARNING_CODE_BYTES: usize = 80;
 const MIN_POLYGON_POINTS: usize = 3;
 const MAX_POLYGON_POINTS: usize = 8;
+
+/// Compatibility mirror of durable core's automatic OCR attempt policy.
+///
+/// `a2d-core::ocr_queue::MAX_OCR_JOB_ATTEMPTS` remains the production source of truth. This crate
+/// cannot depend on `a2d-core`, so this constant is a deliberately small compatibility mirror for
+/// adapter-contract validation. R7 tests must catch drift if this crate ever starts promising a
+/// different automatic retry count.
+pub const COMPAT_OCR_MAX_AUTOMATIC_ATTEMPTS: u32 = 3;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrContractError {
@@ -124,6 +131,11 @@ impl OcrLimits {
     }
 }
 
+/// Compatibility queue limits for adapter-facing records.
+///
+/// This type is retained for public compatibility only. It is not the durable OCR queue contract;
+/// production scheduling and retry eligibility are owned by Rust core. The default mirrors the
+/// canonical core policy of exactly three automatic claimed attempts.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OcrQueueLimits {
     pub max_attempt_count: u32,
@@ -133,7 +145,7 @@ pub struct OcrQueueLimits {
 impl Default for OcrQueueLimits {
     fn default() -> Self {
         Self {
-            max_attempt_count: 25,
+            max_attempt_count: COMPAT_OCR_MAX_AUTOMATIC_ATTEMPTS,
             max_last_error_bytes: 1_000,
         }
     }
@@ -387,17 +399,13 @@ impl OcrJobRecord {
         next.status = OcrJobStatus::Running;
         next.updated_at_ms = now_ms;
         next.last_started_at_ms = Some(now_ms);
-        next.retry_state.attempt_count =
-            next.retry_state
-                .attempt_count
-                .checked_add(1)
-                .ok_or_else(|| {
-                    ocr_contract_error(
-                        "OCR_ATTEMPT_COUNT_OVERFLOW",
-                        "OCR attempt count overflowed",
-                        false,
-                    )
-                })?;
+        next.retry_state.attempt_count = next.retry_state.attempt_count.checked_add(1).ok_or_else(|| {
+            ocr_contract_error(
+                "OCR_ATTEMPT_COUNT_OVERFLOW",
+                "OCR attempt count overflowed",
+                false,
+            )
+        })?;
         next.validate(&OcrQueueLimits::default())?;
         Ok(next)
     }
@@ -408,7 +416,8 @@ impl OcrJobRecord {
         now_ms: i64,
     ) -> Result<Self, OcrContractError> {
         validate_timestamp(now_ms, "now_ms")?;
-        self.validate(&OcrQueueLimits::default())?;
+        let limits = OcrQueueLimits::default();
+        self.validate(&limits)?;
         if !self.work_key.matches_result(&result) {
             return Err(ocr_contract_error(
                 "OCR_RESULT_WORK_KEY_MISMATCH",
@@ -432,7 +441,8 @@ impl OcrJobRecord {
         next.completed_at_ms = Some(now_ms);
         next.retry_state.retryable = matches!(
             &result.body,
-            OcrAdapterOutput::Unavailable(unavailable) if unavailable.retryable
+            OcrAdapterOutput::Unavailable(unavailable)
+                if unavailable.retryable && self.retry_state.attempt_count < limits.max_attempt_count
         );
         next.retry_state.next_retry_at_ms = None;
         next.retry_state.last_error_code = match &result.body {
@@ -448,7 +458,7 @@ impl OcrJobRecord {
             }
         };
         next.result = Some(result);
-        next.validate(&OcrQueueLimits::default())?;
+        next.validate(&limits)?;
         Ok(next)
     }
 
@@ -541,8 +551,7 @@ impl OcrJobRecord {
                 }
             },
             OcrJobStatus::Unavailable => match &self.result {
-                Some(result) if result.is_unavailable() && self.work_key.matches_result(result) => {
-                }
+                Some(result) if result.is_unavailable() && self.work_key.matches_result(result) => {}
                 _ => {
                     return Err(ocr_contract_error(
                         "OCR_JOB_UNAVAILABLE_STATE_INVALID",
@@ -1117,6 +1126,15 @@ mod tests {
     }
 
     #[test]
+    fn compatibility_queue_default_matches_canonical_three_attempt_policy() {
+        assert_eq!(
+            OcrQueueLimits::default().max_attempt_count,
+            COMPAT_OCR_MAX_AUTOMATIC_ATTEMPTS
+        );
+        assert_eq!(COMPAT_OCR_MAX_AUTOMATIC_ATTEMPTS, 3);
+    }
+
+    #[test]
     fn request_rejects_oversized_images_before_provider_work() {
         let mut request = request();
         request.source.width_px = 12_001;
@@ -1216,10 +1234,7 @@ mod tests {
                     points: vec![
                         OcrPoint { x: 10.0, y: 10.0 },
                         OcrPoint { x: 20.0, y: 10.0 },
-                        OcrPoint {
-                            x: 2_000.0,
-                            y: 10.0,
-                        },
+                        OcrPoint { x: 2_000.0, y: 10.0 },
                     ],
                 },
                 bounding_box: None,
@@ -1275,6 +1290,16 @@ mod tests {
     }
 
     #[test]
+    fn compatibility_job_rejects_fourth_automatic_attempt() {
+        let mut job = OcrJobRecord::queued(&request(), 100).unwrap();
+        job.retry_state.attempt_count = COMPAT_OCR_MAX_AUTOMATIC_ATTEMPTS;
+
+        let err = job.mark_running(125).unwrap_err();
+
+        assert_eq!(err.code, "OCR_ATTEMPT_COUNT_EXCEEDS_LIMIT");
+    }
+
+    #[test]
     fn recognized_job_completion_binds_to_same_scan_asset_and_kind() {
         let request = request();
         let job = OcrJobRecord::queued(&request, 100)
@@ -1290,7 +1315,7 @@ mod tests {
     }
 
     #[test]
-    fn unavailable_job_completion_remains_retryable_when_provider_says_retryable() {
+    fn unavailable_job_completion_remains_retryable_before_attempt_limit() {
         let request = request();
         let job = OcrJobRecord::queued(&request, 100)
             .unwrap()
@@ -1306,6 +1331,22 @@ mod tests {
             Some("OCR_ADAPTERFAILURE")
         );
         assert!(completed.result.unwrap().is_unavailable());
+    }
+
+    #[test]
+    fn unavailable_job_completion_is_not_retryable_at_attempt_limit() {
+        let request = request();
+        let mut job = OcrJobRecord::queued(&request, 100)
+            .unwrap()
+            .mark_running(125)
+            .unwrap();
+        job.retry_state.attempt_count = COMPAT_OCR_MAX_AUTOMATIC_ATTEMPTS;
+        let result = normalize_ocr_output(&request, unavailable_output(true)).unwrap();
+        let completed = job.complete_with_result(result, 150).unwrap();
+
+        assert_eq!(completed.status, OcrJobStatus::Unavailable);
+        assert!(!completed.retry_state.retryable);
+        assert!(completed.retry_state.next_retry_at_ms.is_none());
     }
 
     #[test]
