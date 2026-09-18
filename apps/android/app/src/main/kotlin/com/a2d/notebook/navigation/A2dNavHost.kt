@@ -24,9 +24,12 @@ import com.a2d.notebook.feature.notebook.NotebookDetailScreen
 import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
+import com.a2d.notebook.feature.ocr.AndroidOcrCorrectionController
 import com.a2d.notebook.feature.ocr.AndroidOcrSearchController
+import com.a2d.notebook.feature.ocr.FfiAndroidOcrCorrectionGateway
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrReadback
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrSearchGateway
+import com.a2d.notebook.feature.ocr.OcrCorrectionPresentationState
 import com.a2d.notebook.feature.ocr.OcrPresentationState
 import com.a2d.notebook.feature.ocr.OcrPresentationStatus
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayState
@@ -87,6 +90,10 @@ fun A2dNavHost(
             client?.let { AndroidOcrSearchController(FfiAndroidOcrSearchGateway(it)) }
         }
     val ocrReadback = remember(client) { client?.let(::FfiAndroidOcrReadback) }
+    val ocrCorrectionController =
+        remember(client) {
+            client?.let { AndroidOcrCorrectionController(FfiAndroidOcrCorrectionGateway(it)) }
+        }
 
     NavHost(navController = navController, startDestination = A2dDestinations.HOME) {
         composable(A2dDestinations.HOME) {
@@ -154,11 +161,12 @@ fun A2dNavHost(
                         ),
                     )
                 }
-            LaunchedEffect(pageId, scanId, client, ocrReadback) {
+            LaunchedEffect(pageId, scanId, client, ocrReadback, ocrCorrectionController) {
                 if (client != null && ocrReadback != null) {
                     viewerState = hydratePageViewerMetadata(viewerState, pageId, scanId, client)
                     viewerState.preferredScanId?.let { selectedScanId ->
                         viewerState = hydrateOcrForViewer(viewerState, selectedScanId, client, ocrReadback)
+                        viewerState = hydrateOcrCorrectionReviewForViewer(viewerState, selectedScanId, ocrCorrectionController)
                     }
                 }
             }
@@ -181,6 +189,16 @@ fun A2dNavHost(
                 onCancelOcr = {
                     scope.launch {
                         viewerState = cancelOcrJobForViewer(viewerState, client)
+                    }
+                },
+                onSubmitOcrCorrection = { selectedScanId, correctedText ->
+                    scope.launch {
+                        viewerState = submitOcrCorrectionForViewer(
+                            current = viewerState,
+                            scanId = selectedScanId,
+                            correctedText = correctedText,
+                            controller = ocrCorrectionController,
+                        )
                     }
                 },
             )
@@ -264,6 +282,70 @@ fun A2dNavHost(
                 onBack = { navController.navigateUp() },
             )
         }
+    }
+}
+
+private suspend fun hydrateOcrCorrectionReviewForViewer(
+    current: PageViewerState,
+    scanId: String,
+    controller: AndroidOcrCorrectionController?,
+): PageViewerState {
+    if (controller == null) {
+        return current
+    }
+    return try {
+        val correctionState = withContext(Dispatchers.IO) { controller.loadReview(scanId) }
+        current.copy(
+            ocrCorrectionState = correctionState,
+            viewerApiConnected = true,
+        )
+    } catch (failure: Exception) {
+        current.copy(
+            ocrCorrectionState = OcrCorrectionPresentationState.error(scanId, failure.message ?: failure::class.java.simpleName),
+            viewerApiConnected = true,
+        )
+    }
+}
+
+private suspend fun submitOcrCorrectionForViewer(
+    current: PageViewerState,
+    scanId: String,
+    correctedText: String,
+    controller: AndroidOcrCorrectionController?,
+): PageViewerState {
+    if (controller == null) {
+        return current.copy(
+            ocrCorrectionState = OcrCorrectionPresentationState.error(
+                scanId,
+                "No open local library is available for OCR corrections",
+            ),
+            viewerApiConnected = false,
+        )
+    }
+    return try {
+        val saved = withContext(Dispatchers.IO) {
+            controller.submitCorrection(
+                scanId = scanId,
+                textRegionId = null,
+                correctedText = correctedText,
+                previousText = null,
+            )
+        }
+        val correctionState =
+            if (saved.errorMessage != null) {
+                saved
+            } else {
+                withContext(Dispatchers.IO) { controller.loadReview(scanId) }
+            }
+        current.copy(
+            ocrCorrectionState = correctionState,
+            viewerApiConnected = true,
+        )
+    } catch (failure: Exception) {
+        current.copy(
+            ocrCorrectionState = OcrCorrectionPresentationState.error(scanId, failure.message ?: failure::class.java.simpleName),
+            viewerApiConnected = true,
+        )
     }
 }
 
