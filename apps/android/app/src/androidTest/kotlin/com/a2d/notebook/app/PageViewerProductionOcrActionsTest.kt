@@ -161,6 +161,7 @@ class PageViewerProductionOcrActionsTest {
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule.onAllNodesWithText("route reopen durable OCR sentinel", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("route reopen durable OCR sentinel", substring = true).assertIsDisplayed()
             openProductionPageViewer(client = client, scan = scan)
             composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo()
