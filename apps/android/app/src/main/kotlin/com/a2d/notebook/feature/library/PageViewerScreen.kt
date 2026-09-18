@@ -11,13 +11,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
+import com.a2d.notebook.feature.ocr.OcrCorrectionPresentationState
+import com.a2d.notebook.feature.ocr.OcrCorrectionPresentationStatus
 import com.a2d.notebook.feature.ocr.OcrPresentationState
 import com.a2d.notebook.feature.ocr.OcrPresentationStatus
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayCard
@@ -34,6 +41,10 @@ object PageViewerTestTags {
     const val OCR_START = "page_viewer_ocr_start"
     const val OCR_RETRY = "page_viewer_ocr_retry"
     const val OCR_CANCEL = "page_viewer_ocr_cancel"
+    const val OCR_CORRECTION = "page_viewer_ocr_correction"
+    const val OCR_CORRECTION_INPUT = "page_viewer_ocr_correction_input"
+    const val OCR_CORRECTION_SUBMIT = "page_viewer_ocr_correction_submit"
+    const val OCR_CORRECTION_HISTORY = "page_viewer_ocr_correction_history"
     const val SPLIT = "page_viewer_split"
     const val METADATA = "page_viewer_metadata"
     const val VERSIONS = "page_viewer_versions"
@@ -61,6 +72,7 @@ data class PageViewerState(
     val hasRecognizedText: Boolean = false,
     val ocrState: OcrPresentationState = OcrPresentationState(),
     val ocrRegionOverlay: OcrRegionOverlayState = OcrRegionOverlayState(),
+    val ocrCorrectionState: OcrCorrectionPresentationState = OcrCorrectionPresentationState.empty(""),
     val annotationCount: Int = 0,
     val relatedPageCount: Int = 0,
     val skillResultCount: Int = 0,
@@ -79,6 +91,7 @@ fun PageViewerScreen(
     onStartOcr: (String) -> Unit = {},
     onRetryOcr: (String) -> Unit = {},
     onCancelOcr: (String) -> Unit = {},
+    onSubmitOcrCorrection: (String, String) -> Unit = { _, _ -> },
 ) {
     PageViewerContent(
         state = state,
@@ -89,6 +102,7 @@ fun PageViewerScreen(
         onStartOcr = onStartOcr,
         onRetryOcr = onRetryOcr,
         onCancelOcr = onCancelOcr,
+        onSubmitOcrCorrection = onSubmitOcrCorrection,
     )
 }
 
@@ -102,6 +116,7 @@ fun PageViewerContent(
     onStartOcr: (String) -> Unit = {},
     onRetryOcr: (String) -> Unit = {},
     onCancelOcr: (String) -> Unit = {},
+    onSubmitOcrCorrection: (String, String) -> Unit = { _, _ -> },
 ) {
     Column(
         modifier =
@@ -164,6 +179,10 @@ fun PageViewerContent(
             onStartOcr = onStartOcr,
             onRetryOcr = onRetryOcr,
             onCancelOcr = onCancelOcr,
+        )
+        PageViewerOcrCorrectionSection(
+            state = state,
+            onSubmitOcrCorrection = onSubmitOcrCorrection,
         )
         OcrRegionOverlayCard(state.ocrRegionOverlay)
         PageViewerSection(
@@ -310,6 +329,60 @@ private fun PageViewerOcrTextSection(
                     ) {
                         Text(stringResource(R.string.common_cancel))
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PageViewerOcrCorrectionSection(
+    state: PageViewerState,
+    onSubmitOcrCorrection: (String, String) -> Unit,
+) {
+    val scanId = state.preferredScanId
+    val correctionState = state.ocrCorrectionState
+    val correctionSupported = scanId != null && state.ocrState.status == OcrPresentationStatus.Detected
+    if (!correctionSupported && correctionState.corrections.isEmpty() && correctionState.errorMessage == null) {
+        return
+    }
+    var correctedText by remember(scanId, correctionState.lastSaved?.textCorrectionId) { mutableStateOf("") }
+    Card(Modifier.fillMaxWidth().testTag(PageViewerTestTags.OCR_CORRECTION)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "OCR corrections",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text("Original OCR remains immutable; corrections are stored as separate Rust-owned records.")
+            if (correctionState.status == OcrCorrectionPresentationStatus.Error) {
+                Text(stringResource(R.string.common_error_prefix, correctionState.errorMessage ?: stringResource(R.string.common_unknown)))
+            }
+            if (correctionState.corrections.isNotEmpty()) {
+                Column(Modifier.testTag(PageViewerTestTags.OCR_CORRECTION_HISTORY), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    correctionState.corrections.forEach { correction ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Original text: ${correction.previousText ?: stringResource(R.string.common_unknown)}")
+                            Text("Corrected text: ${correction.correctedText}")
+                            Text("Correction ID: ${correction.textCorrectionId}")
+                        }
+                    }
+                }
+            } else {
+                Text("No OCR corrections have been recorded for this scan.")
+            }
+            if (correctionSupported && scanId != null) {
+                OutlinedTextField(
+                    value = correctedText,
+                    onValueChange = { correctedText = it },
+                    label = { Text("Corrected text") },
+                    modifier = Modifier.fillMaxWidth().testTag(PageViewerTestTags.OCR_CORRECTION_INPUT),
+                )
+                OutlinedButton(
+                    enabled = correctedText.isNotBlank(),
+                    onClick = { onSubmitOcrCorrection(scanId, correctedText) },
+                    modifier = Modifier.testTag(PageViewerTestTags.OCR_CORRECTION_SUBMIT),
+                ) {
+                    Text("Save correction")
                 }
             }
         }
