@@ -6,8 +6,8 @@ use a2d_domain::{
     system_now_ms,
 };
 use a2d_storage::{
-    AssetRepository, OcrJobRepository, OcrRunRepository, PersistedOcrJob,
-    PersistedOcrJobStatus, PersistedOcrProviderAvailability, ScanRepository, TextRegionRepository,
+    AssetRepository, OcrJobRepository, OcrRunRepository, PersistedOcrJob, PersistedOcrJobStatus,
+    PersistedOcrProviderAvailability, ScanRepository, TextRegionRepository,
 };
 
 const MAX_OCR_LABEL_BYTES: usize = 120;
@@ -279,7 +279,10 @@ fn validate_running_claim(job: &PersistedOcrJob, attempt_count: u32) -> Result<(
     Ok(())
 }
 
-fn validate_job_input(conn: &rusqlite::Connection, job: &PersistedOcrJob) -> Result<Scan, A2dError> {
+fn validate_job_input(
+    conn: &rusqlite::Connection,
+    job: &PersistedOcrJob,
+) -> Result<Scan, A2dError> {
     let scan = conn.get_scan(&job.scan_id)?.ok_or_else(|| {
         finalize_error(
             "CORE_OCR_FINALIZE_SCAN_MISSING",
