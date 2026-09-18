@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -31,6 +32,8 @@ import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.CompleteOcrJobRequest
 import uniffi.a2d_ffi.CreateNotebookRequest
 import uniffi.a2d_ffi.EnqueueOcrJobRequest
+import uniffi.a2d_ffi.ListOcrCorrectionsForScanRequest
+import uniffi.a2d_ffi.LoadLatestOcrOutputRequest
 import uniffi.a2d_ffi.OcrInputKind
 import uniffi.a2d_ffi.OcrQueueJobStatus
 import uniffi.a2d_ffi.OcrRunStatus
@@ -147,6 +150,44 @@ class PageViewerProductionOcrActionsTest {
             val retryJob = requireNotNull(client.claimNextOcrJob()) { "Retry OCR must enqueue a Rust-owned durable job" }
             assertEquals(scan.scanId, retryJob.scanId)
             assertEquals(OcrQueueJobStatus.RUNNING, retryJob.status)
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test
+    fun pageViewerCorrectionPersistsThroughProductionUiAndReopen() {
+        val root = composeRule.activity.filesDir.resolve("page-viewer-ocr-correction-${UUID.randomUUID()}")
+        val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
+        try {
+            val scan = registerRealScan(client = client, root = root)
+            val recorded = recordTerminalOcr(client, scan, OcrRunStatus.DETECTED, "helo notebook", null, null)
+            openProductionPageViewer(client = client, scan = scan)
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("helo notebook", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_CORRECTION).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("Original OCR remains immutable", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_CORRECTION_INPUT)
+                .performScrollTo()
+                .performTextInput("hello notebook")
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_CORRECTION_SUBMIT)
+                .performScrollTo()
+                .assertIsEnabled()
+                .performClick()
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("Corrected text: hello notebook", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            val corrections = client.listOcrCorrectionsForScan(ListOcrCorrectionsForScanRequest(scanId = scan.scanId, limit = 10u))
+            assertEquals(1, corrections.corrections.size)
+            assertEquals("hello notebook", corrections.corrections[0].correctedText)
+            assertEquals("helo notebook", corrections.corrections[0].previousText)
+            val latestOutput = client.loadLatestOcrOutput(LoadLatestOcrOutputRequest(scanId = scan.scanId, regionLimit = 10u))
+            assertEquals(recorded.ocrRunId, latestOutput.latestRun?.ocrRunId)
+            assertEquals("helo notebook", latestOutput.latestRun?.fullText)
+            openProductionPageViewer(client = client, scan = scan)
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("Corrected text: hello notebook", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Text preview: helo notebook", substring = true).assertIsDisplayed()
         } finally { root.deleteRecursively() }
     }
 
