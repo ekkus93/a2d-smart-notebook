@@ -32,15 +32,20 @@ These projections are acceptable only while they remain mechanical mappings from
 
 Provider-result status is a separate concept. `OcrRunStatus` (`Detected`, `NoTextDetected`, `Unavailable`) describes one provider result/run; it is not a queue state machine. Keeping provider result types separate from durable queue policy is intentional.
 
-## Authoritative retry policy
+## R7.2 frozen policy decision
 
-The remediation target is:
+The canonical contract is now fixed for the remainder of this remediation:
 
-1. Rust core owns durable queue transitions and automatic retry eligibility.
-2. `MAX_OCR_JOB_ATTEMPTS = 3` is the single automatic-attempt policy used by claim/recovery/finalization.
-3. FFI and Android expose/project durable state; they do not duplicate the attempt limit for decisions.
-4. The legacy `a2d-ocr` in-memory queue contract must be removed if unused or explicitly compatibility-deprecated and aligned so its defaults cannot contradict production policy.
-5. Manual/user retry, if retained as a distinct operation, must be specified separately from automatic retry and must still be enforced by Rust core.
+1. `a2d-core` is the sole owner of durable OCR queue transitions and automatic retry eligibility.
+2. Exactly three provider attempts are permitted for one durable OCR job. `MAX_OCR_JOB_ATTEMPTS = 3` in core is authoritative; no Android, FFI, storage, or provider-adapter constant may override it.
+3. `a2d-storage` persists state only. It may enforce structural database invariants but must not introduce a competing retry policy.
+4. FFI and Android expose/project Rust-owned durable state; they do not duplicate the attempt limit for decisions.
+5. `a2d-ocr` remains a provider-adapter contract crate. Its legacy in-memory queue model is compatibility-only and must be explicitly deprecated or removed. While retained, its default attempt bound must not contradict the canonical three-attempt policy.
+6. Provider request/result types remain separate from durable queue state. `Detected`, `NoTextDetected`, and `Unavailable` describe provider/run outcomes, not queue transitions.
+7. User/manual retry is not a bypass around exhaustion. Any user-visible retry operation must be accepted or rejected by Rust core from durable state and the same bounded policy unless a future specification explicitly introduces a distinct durable retry budget.
+8. Existing databases remain compatible. R7 will not rewrite migration 0011 and will add no migration solely to mirror a Rust constant.
+
+This decision resolves R7.2's ownership and maximum-attempt questions; implementation and behavioral qualification remain required before R7 is complete.
 
 ## Database compatibility
 
@@ -54,4 +59,4 @@ R7 should not change the schema merely to consolidate policy. The current durabl
 - Add tests proving exactly three automatic claims maximum, terminal exhaustion, restart persistence/recovery, and FFI/UI diagnostics derived from canonical Rust state.
 - Reconcile the R7 checklist and companion spec only after those behavioral tests and exact-head CI pass.
 
-This document is an inventory, not R7 completion evidence.
+This document records the R7.1 inventory and R7.2 policy decision; it is not R7 completion evidence.
