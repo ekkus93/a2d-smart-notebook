@@ -61,6 +61,8 @@ class AndroidOcrWorkflow(
                     gateway.recordOcrTextRegions(
                         AndroidRecordOcrTextRegionsRequest(
                             ocrRunId = recorded.ocrRunId,
+                            sourceImageWidth = prepared.widthPx,
+                            sourceImageHeight = prepared.heightPx,
                             regions = outcome.regions.map { it.toRecordRequest() },
                         ),
                     )
@@ -188,6 +190,8 @@ class FfiRustOcrGateway(private val client: A2dClient) : RustOcrGateway {
             client.recordOcrTextRegions(
                 FfiRecordOcrTextRegionsRequest(
                     ocrRunId = request.ocrRunId,
+                    sourceImageWidth = request.sourceImageWidth,
+                    sourceImageHeight = request.sourceImageHeight,
                     regions = request.regions.map { it.toFfi() },
                 ),
             )
@@ -265,6 +269,8 @@ data class AndroidRecordOcrTextRegionRequest(
 
 data class AndroidRecordOcrTextRegionsRequest(
     val ocrRunId: String,
+    val sourceImageWidth: UInt,
+    val sourceImageHeight: UInt,
     val regions: List<AndroidRecordOcrTextRegionRequest>,
 )
 
