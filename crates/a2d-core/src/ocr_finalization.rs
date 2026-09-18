@@ -1,8 +1,9 @@
-use crate::{A2dCore, CoreOcrTextPoint, OcrJobSnapshot, MAX_OCR_JOB_ATTEMPTS};
+use crate::scan_policy::{MAX_OCR_JOB_ATTEMPTS, OcrJobSnapshot};
+use crate::{A2dCore, CoreOcrTextPoint};
 use a2d_domain::{
     A2dError, Asset, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, OcrJobId, OcrRun,
-    OcrRunId, OcrRunStatus, OcrUnavailableReason, Provenance, Scan, ScanId, TextRegion,
-    TextRegionId, system_now_ms,
+    OcrRunId, OcrRunStatus, OcrUnavailableReason, Provenance, Scan, TextRegion, TextRegionId,
+    system_now_ms,
 };
 use a2d_storage::{
     AssetRepository, OcrJobRepository, OcrRunRepository, PersistedOcrJob,
@@ -521,7 +522,7 @@ mod tests {
     };
     use a2d_domain::{
         Asset, AssetId, CaptureSource, EncryptionState, LayoutId, Page, PageId, PageKind,
-        PageState, QualityStatus, SmartPageId,
+        PageState, QualityStatus, ScanId, SmartPageId,
     };
     use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
     use std::path::PathBuf;
@@ -662,7 +663,10 @@ mod tests {
 
         let finalized = core.finalize_ocr_job(detected_request(&claimed)).unwrap();
 
-        assert_eq!(finalized.resolution, CoreOcrFinalizationResolution::Completed);
+        assert_eq!(
+            finalized.resolution,
+            CoreOcrFinalizationResolution::Completed
+        );
         assert_eq!(finalized.job.status, crate::CoreOcrJobStatus::Recognized);
         assert_eq!(finalized.recorded_region_count, 1);
         assert!(finalized.ocr_run_id.is_some());
@@ -710,7 +714,9 @@ mod tests {
                 .unwrap();
         }
 
-        let err = core.finalize_ocr_job(detected_request(&claimed)).unwrap_err();
+        let err = core
+            .finalize_ocr_job(detected_request(&claimed))
+            .unwrap_err();
         assert!(
             err.developer_message.contains("forced text-region failure")
                 || err.code.to_string().contains("STORAGE")

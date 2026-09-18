@@ -30,8 +30,6 @@ mod ocr;
 pub use ocr::*;
 mod ocr_regions;
 pub use ocr_regions::*;
-mod ocr_queue;
-pub use ocr_queue::*;
 mod ocr_finalization;
 pub use ocr_finalization::*;
 mod revision;
