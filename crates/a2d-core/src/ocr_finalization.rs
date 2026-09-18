@@ -443,7 +443,8 @@ fn apply_terminal_queue_transition(
                 job.last_started_at_ms = None;
                 job.completed_at_ms = None;
                 job.retryable = true;
-                job.next_retry_at_ms = Some(now_ms.saturating_add(retry_delay_ms(job.attempt_count)));
+                job.next_retry_at_ms =
+                    Some(now_ms.saturating_add(retry_delay_ms(job.attempt_count)));
             } else {
                 job.status = PersistedOcrJobStatus::Unavailable;
                 job.completed_at_ms = Some(now_ms);
@@ -534,10 +535,8 @@ mod tests {
     }
 
     fn open_test_core() -> (Arc<A2dCore>, PathBuf) {
-        let dir = std::env::temp_dir().join(format!(
-            "a2d-core-ocr-finalize-test-{}",
-            PageId::generate()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("a2d-core-ocr-finalize-test-{}", PageId::generate()));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: dir.to_string_lossy().into_owned(),
         })
