@@ -16,7 +16,7 @@ import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
 class FfiAndroidOcrReadback(private val client: A2dClient) {
     fun loadLatestOcrOutput(
         scanId: String,
-        regionLimit: UInt = 50u,
+        regionLimit: UInt = DEFAULT_OCR_READBACK_REGION_LIMIT,
     ): LoadedAndroidOcrOutput {
         val loaded =
             client.loadLatestOcrOutput(
@@ -61,7 +61,7 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
 
     fun loadPresentationState(
         scanId: String,
-        regionLimit: UInt = 50u,
+        regionLimit: UInt = DEFAULT_OCR_READBACK_REGION_LIMIT,
     ): OcrPresentationState = loadLatestOcrOutput(scanId, regionLimit).toPresentationState()
 }
 
@@ -171,3 +171,4 @@ private fun OcrUnavailableReason?.isRetryableReadbackUnavailableReason(): Boolea
     }
 
 private const val TEXT_PREVIEW_LIMIT = 240
+private const val DEFAULT_OCR_READBACK_REGION_LIMIT: UInt = 1_000u

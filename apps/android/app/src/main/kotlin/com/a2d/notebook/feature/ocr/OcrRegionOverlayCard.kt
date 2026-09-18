@@ -69,7 +69,7 @@ fun OcrRegionOverlayCard(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .aspectRatio(frame.aspectRatio.coerceIn(0.5f, 2.5f))
+                        .aspectRatio(frame.aspectRatio)
                         .testTag(OcrRegionOverlayTestTags.CANVAS)
                         .pointerInput(frame, overlay.renderableRegions) {
                             detectTapGestures { tap ->
