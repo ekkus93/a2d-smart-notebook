@@ -399,17 +399,17 @@ impl OcrJobRecord {
         next.status = OcrJobStatus::Running;
         next.updated_at_ms = now_ms;
         next.last_started_at_ms = Some(now_ms);
-        next.retry_state.attempt_count = next
-            .retry_state
-            .attempt_count
-            .checked_add(1)
-            .ok_or_else(|| {
-                ocr_contract_error(
-                    "OCR_ATTEMPT_COUNT_OVERFLOW",
-                    "OCR attempt count overflowed",
-                    false,
-                )
-            })?;
+        next.retry_state.attempt_count =
+            next.retry_state
+                .attempt_count
+                .checked_add(1)
+                .ok_or_else(|| {
+                    ocr_contract_error(
+                        "OCR_ATTEMPT_COUNT_OVERFLOW",
+                        "OCR attempt count overflowed",
+                        false,
+                    )
+                })?;
         next.validate(&OcrQueueLimits::default())?;
         Ok(next)
     }
