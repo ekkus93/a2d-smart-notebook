@@ -17,5 +17,4 @@ a2d-layout = { version = "0.1.0", path = "../a2d-layout" }
 a2d-pdf = { version = "0.1.0", path = "../a2d-pdf" }
 a2d-storage = { version = "0.1.0", path = "../a2d-storage" }
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
-rusqlite = { version = "~0.32", features = ["bundled"] }
 serde_json = "1"

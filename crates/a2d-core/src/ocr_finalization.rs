@@ -108,7 +108,26 @@ impl A2dCore {
                 });
             }
 
-            let scan = validate_job_input(tx, &job)?;
+            let scan = tx.get_scan(&job.scan_id)?.ok_or_else(|| {
+                finalize_error(
+                    "CORE_OCR_FINALIZE_SCAN_MISSING",
+                    "OCR finalization requires the queued scan to still exist",
+                    false,
+                )
+                .with_detail("scan_id", job.scan_id.to_string())
+            })?;
+            let expected_asset_kind = expected_scan_asset_kind(&scan, &job.input_asset_id)?;
+            let asset = tx.get_asset(&job.input_asset_id)?.ok_or_else(|| {
+                finalize_error(
+                    "CORE_OCR_FINALIZE_INPUT_ASSET_MISSING_ROW",
+                    "OCR finalization requires the queued input asset row to still exist",
+                    false,
+                )
+                .with_detail("scan_id", job.scan_id.to_string())
+                .with_detail("input_asset_id", job.input_asset_id.to_string())
+            })?;
+            validate_record_input_asset(&asset, expected_asset_kind)?;
+
             let run_id = OcrRunId::try_generate()?;
             let provenance = Provenance {
                 source_page_id: Some(scan.page_id),
@@ -277,32 +296,6 @@ fn validate_running_claim(job: &PersistedOcrJob, attempt_count: u32) -> Result<(
         .with_detail("actual_attempt_count", attempt_count.to_string()));
     }
     Ok(())
-}
-
-fn validate_job_input(
-    conn: &rusqlite::Connection,
-    job: &PersistedOcrJob,
-) -> Result<Scan, A2dError> {
-    let scan = conn.get_scan(&job.scan_id)?.ok_or_else(|| {
-        finalize_error(
-            "CORE_OCR_FINALIZE_SCAN_MISSING",
-            "OCR finalization requires the queued scan to still exist",
-            false,
-        )
-        .with_detail("scan_id", job.scan_id.to_string())
-    })?;
-    let expected_asset_kind = expected_scan_asset_kind(&scan, &job.input_asset_id)?;
-    let asset = conn.get_asset(&job.input_asset_id)?.ok_or_else(|| {
-        finalize_error(
-            "CORE_OCR_FINALIZE_INPUT_ASSET_MISSING_ROW",
-            "OCR finalization requires the queued input asset row to still exist",
-            false,
-        )
-        .with_detail("scan_id", job.scan_id.to_string())
-        .with_detail("input_asset_id", job.input_asset_id.to_string())
-    })?;
-    validate_record_input_asset(&asset, expected_asset_kind)?;
-    Ok(scan)
 }
 
 fn expected_scan_asset_kind(
@@ -534,7 +527,6 @@ mod tests {
 
     struct ScanFixture {
         scan_id: ScanId,
-        original_asset_id: AssetId,
     }
 
     fn open_test_core() -> (Arc<A2dCore>, PathBuf) {
@@ -608,10 +600,7 @@ mod tests {
             .insert_asset(&asset(original_asset_id.clone()))
             .unwrap();
         storage.insert_scan(&scan).unwrap();
-        ScanFixture {
-            scan_id,
-            original_asset_id,
-        }
+        ScanFixture { scan_id }
     }
 
     fn claim_job(core: &A2dCore, fixture: &ScanFixture) -> OcrJobSnapshot {
