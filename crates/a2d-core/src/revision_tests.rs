@@ -64,10 +64,11 @@ fn fixture(candidate_changed_cell: Option<(usize, u8)>) -> Fixture {
         .asset_store
         .commit(b"baseline-original", AssetKind::Original, "image/jpeg")
         .unwrap();
-    let baseline_corrected = core
+    let mut baseline_corrected = core
         .asset_store
         .commit(b"baseline-corrected", AssetKind::Corrected, "image/png")
         .unwrap();
+    baseline_corrected.immutable = true;
     let candidate_original = core
         .asset_store
         .commit(b"candidate-original", AssetKind::Original, "image/jpeg")
@@ -77,10 +78,11 @@ fn fixture(candidate_changed_cell: Option<(usize, u8)>) -> Fixture {
     } else {
         b"candidate-corrected"
     };
-    let candidate_corrected = core
+    let mut candidate_corrected = core
         .asset_store
         .commit(candidate_corrected_bytes, AssetKind::Corrected, "image/png")
         .unwrap();
+    candidate_corrected.immutable = true;
     let baseline_id = ScanId::generate();
     let candidate_id = ScanId::generate();
     let baseline = Scan::new(
