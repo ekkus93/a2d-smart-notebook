@@ -25,6 +25,8 @@ pub struct RecordOcrTextRegionRequest {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RecordOcrTextRegionsRequest {
     pub ocr_run_id: String,
+    pub source_image_width: u32,
+    pub source_image_height: u32,
     pub regions: Vec<RecordOcrTextRegionRequest>,
 }
 
@@ -88,7 +90,9 @@ impl A2dCore {
     /// durable region rows. This method creates typed `TextRegion` values, bounds the batch, and
     /// inserts the batch transactionally through storage. The storage repository independently
     /// rejects regions for `NoTextDetected` and `Unavailable` OCR runs so failures cannot grow
-    /// fabricated text rows.
+    /// fabricated text rows. The source image dimensions use an inclusive pixel-bound convention:
+    /// a persisted point is valid only when `0 <= x <= source_image_width` and
+    /// `0 <= y <= source_image_height`.
     pub fn record_ocr_text_regions(
         &self,
         request: RecordOcrTextRegionsRequest,
@@ -112,6 +116,7 @@ impl A2dCore {
                 MAX_OCR_TEXT_REGION_BATCH_SIZE.to_string(),
             ));
         }
+        validate_source_dimensions(request.source_image_width, request.source_image_height)?;
 
         let ocr_run_id = OcrRunId::parse(&request.ocr_run_id)?;
         let fallback_created_at_ms = system_now_ms()?;
@@ -126,6 +131,12 @@ impl A2dCore {
                 )
                 .with_detail("region_index", index.to_string()));
             }
+            validate_polygon_inside_source(
+                &region.polygon,
+                request.source_image_width,
+                request.source_image_height,
+                index,
+            )?;
             let polygon = region
                 .polygon
                 .into_iter()
@@ -264,6 +275,52 @@ fn loaded_text_region(region: TextRegion) -> LoadedOcrTextRegion {
     }
 }
 
+fn validate_source_dimensions(width: u32, height: u32) -> Result<(), A2dError> {
+    if width == 0 || height == 0 {
+        return Err(ocr_region_error(
+            "CORE_OCR_SOURCE_IMAGE_DIMENSIONS_INVALID",
+            "OCR source image dimensions must be positive pixels",
+            false,
+        )
+        .with_detail("source_image_width", width.to_string())
+        .with_detail("source_image_height", height.to_string()));
+    }
+    Ok(())
+}
+
+fn validate_polygon_inside_source(
+    polygon: &[CoreOcrTextPoint],
+    width: u32,
+    height: u32,
+    region_index: usize,
+) -> Result<(), A2dError> {
+    let max_x = width as f32;
+    let max_y = height as f32;
+    for (point_index, point) in polygon.iter().enumerate() {
+        if !point.x.is_finite() || !point.y.is_finite() || point.x < 0.0 || point.y < 0.0 {
+            return Err(ocr_region_error(
+                "CORE_OCR_TEXT_REGION_POLYGON_COORDINATE_INVALID",
+                "OCR text-region polygon coordinates must be finite and non-negative",
+                false,
+            )
+            .with_detail("region_index", region_index.to_string())
+            .with_detail("point_index", point_index.to_string()));
+        }
+        if point.x > max_x || point.y > max_y {
+            return Err(ocr_region_error(
+                "CORE_OCR_TEXT_REGION_POLYGON_OUT_OF_BOUNDS",
+                "OCR text-region polygon coordinates must be within the source image bounds",
+                false,
+            )
+            .with_detail("region_index", region_index.to_string())
+            .with_detail("point_index", point_index.to_string())
+            .with_detail("source_image_width", width.to_string())
+            .with_detail("source_image_height", height.to_string()));
+        }
+    }
+    Ok(())
+}
+
 fn ocr_region_error(
     code: &'static str,
     developer_message: impl Into<String>,
@@ -292,6 +349,9 @@ mod tests {
     };
     use std::path::PathBuf;
     use std::sync::Arc;
+
+    const SOURCE_WIDTH: u32 = 200;
+    const SOURCE_HEIGHT: u32 = 100;
 
     struct ScanFixture {
         scan_id: ScanId,
@@ -438,6 +498,18 @@ mod tests {
         }
     }
 
+    fn record_request(
+        run_id: &OcrRunId,
+        regions: Vec<RecordOcrTextRegionRequest>,
+    ) -> RecordOcrTextRegionsRequest {
+        RecordOcrTextRegionsRequest {
+            ocr_run_id: run_id.to_string(),
+            source_image_width: SOURCE_WIDTH,
+            source_image_height: SOURCE_HEIGHT,
+            regions,
+        }
+    }
+
     #[test]
     fn record_ocr_text_regions_persists_batch_for_detected_run() {
         let (core, dir) = open_test_core();
@@ -445,13 +517,13 @@ mod tests {
         let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
 
         let recorded = core
-            .record_ocr_text_regions(RecordOcrTextRegionsRequest {
-                ocr_run_id: run_id.to_string(),
-                regions: vec![
+            .record_ocr_text_regions(record_request(
+                &run_id,
+                vec![
                     region("first line", Some(300)),
                     region("second line", Some(301)),
                 ],
-            })
+            ))
             .unwrap();
 
         assert_eq!(recorded.ocr_run_id, run_id.to_string());
@@ -486,13 +558,13 @@ mod tests {
         let (core, dir) = open_test_core();
         let fixture = insert_scan_fixture(&core);
         let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
-        core.record_ocr_text_regions(RecordOcrTextRegionsRequest {
-            ocr_run_id: run_id.to_string(),
-            regions: vec![
+        core.record_ocr_text_regions(record_request(
+            &run_id,
+            vec![
                 region("first line", Some(300)),
                 region("second line", Some(301)),
             ],
-        })
+        ))
         .unwrap();
 
         let loaded = core
@@ -558,10 +630,60 @@ mod tests {
         let err = core
             .record_ocr_text_regions(RecordOcrTextRegionsRequest {
                 ocr_run_id: OcrRunId::generate().to_string(),
+                source_image_width: SOURCE_WIDTH,
+                source_image_height: SOURCE_HEIGHT,
                 regions: Vec::new(),
             })
             .unwrap_err();
         assert_eq!(err.code.to_string(), "CORE_OCR_TEXT_REGION_BATCH_EMPTY");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_ocr_text_regions_rejects_invalid_source_dimensions() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
+        let err = core
+            .record_ocr_text_regions(RecordOcrTextRegionsRequest {
+                ocr_run_id: run_id.to_string(),
+                source_image_width: 0,
+                source_image_height: SOURCE_HEIGHT,
+                regions: vec![region("bad dimensions", Some(300))],
+            })
+            .unwrap_err();
+        assert_eq!(
+            err.code.to_string(),
+            "CORE_OCR_SOURCE_IMAGE_DIMENSIONS_INVALID"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_ocr_text_regions_rejects_points_outside_source_dimensions() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
+        let err = core
+            .record_ocr_text_regions(record_request(
+                &run_id,
+                vec![RecordOcrTextRegionRequest {
+                    polygon: vec![
+                        CoreOcrTextPoint { x: 0.0, y: 0.0 },
+                        CoreOcrTextPoint { x: 201.0, y: 0.0 },
+                        CoreOcrTextPoint { x: 0.0, y: 32.0 },
+                    ],
+                    text: "outside source".to_string(),
+                    confidence: Some(0.5),
+                    created_at_ms: Some(300),
+                }],
+            ))
+            .unwrap_err();
+        assert_eq!(
+            err.code.to_string(),
+            "CORE_OCR_TEXT_REGION_POLYGON_OUT_OF_BOUNDS"
+        );
+        assert_eq!(err.details.get("region_index"), Some(&"0".to_string()));
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -571,15 +693,15 @@ mod tests {
         let fixture = insert_scan_fixture(&core);
         let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
         let err = core
-            .record_ocr_text_regions(RecordOcrTextRegionsRequest {
-                ocr_run_id: run_id.to_string(),
-                regions: vec![RecordOcrTextRegionRequest {
+            .record_ocr_text_regions(record_request(
+                &run_id,
+                vec![RecordOcrTextRegionRequest {
                     polygon: vec![CoreOcrTextPoint { x: 0.0, y: 0.0 }],
                     text: "bad polygon".to_string(),
                     confidence: Some(0.5),
                     created_at_ms: Some(300),
                 }],
-            })
+            ))
             .unwrap_err();
         assert_eq!(
             err.code.to_string(),
@@ -596,10 +718,10 @@ mod tests {
         let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::NoTextDetected);
 
         let err = core
-            .record_ocr_text_regions(RecordOcrTextRegionsRequest {
-                ocr_run_id: run_id.to_string(),
-                regions: vec![region("fabricated", Some(300))],
-            })
+            .record_ocr_text_regions(record_request(
+                &run_id,
+                vec![region("fabricated", Some(300))],
+            ))
             .unwrap_err();
 
         assert_eq!(

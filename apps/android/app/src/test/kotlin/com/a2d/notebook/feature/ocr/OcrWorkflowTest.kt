@@ -57,6 +57,8 @@ class OcrWorkflowTest {
 
         assertEquals(OcrPresentationStatus.Detected, result.status)
         assertEquals("ocr-run-1", gateway.recordedRegionBatches.single().ocrRunId)
+        assertEquals(1_000u, gateway.recordedRegionBatches.single().sourceImageWidth)
+        assertEquals(1_400u, gateway.recordedRegionBatches.single().sourceImageHeight)
         assertEquals(2, gateway.recordedRegionBatches.single().regions.size)
         assertEquals("hello", gateway.recordedRegionBatches.single().regions[0].text)
         assertEquals(2, result.recognizedRegionCount)

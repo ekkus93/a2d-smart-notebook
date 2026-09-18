@@ -54,6 +54,8 @@ impl From<RecordOcrTextRegionRequest> for core::RecordOcrTextRegionRequest {
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct RecordOcrTextRegionsRequest {
     pub ocr_run_id: String,
+    pub source_image_width: u32,
+    pub source_image_height: u32,
     pub regions: Vec<RecordOcrTextRegionRequest>,
 }
 
@@ -181,6 +183,8 @@ impl A2dClient {
         self.core
             .record_ocr_text_regions(core::RecordOcrTextRegionsRequest {
                 ocr_run_id: request.ocr_run_id,
+                source_image_width: request.source_image_width,
+                source_image_height: request.source_image_height,
                 regions: request.regions.into_iter().map(Into::into).collect(),
             })
             .map(Into::into)
@@ -238,6 +242,8 @@ mod tests {
         let err = client
             .record_ocr_text_regions(RecordOcrTextRegionsRequest {
                 ocr_run_id: a2d_domain::OcrRunId::generate().to_string(),
+                source_image_width: 100,
+                source_image_height: 100,
                 regions: vec![region("orphaned")],
             })
             .unwrap_err();
@@ -254,6 +260,8 @@ mod tests {
         let err = client
             .record_ocr_text_regions(RecordOcrTextRegionsRequest {
                 ocr_run_id: a2d_domain::OcrRunId::generate().to_string(),
+                source_image_width: 100,
+                source_image_height: 100,
                 regions: Vec::new(),
             })
             .unwrap_err();
