@@ -23,7 +23,7 @@ class OcrRegionOverlayTest {
     }
 
     @Test
-    fun persistedDetectedRegionsPreserveTextConfidenceAndPolygon() {
+    fun persistedDetectedRegionsArePreservedButNotRenderedWithoutSourceGeometry() {
         val region = loadedRegion()
 
         val state =
@@ -34,13 +34,33 @@ class OcrRegionOverlayTest {
                 ),
             )
 
+        assertFalse(state.enabled)
+        assertEquals("text-region-1", state.regions.single().textRegionId)
+        assertEquals("stored text", state.regions.single().text)
+        assertEquals(0.91f, state.regions.single().confidence)
+        assertEquals(region.polygon, state.regions.single().polygon)
+        assertTrue(state.renderableRegions.isEmpty())
+        assertNull(state.coordinateFrame)
+    }
+
+    @Test
+    fun explicitSourceGeometryEnablesRegionRendering() {
+        val region = loadedRegion()
+
+        val state =
+            OcrRegionOverlayState.withSourceGeometry(
+                sourceImageWidth = 240,
+                sourceImageHeight = 120,
+                regions = listOf(region.toOverlayRegion()),
+            )
+
         assertTrue(state.enabled)
         assertEquals("text-region-1", state.renderableRegions.single().textRegionId)
         assertEquals("stored text", state.renderableRegions.single().text)
         assertEquals(0.91f, state.renderableRegions.single().confidence)
         assertEquals(region.polygon, state.renderableRegions.single().polygon)
-        assertEquals(120f, state.coordinateFrame?.width)
-        assertEquals(40f, state.coordinateFrame?.height)
+        assertEquals(240f, state.coordinateFrame?.width)
+        assertEquals(120f, state.coordinateFrame?.height)
     }
 
     @Test
@@ -62,11 +82,17 @@ class OcrRegionOverlayTest {
     }
 
     @Test
-    fun selectionUsesStoredPolygonGeometry() {
-        val state = OcrRegionOverlayState(regions = listOf(loadedRegion().toOverlayRegion()))
+    fun selectionUsesStoredPolygonGeometryInsideSourceFrame() {
+        val state =
+            OcrRegionOverlayState.withSourceGeometry(
+                sourceImageWidth = 240,
+                sourceImageHeight = 120,
+                regions = listOf(loadedRegion().toOverlayRegion()),
+            )
 
         assertEquals("text-region-1", state.regionAt(sourceX = 60f, sourceY = 20f)?.textRegionId)
         assertNull(state.regionAt(sourceX = 160f, sourceY = 20f))
+        assertNull(state.regionAt(sourceX = 260f, sourceY = 20f))
     }
 
     private fun loadedRun(
