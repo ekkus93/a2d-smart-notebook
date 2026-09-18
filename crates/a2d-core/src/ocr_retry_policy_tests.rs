@@ -146,8 +146,7 @@ fn automatic_retry_claims_exactly_three_attempts_then_exhausts_terminally() {
         assert_eq!(claimed.job_id, job_id);
         assert_eq!(claimed.attempt_count, expected_attempt);
 
-        let finalized =
-            finalize_retryable_unavailable(&core, &job_id, claimed.attempt_count);
+        let finalized = finalize_retryable_unavailable(&core, &job_id, claimed.attempt_count);
         if expected_attempt < MAX_OCR_JOB_ATTEMPTS {
             assert_eq!(
                 finalized.resolution,
