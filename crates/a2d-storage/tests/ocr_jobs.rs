@@ -159,3 +159,20 @@ fn one_active_job_per_work_key_is_enforced() {
 
     assert_eq!(error.code.to_string(), "STORAGE_CONSTRAINT_VIOLATION");
 }
+
+#[test]
+fn legacy_schema_attempt_counts_remain_readable_without_becoming_retry_policy() {
+    let storage = Storage::open_in_memory().unwrap();
+    let (scan_id, asset_id) = fixture(&storage);
+    let mut job = queued_job(scan_id, asset_id, 300);
+    let id = job.id.clone();
+
+    // Migration 0011 shipped with a compatibility envelope of 0..=25. Keep that historical
+    // constraint immutable so existing rows remain readable; Rust core, not storage, owns the
+    // canonical three-attempt automatic retry policy.
+    job.attempt_count = 25;
+    storage.insert_ocr_job(&job).unwrap();
+
+    let persisted = storage.get_ocr_job(&id).unwrap().unwrap();
+    assert_eq!(persisted.attempt_count, 25);
+}
