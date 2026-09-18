@@ -12,11 +12,15 @@ import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
  * Running OCR and reading previously persisted OCR are deliberately separate flows. This adapter
  * hydrates [OcrPresentationState] from Rust-owned OCR rows so Page Viewer callers can restore OCR
  * status after app restart without manufacturing an empty detected-text result on Android.
+ *
+ * Page Viewer requests the Rust-owned maximum region window rather than the historical 50-row
+ * preview. If a run contains more rows than that bounded Rust API can return, readback fails
+ * explicitly instead of presenting a silently incomplete overlay as complete.
  */
 class FfiAndroidOcrReadback(private val client: A2dClient) {
     fun loadLatestOcrOutput(
         scanId: String,
-        regionLimit: UInt = 50u,
+        regionLimit: UInt = PAGE_VIEWER_REGION_LIMIT,
     ): LoadedAndroidOcrOutput {
         val loaded =
             client.loadLatestOcrOutput(
@@ -25,10 +29,17 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
                     regionLimit = regionLimit,
                 ),
             )
+        val latestRun = loaded.latestRun
+        if (latestRun != null && latestRun.textRegionCount > latestRun.textRegions.size.toUInt()) {
+            throw IllegalStateException(
+                "OCR region readback is partial: ${latestRun.textRegions.size} of " +
+                    "${latestRun.textRegionCount} persisted regions were returned",
+            )
+        }
         return LoadedAndroidOcrOutput(
             scanId = loaded.scanId,
             latestRun =
-                loaded.latestRun?.let { run ->
+                latestRun?.let { run ->
                     LoadedAndroidOcrRun(
                         ocrRunId = run.ocrRunId,
                         scanId = run.scanId,
@@ -61,7 +72,7 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
 
     fun loadPresentationState(
         scanId: String,
-        regionLimit: UInt = 50u,
+        regionLimit: UInt = PAGE_VIEWER_REGION_LIMIT,
     ): OcrPresentationState = loadLatestOcrOutput(scanId, regionLimit).toPresentationState()
 }
 
@@ -171,3 +182,4 @@ private fun OcrUnavailableReason?.isRetryableReadbackUnavailableReason(): Boolea
     }
 
 private const val TEXT_PREVIEW_LIMIT = 240
+private const val PAGE_VIEWER_REGION_LIMIT: UInt = 1_000u
