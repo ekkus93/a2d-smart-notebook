@@ -1,6 +1,6 @@
 use a2d_core as core;
 
-use super::{A2dClient, A2dFfiError, OcrInputKind};
+use super::{A2dClient, A2dFfiError, OcrInputKind, OcrRunStatus, OcrUnavailableReason};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
 pub enum OcrQueueJobStatus {
@@ -32,6 +32,97 @@ pub struct CompleteOcrJobRequest {
     pub job_id: String,
     pub ocr_run_id: String,
     pub retryable: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, uniffi::Record)]
+pub struct FinalizeOcrTextPoint {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl From<FinalizeOcrTextPoint> for core::CoreOcrTextPoint {
+    fn from(value: FinalizeOcrTextPoint) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct FinalizeOcrTextRegionRequest {
+    pub polygon: Vec<FinalizeOcrTextPoint>,
+    pub text: String,
+    pub confidence: Option<f32>,
+    pub created_at_ms: Option<i64>,
+}
+
+impl From<FinalizeOcrTextRegionRequest> for core::FinalizeOcrTextRegionRequest {
+    fn from(value: FinalizeOcrTextRegionRequest) -> Self {
+        Self {
+            polygon: value.polygon.into_iter().map(Into::into).collect(),
+            text: value.text,
+            confidence: value.confidence,
+            created_at_ms: value.created_at_ms,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct FinalizeOcrJobRequest {
+    pub job_id: String,
+    pub attempt_count: u32,
+    pub provider: String,
+    pub provider_version: String,
+    pub model_name: Option<String>,
+    pub status: OcrRunStatus,
+    pub full_text: String,
+    pub unavailable_reason: Option<OcrUnavailableReason>,
+    pub unavailable_message: Option<String>,
+    pub completed_at_ms: Option<i64>,
+    pub warnings: Vec<String>,
+    pub retryable: bool,
+    pub regions: Vec<FinalizeOcrTextRegionRequest>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
+pub enum OcrFinalizationResolution {
+    Completed,
+    RetryScheduled,
+    TerminalUnavailable,
+    CancelledBeforeCommit,
+}
+
+impl From<core::CoreOcrFinalizationResolution> for OcrFinalizationResolution {
+    fn from(value: core::CoreOcrFinalizationResolution) -> Self {
+        match value {
+            core::CoreOcrFinalizationResolution::Completed => Self::Completed,
+            core::CoreOcrFinalizationResolution::RetryScheduled => Self::RetryScheduled,
+            core::CoreOcrFinalizationResolution::TerminalUnavailable => Self::TerminalUnavailable,
+            core::CoreOcrFinalizationResolution::CancelledBeforeCommit => {
+                Self::CancelledBeforeCommit
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct FinalizedOcrJob {
+    pub job: OcrQueueJob,
+    pub ocr_run_id: Option<String>,
+    pub recorded_region_count: u32,
+    pub resolution: OcrFinalizationResolution,
+}
+
+impl From<core::FinalizedOcrJob> for FinalizedOcrJob {
+    fn from(value: core::FinalizedOcrJob) -> Self {
+        Self {
+            job: value.job.into(),
+            ocr_run_id: value.ocr_run_id,
+            recorded_region_count: value.recorded_region_count,
+            resolution: value.resolution.into(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, uniffi::Record)]
@@ -170,6 +261,30 @@ impl A2dClient {
                 job_id: request.job_id,
                 ocr_run_id: request.ocr_run_id,
                 retryable: request.retryable,
+            })
+            .map(Into::into)
+            .map_err(Into::into)
+    }
+
+    pub fn finalize_ocr_job(
+        &self,
+        request: FinalizeOcrJobRequest,
+    ) -> Result<FinalizedOcrJob, A2dFfiError> {
+        self.core
+            .finalize_ocr_job(core::FinalizeOcrJobRequest {
+                job_id: request.job_id,
+                attempt_count: request.attempt_count,
+                provider: request.provider,
+                provider_version: request.provider_version,
+                model_name: request.model_name,
+                status: request.status.into(),
+                full_text: request.full_text,
+                unavailable_reason: request.unavailable_reason.map(Into::into),
+                unavailable_message: request.unavailable_message,
+                completed_at_ms: request.completed_at_ms,
+                warnings: request.warnings,
+                retryable: request.retryable,
+                regions: request.regions.into_iter().map(Into::into).collect(),
             })
             .map(Into::into)
             .map_err(Into::into)

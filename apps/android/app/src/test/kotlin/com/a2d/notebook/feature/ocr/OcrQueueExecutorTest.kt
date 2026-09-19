@@ -30,10 +30,10 @@ class OcrQueueExecutorTest {
 
         val completed = step as AndroidOcrQueueStep.Completed
         assertEquals(AndroidOcrQueueJobStatus.Queued, completed.job.status)
-        assertEquals(true, queue.lastCompletionRetryable)
-        assertEquals(OcrRunStatus.Unavailable, rust.recorded.single().status)
-        assertEquals(OcrUnavailableReason.ProviderUnavailable, rust.recorded.single().unavailableReason)
-        assertEquals("", rust.recorded.single().fullText)
+        assertEquals(true, rust.finalized.single().retryable)
+        assertEquals(OcrRunStatus.Unavailable, rust.finalized.single().status)
+        assertEquals(OcrUnavailableReason.ProviderUnavailable, rust.finalized.single().unavailableReason)
+        assertEquals("", rust.finalized.single().fullText)
     }
 
     @Test
@@ -54,8 +54,8 @@ class OcrQueueExecutorTest {
 
         val completed = step as AndroidOcrQueueStep.Completed
         assertEquals(AndroidOcrQueueJobStatus.Cancelled, completed.job.status)
-        assertEquals(false, queue.lastCompletionRetryable)
-        assertEquals(OcrUnavailableReason.Cancelled, rust.recorded.single().unavailableReason)
+        assertEquals(false, rust.finalized.single().retryable)
+        assertEquals(OcrUnavailableReason.Cancelled, rust.finalized.single().unavailableReason)
         assertTrue(completed.job.cancellationRequested)
     }
 
@@ -78,9 +78,9 @@ class OcrQueueExecutorTest {
         val completed = step as AndroidOcrQueueStep.Completed
         assertEquals(AndroidOcrQueueJobStatus.Unavailable, completed.job.status)
         assertEquals(AndroidOcrProviderAvailability.Failed, completed.job.providerAvailability)
-        assertEquals(true, queue.lastCompletionRetryable)
-        assertEquals(OcrUnavailableReason.ProviderFailed, rust.recorded.single().unavailableReason)
-        assertEquals("provider exploded", rust.recorded.single().unavailableMessage)
+        assertEquals(true, rust.finalized.single().retryable)
+        assertEquals(OcrUnavailableReason.ProviderFailed, rust.finalized.single().unavailableReason)
+        assertEquals("provider exploded", rust.finalized.single().unavailableMessage)
     }
 
     private class FakeQueueGateway(
@@ -135,6 +135,7 @@ class OcrQueueExecutorTest {
 
     private class FakeRustGateway : RustOcrGateway {
         val recorded = mutableListOf<AndroidRecordOcrRunRequest>()
+        val finalized = mutableListOf<AndroidFinalizeOcrJobRequest>()
 
         override fun prepareOcrInput(request: AndroidOcrStartRequest): PreparedAndroidOcrInput =
             runningJob().preparedInput()
@@ -153,6 +154,50 @@ class OcrQueueExecutorTest {
             request: AndroidRecordOcrTextRegionsRequest,
         ): RecordedAndroidOcrTextRegions =
             RecordedAndroidOcrTextRegions(ocrRunId = request.ocrRunId, regions = emptyList())
+
+        override fun finalizeOcrJob(request: AndroidFinalizeOcrJobRequest): FinalizedAndroidOcrJob {
+            finalized += request
+            val status =
+                when (request.unavailableReason) {
+                    OcrUnavailableReason.Cancelled -> AndroidOcrQueueJobStatus.Cancelled
+                    OcrUnavailableReason.ProviderFailed -> AndroidOcrQueueJobStatus.Unavailable
+                    OcrUnavailableReason.ProviderUnavailable ->
+                        if (request.retryable) {
+                            AndroidOcrQueueJobStatus.Queued
+                        } else {
+                            AndroidOcrQueueJobStatus.Unavailable
+                        }
+                    else -> AndroidOcrQueueJobStatus.Recognized
+                }
+            val availability =
+                if (request.unavailableReason == OcrUnavailableReason.ProviderFailed) {
+                    AndroidOcrProviderAvailability.Failed
+                } else {
+                    AndroidOcrProviderAvailability.Unavailable
+                }
+            return FinalizedAndroidOcrJob(
+                job =
+                    runningJob().copy(
+                        status = status,
+                        retryable = status == AndroidOcrQueueJobStatus.Queued,
+                        nextRetryAtMs = if (status == AndroidOcrQueueJobStatus.Queued) 2_000 else null,
+                        provider = request.provider,
+                        providerVersion = request.providerVersion,
+                        modelName = request.modelName,
+                        providerAvailability = availability,
+                        lastOcrRunId = "ocr-run-1",
+                        cancellationRequested = request.unavailableReason == OcrUnavailableReason.Cancelled,
+                    ),
+                ocrRunId = "ocr-run-1",
+                recordedRegionCount = request.regions.size.toUInt(),
+                resolution =
+                    if (status == AndroidOcrQueueJobStatus.Queued) {
+                        OcrFinalizationResolution.RetryScheduled
+                    } else {
+                        OcrFinalizationResolution.Completed
+                    },
+            )
+        }
     }
 
     private class FakeProvider(

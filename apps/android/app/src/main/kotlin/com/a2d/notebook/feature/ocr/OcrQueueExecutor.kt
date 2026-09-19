@@ -153,27 +153,26 @@ internal class AndroidOcrQueueProcessor(
         val claimed = gateway.claimNext() ?: return AndroidOcrQueueStep.Idle
         onClaimed(claimed)
         val result =
-            workflow.run(
-                AndroidOcrStartRequest(
-                    scanId = claimed.scanId,
-                    inputKind = claimed.inputKind,
-                    widthPx = claimed.widthPx,
-                    heightPx = claimed.heightPx,
+            workflow.runClaimedJob(
+                AndroidClaimedOcrStartRequest(
+                    jobId = claimed.jobId,
+                    attemptCount = claimed.attemptCount,
+                    startRequest =
+                        AndroidOcrStartRequest(
+                            scanId = claimed.scanId,
+                            inputKind = claimed.inputKind,
+                            widthPx = claimed.widthPx,
+                            heightPx = claimed.heightPx,
+                        ),
                 ),
             )
-        val recorded =
-            result.recordedRun
+        val finalizedJob =
+            result.finalizedJob
                 ?: return AndroidOcrQueueStep.RecoverableFailure(
                     job = claimed,
-                    message = result.message ?: "OCR result could not be persisted",
+                    message = result.message ?: "OCR result could not be finalized",
                 )
-        return AndroidOcrQueueStep.Completed(
-            gateway.complete(
-                jobId = claimed.jobId,
-                ocrRunId = recorded.ocrRunId,
-                retryable = result.retryAvailable,
-            ),
-        )
+        return AndroidOcrQueueStep.Completed(finalizedJob)
     }
 }
 
@@ -376,7 +375,7 @@ internal fun readRegisteredOcrDimensions(
     return options.outWidth.toUInt() to options.outHeight.toUInt()
 }
 
-private fun FfiOcrQueueJob.toAndroid(): AndroidOcrQueueJob =
+internal fun FfiOcrQueueJob.toAndroid(): AndroidOcrQueueJob =
     AndroidOcrQueueJob(
         jobId = jobId,
         scanId = scanId,
