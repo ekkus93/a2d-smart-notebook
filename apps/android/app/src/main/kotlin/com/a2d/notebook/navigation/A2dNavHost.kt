@@ -25,6 +25,7 @@ import com.a2d.notebook.feature.notebook.NotebookLibraryScreen
 import com.a2d.notebook.feature.notebook.NotebookSetupScreen
 import com.a2d.notebook.feature.notebook.PageCodeScreen
 import com.a2d.notebook.feature.ocr.AndroidOcrCorrectionController
+import com.a2d.notebook.feature.ocr.AndroidOcrManualRetryGateway
 import com.a2d.notebook.feature.ocr.AndroidOcrSearchController
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrCorrectionGateway
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrReadback
@@ -90,6 +91,7 @@ fun A2dNavHost(
             client?.let { AndroidOcrSearchController(FfiAndroidOcrSearchGateway(it)) }
         }
     val ocrReadback = remember(client) { client?.let(::FfiAndroidOcrReadback) }
+    val ocrManualRetryGateway = remember(client) { client?.let(::AndroidOcrManualRetryGateway) }
     val ocrCorrectionController =
         remember(client) {
             client?.let { AndroidOcrCorrectionController(FfiAndroidOcrCorrectionGateway(it)) }
@@ -183,7 +185,11 @@ fun A2dNavHost(
                 },
                 onRetryOcr = { selectedScanId ->
                     scope.launch {
-                        viewerState = enqueueOcrJobForViewer(viewerState, selectedScanId, client)
+                        viewerState = manualRetryOcrJobForViewer(
+                            current = viewerState,
+                            scanId = selectedScanId,
+                            gateway = ocrManualRetryGateway,
+                        )
                     }
                 },
                 onCancelOcr = {
@@ -441,6 +447,37 @@ private suspend fun enqueueOcrJobForViewer(
                     ),
                 )
             }
+        current.copy(
+            preferredScanId = scanId,
+            activeOcrJobId = job.jobId,
+            ocrState = job.toViewerOcrPresentationState(),
+            viewerApiConnected = true,
+        )
+    } catch (failure: Exception) {
+        current.copy(
+            ocrState = failure.toOcrPresentationState(),
+            viewerApiConnected = true,
+        )
+    }
+}
+
+private suspend fun manualRetryOcrJobForViewer(
+    current: PageViewerState,
+    scanId: String,
+    gateway: AndroidOcrManualRetryGateway?,
+): PageViewerState {
+    if (gateway == null) {
+        return current.copy(
+            ocrState =
+                OcrPresentationState(
+                    status = OcrPresentationStatus.Failed,
+                    message = "No open local library is available for OCR retry",
+                ),
+            viewerApiConnected = false,
+        )
+    }
+    return try {
+        val job = gateway.retry(scanId)
         current.copy(
             preferredScanId = scanId,
             activeOcrJobId = job.jobId,
