@@ -94,6 +94,14 @@ impl A2dCore {
         &self,
         request: EnqueueOcrJobRequest,
     ) -> Result<OcrJobSnapshot, A2dError> {
+        let requested_scan_id = a2d_domain::ScanId::parse(&request.scan_id)?;
+        {
+            let storage = self.lock_storage()?;
+            if let Some(existing) = storage.find_active_ocr_job_for_scan(&requested_scan_id)? {
+                return Ok(existing.into());
+            }
+        }
+
         let prepared = self.prepare_ocr_input(PrepareOcrInputRequest {
             scan_id: request.scan_id,
             input_kind: request.input_kind,
@@ -106,9 +114,7 @@ impl A2dCore {
         let input_kind = to_persisted_input_kind(prepared.input_kind);
         let storage = self.lock_storage()?;
 
-        if let Some(existing) =
-            storage.find_active_ocr_job(&scan_id, &input_asset_id, input_kind)?
-        {
+        if let Some(existing) = storage.find_active_ocr_job_for_scan(&scan_id)? {
             return Ok(existing.into());
         }
         let active_count = storage.count_active_ocr_jobs()?;
@@ -196,15 +202,21 @@ impl A2dCore {
             .ok_or_else(|| missing_job_error(&job_id))
     }
 
+    /// Finds the scan's oldest active OCR job regardless of input kind.
+    ///
+    /// Scanner registration normally enqueues an `OcrOptimized` job while Page Viewer may be
+    /// reached from a scan/page route that does not know the durable input identity yet. The queue
+    /// contract is therefore scan-owned: callers receive the actual active job/input identity that
+    /// Rust already persisted instead of selecting a parallel active job by choosing a different
+    /// input kind.
     pub fn find_active_ocr_job_for_scan(
         &self,
         request: EnqueueOcrJobRequest,
     ) -> Result<Option<OcrJobSnapshot>, A2dError> {
         let scan_id = a2d_domain::ScanId::parse(&request.scan_id)?;
-        let input_kind = to_persisted_input_kind(request.input_kind);
         let storage = self.lock_storage()?;
         storage
-            .find_active_ocr_job_for_scan(&scan_id, input_kind)
+            .find_active_ocr_job_for_scan(&scan_id)
             .map(|job| job.map(Into::into))
     }
 
@@ -503,5 +515,194 @@ impl From<PersistedOcrJob> for OcrJobSnapshot {
             last_ocr_run_id: job.last_ocr_run_id.map(|id| id.to_string()),
             cancellation_requested: job.cancellation_requested,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::OpenLibraryRequest;
+    use a2d_domain::{
+        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, Page, PageId,
+        PageKind, PageState, QualityStatus, Scan, ScanId, SmartPageId,
+    };
+    use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    struct ScanFixture {
+        scan_id: ScanId,
+    }
+
+    fn open_test_core() -> (Arc<A2dCore>, PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "a2d-core-ocr-queue-r13-test-{}",
+            PageId::generate()
+        ));
+        let core = A2dCore::open(OpenLibraryRequest {
+            library_path: dir.to_string_lossy().into_owned(),
+        })
+        .unwrap();
+        (core, dir)
+    }
+
+    fn asset(id: AssetId, kind: AssetKind) -> Asset {
+        Asset::new(
+            id.clone(),
+            kind,
+            format!("assets/{}/{}.png", asset_kind_label(kind), id),
+            "image/png".to_string(),
+            1_024,
+            "test-sha256".to_string(),
+            100,
+            true,
+            EncryptionState::Plaintext,
+        )
+    }
+
+    fn asset_kind_label(kind: AssetKind) -> &'static str {
+        match kind {
+            AssetKind::Original => "originals",
+            AssetKind::Corrected => "corrected",
+            AssetKind::Ocr => "ocr",
+            AssetKind::Thumbnail => "thumbnails",
+            AssetKind::Export => "exports",
+        }
+    }
+
+    fn scan_fingerprint() -> String {
+        format!(
+            "scan-content-v1;corrected-sha256={};perceptual=mean-grid-16x24-v1:{}",
+            "a".repeat(64),
+            "b".repeat(16 * 24 * 2)
+        )
+    }
+
+    fn insert_scan_fixture(core: &A2dCore) -> ScanFixture {
+        let page_id = PageId::generate();
+        let original_asset_id = AssetId::generate();
+        let ocr_asset_id = AssetId::generate();
+        let scan_id = ScanId::generate();
+        let page = Page::new(
+            page_id.clone(),
+            PageKind::SmartPage {
+                smart_page_id: SmartPageId::generate(),
+                page_set_id: None,
+                visible_page_number: Some(1),
+            },
+            LayoutId::parse("PAGE").unwrap(),
+            Some("OCR queue R13 page".to_string()),
+            PageState::Scanned,
+            100,
+        );
+        let scan = Scan::new(
+            scan_id.clone(),
+            page_id.clone(),
+            None,
+            CaptureSource::Camera,
+            125,
+            original_asset_id.clone(),
+            None,
+            Some(ocr_asset_id.clone()),
+            None,
+            "test-pipeline".to_string(),
+            QualityStatus::Accepted,
+            Vec::new(),
+            true,
+            None,
+            scan_fingerprint(),
+        );
+        let storage = core.lock_storage().unwrap();
+        storage.insert_page(&page).unwrap();
+        storage
+            .insert_asset(&asset(original_asset_id, AssetKind::Original))
+            .unwrap();
+        storage
+            .insert_asset(&asset(ocr_asset_id, AssetKind::Ocr))
+            .unwrap();
+        storage.insert_scan(&scan).unwrap();
+        ScanFixture { scan_id }
+    }
+
+    fn enqueue_request(scan_id: &ScanId, input_kind: CoreOcrInputKind) -> EnqueueOcrJobRequest {
+        EnqueueOcrJobRequest {
+            scan_id: scan_id.to_string(),
+            input_kind,
+            width_px: 1_000,
+            height_px: 1_400,
+        }
+    }
+
+    #[test]
+    fn active_job_lookup_returns_scanner_created_ocr_optimized_job_for_original_request() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let queued = core
+            .enqueue_ocr_job(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::OcrOptimized,
+            ))
+            .unwrap();
+
+        let found = core
+            .find_active_ocr_job_for_scan(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Original,
+            ))
+            .unwrap()
+            .expect("active OCR job must be found by scan");
+
+        assert_eq!(found.job_id, queued.job_id);
+        assert_eq!(found.input_kind, CoreOcrInputKind::OcrOptimized);
+        assert_eq!(found.status, CoreOcrJobStatus::Queued);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn active_job_lookup_returns_running_ocr_optimized_job_for_original_request() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        core.enqueue_ocr_job(enqueue_request(
+            &fixture.scan_id,
+            CoreOcrInputKind::OcrOptimized,
+        ))
+        .unwrap();
+        let running = core.claim_next_ocr_job().unwrap().unwrap();
+
+        let found = core
+            .find_active_ocr_job_for_scan(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Original,
+            ))
+            .unwrap()
+            .expect("running OCR job must be found by scan");
+
+        assert_eq!(found.job_id, running.job_id);
+        assert_eq!(found.input_kind, CoreOcrInputKind::OcrOptimized);
+        assert_eq!(found.status, CoreOcrJobStatus::Running);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn enqueue_returns_existing_active_job_for_scan_instead_of_parallel_input_kind_job() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let scanner_job = core
+            .enqueue_ocr_job(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::OcrOptimized,
+            ))
+            .unwrap();
+
+        let page_viewer_start = core
+            .enqueue_ocr_job(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Original,
+            ))
+            .unwrap();
+
+        assert_eq!(page_viewer_start.job_id, scanner_job.job_id);
+        assert_eq!(page_viewer_start.input_kind, CoreOcrInputKind::OcrOptimized);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
