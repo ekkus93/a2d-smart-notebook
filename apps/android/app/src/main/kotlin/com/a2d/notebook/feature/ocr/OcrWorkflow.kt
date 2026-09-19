@@ -1,6 +1,10 @@
 package com.a2d.notebook.feature.ocr
 
 import uniffi.a2d_ffi.A2dClient
+import uniffi.a2d_ffi.FinalizeOcrJobRequest as FfiFinalizeOcrJobRequest
+import uniffi.a2d_ffi.FinalizeOcrTextPoint as FfiFinalizeOcrTextPoint
+import uniffi.a2d_ffi.FinalizeOcrTextRegionRequest as FfiFinalizeOcrTextRegionRequest
+import uniffi.a2d_ffi.OcrFinalizationResolution as FfiOcrFinalizationResolution
 import uniffi.a2d_ffi.OcrInputKind as FfiOcrInputKind
 import uniffi.a2d_ffi.OcrRunStatus as FfiOcrRunStatus
 import uniffi.a2d_ffi.OcrTextPoint as FfiOcrTextPoint
@@ -10,13 +14,7 @@ import uniffi.a2d_ffi.RecordOcrRunRequest as FfiRecordOcrRunRequest
 import uniffi.a2d_ffi.RecordOcrTextRegionRequest as FfiRecordOcrTextRegionRequest
 import uniffi.a2d_ffi.RecordOcrTextRegionsRequest as FfiRecordOcrTextRegionsRequest
 
-/**
- * Android-side OCR orchestration around the Rust-owned Milestone 11 OCR APIs.
- *
- * Platform OCR providers may recognize text from the prepared image path, but they do not choose
- * scan identity, asset identity, or SQL-shaped result rows. Those remain delegated to Rust through
- * [RustOcrGateway].
- */
+/** Android-side OCR orchestration around the Rust-owned Milestone 11 OCR APIs. */
 class AndroidOcrWorkflow(
     private val gateway: RustOcrGateway,
     private val provider: AndroidOcrProvider,
@@ -31,22 +29,10 @@ class AndroidOcrWorkflow(
                     message = failure.message ?: "Rust could not prepare an OCR input",
                 )
             }
-
-        val outcome =
-            try {
-                provider.recognize(prepared)
-            } catch (failure: Exception) {
-                AndroidOcrRecognitionOutcome.Unavailable(
-                    reason = OcrUnavailableReason.ProviderFailed,
-                    message = failure.message ?: "OCR provider failed before returning text",
-                    retryAvailable = true,
-                )
-            }
-
-        val recordRequest = outcome.toRecordRequest(request.scanId, prepared)
+        val outcome = recognize(prepared)
         val recorded =
             try {
-                gateway.recordOcrRun(recordRequest)
+                gateway.recordOcrRun(outcome.toRecordRequest(request.scanId, prepared))
             } catch (failure: Exception) {
                 return AndroidOcrWorkflowResult.failed(
                     status = OcrPresentationStatus.Failed,
@@ -54,7 +40,6 @@ class AndroidOcrWorkflow(
                     message = failure.message ?: "Rust rejected the OCR result",
                 )
             }
-
         val recordedRegions =
             if (outcome is AndroidOcrRecognitionOutcome.Detected && outcome.regions.isNotEmpty()) {
                 try {
@@ -75,50 +60,64 @@ class AndroidOcrWorkflow(
             } else {
                 null
             }
-
-        return when (outcome) {
-            is AndroidOcrRecognitionOutcome.Detected ->
-                AndroidOcrWorkflowResult(
-                    status = OcrPresentationStatus.Detected,
-                    preparedInput = prepared,
-                    recordedRun = recorded,
-                    recordedTextRegions = recordedRegions,
-                    textPreview = outcome.fullText.take(TEXT_PREVIEW_LIMIT),
-                    providerLabel = outcome.provider,
-                    modelName = outcome.modelName,
-                    recognizedRegionCount = recordedRegions?.regions?.size ?: 0,
-                )
-
-            is AndroidOcrRecognitionOutcome.NoTextDetected ->
-                AndroidOcrWorkflowResult(
-                    status = OcrPresentationStatus.NoTextDetected,
-                    preparedInput = prepared,
-                    recordedRun = recorded,
-                    providerLabel = outcome.provider,
-                    modelName = outcome.modelName,
-                )
-
-            is AndroidOcrRecognitionOutcome.Unavailable ->
-                AndroidOcrWorkflowResult(
-                    status = OcrPresentationStatus.Unavailable,
-                    preparedInput = prepared,
-                    recordedRun = recorded,
-                    unavailableReason = outcome.reason,
-                    message = outcome.message,
-                    retryAvailable = outcome.retryAvailable,
-                )
-
-            is AndroidOcrRecognitionOutcome.Cancelled ->
-                AndroidOcrWorkflowResult(
-                    status = OcrPresentationStatus.Cancelled,
-                    preparedInput = prepared,
-                    recordedRun = recorded,
-                    unavailableReason = OcrUnavailableReason.Cancelled,
-                    message = outcome.message,
-                    retryAvailable = false,
-                )
-        }
+        return outcome.toWorkflowResult(
+            prepared = prepared,
+            recordedRun = recorded,
+            recordedTextRegions = recordedRegions,
+            finalizedJob = null,
+            recordedRegionCount = recordedRegions?.regions?.size ?: 0,
+        )
     }
+
+    fun runClaimedJob(request: AndroidClaimedOcrStartRequest): AndroidOcrWorkflowResult {
+        val prepared =
+            try {
+                gateway.prepareOcrInput(request.startRequest)
+            } catch (failure: Exception) {
+                return AndroidOcrWorkflowResult.failed(
+                    status = OcrPresentationStatus.Failed,
+                    message = failure.message ?: "Rust could not prepare an OCR input",
+                )
+            }
+        val outcome = recognize(prepared)
+        val finalized =
+            try {
+                gateway.finalizeOcrJob(outcome.toFinalizeRequest(request.jobId, request.attemptCount))
+            } catch (failure: Exception) {
+                return AndroidOcrWorkflowResult.failed(
+                    status = OcrPresentationStatus.Failed,
+                    preparedInput = prepared,
+                    message = failure.message ?: "Rust rejected the OCR finalization result",
+                )
+            }
+        val recordedRun =
+            finalized.ocrRunId?.let { runId ->
+                RecordedAndroidOcrRun(
+                    ocrRunId = runId,
+                    scanId = prepared.scanId,
+                    inputAssetId = prepared.inputAssetId,
+                    status = outcome.recordedStatus(),
+                )
+            }
+        return outcome.toWorkflowResult(
+            prepared = prepared,
+            recordedRun = recordedRun,
+            recordedTextRegions = null,
+            finalizedJob = finalized.job,
+            recordedRegionCount = finalized.recordedRegionCount.toInt(),
+        )
+    }
+
+    private fun recognize(prepared: PreparedAndroidOcrInput): AndroidOcrRecognitionOutcome =
+        try {
+            provider.recognize(prepared)
+        } catch (failure: Exception) {
+            AndroidOcrRecognitionOutcome.Unavailable(
+                reason = OcrUnavailableReason.ProviderFailed,
+                message = failure.message ?: "OCR provider failed before returning text",
+                retryAvailable = true,
+            )
+        }
 }
 
 interface AndroidOcrProvider {
@@ -131,6 +130,9 @@ interface RustOcrGateway {
     fun recordOcrRun(request: AndroidRecordOcrRunRequest): RecordedAndroidOcrRun
 
     fun recordOcrTextRegions(request: AndroidRecordOcrTextRegionsRequest): RecordedAndroidOcrTextRegions
+
+    fun finalizeOcrJob(request: AndroidFinalizeOcrJobRequest): FinalizedAndroidOcrJob =
+        throw UnsupportedOperationException("OCR finalization is not implemented by this gateway")
 }
 
 class FfiRustOcrGateway(private val client: A2dClient) : RustOcrGateway {
@@ -203,6 +205,33 @@ class FfiRustOcrGateway(private val client: A2dClient) : RustOcrGateway {
                 },
         )
     }
+
+    override fun finalizeOcrJob(request: AndroidFinalizeOcrJobRequest): FinalizedAndroidOcrJob {
+        val finalized =
+            client.finalizeOcrJob(
+                FfiFinalizeOcrJobRequest(
+                    jobId = request.jobId,
+                    attemptCount = request.attemptCount,
+                    provider = request.provider,
+                    providerVersion = request.providerVersion,
+                    modelName = request.modelName,
+                    status = request.status.toFfi(),
+                    fullText = request.fullText,
+                    unavailableReason = request.unavailableReason?.toFfi(),
+                    unavailableMessage = request.unavailableMessage,
+                    completedAtMs = request.completedAtMs,
+                    warnings = request.warnings,
+                    retryable = request.retryable,
+                    regions = request.regions.map { it.toFinalizeFfi() },
+                ),
+            )
+        return FinalizedAndroidOcrJob(
+            job = finalized.job.toAndroid(),
+            ocrRunId = finalized.ocrRunId,
+            recordedRegionCount = finalized.recordedRegionCount,
+            resolution = finalized.resolution.toAndroid(),
+        )
+    }
 }
 
 data class AndroidOcrStartRequest(
@@ -210,6 +239,12 @@ data class AndroidOcrStartRequest(
     val inputKind: OcrInputKind,
     val widthPx: UInt,
     val heightPx: UInt,
+)
+
+data class AndroidClaimedOcrStartRequest(
+    val jobId: String,
+    val attemptCount: UInt,
+    val startRequest: AndroidOcrStartRequest,
 )
 
 data class PreparedAndroidOcrInput(
@@ -279,11 +314,35 @@ data class RecordedAndroidOcrTextRegions(
     val regions: List<RecordedAndroidOcrTextRegion>,
 )
 
+data class AndroidFinalizeOcrJobRequest(
+    val jobId: String,
+    val attemptCount: UInt,
+    val provider: String,
+    val providerVersion: String,
+    val modelName: String?,
+    val status: OcrRunStatus,
+    val fullText: String,
+    val unavailableReason: OcrUnavailableReason?,
+    val unavailableMessage: String?,
+    val completedAtMs: Long?,
+    val warnings: List<String>,
+    val retryable: Boolean,
+    val regions: List<AndroidRecordOcrTextRegionRequest>,
+)
+
+data class FinalizedAndroidOcrJob(
+    val job: AndroidOcrQueueJob,
+    val ocrRunId: String?,
+    val recordedRegionCount: UInt,
+    val resolution: OcrFinalizationResolution,
+)
+
 data class AndroidOcrWorkflowResult(
     val status: OcrPresentationStatus,
     val preparedInput: PreparedAndroidOcrInput? = null,
     val recordedRun: RecordedAndroidOcrRun? = null,
     val recordedTextRegions: RecordedAndroidOcrTextRegions? = null,
+    val finalizedJob: AndroidOcrQueueJob? = null,
     val textPreview: String? = null,
     val providerLabel: String? = null,
     val modelName: String? = null,
@@ -370,6 +429,13 @@ enum class OcrUnavailableReason(val label: String) {
     Cancelled("cancelled"),
 }
 
+enum class OcrFinalizationResolution {
+    Completed,
+    RetryScheduled,
+    TerminalUnavailable,
+    CancelledBeforeCommit,
+}
+
 sealed class AndroidOcrRecognitionOutcome {
     abstract val provider: String
     abstract val providerVersion: String
@@ -416,15 +482,66 @@ sealed class AndroidOcrRecognitionOutcome {
     ) : AndroidOcrRecognitionOutcome()
 }
 
-private fun AndroidOcrRecognitionOutcome.toRecordRequest(
-    scanId: String,
+private fun AndroidOcrRecognitionOutcome.toWorkflowResult(
     prepared: PreparedAndroidOcrInput,
-): AndroidRecordOcrRunRequest =
+    recordedRun: RecordedAndroidOcrRun?,
+    recordedTextRegions: RecordedAndroidOcrTextRegions?,
+    finalizedJob: AndroidOcrQueueJob?,
+    recordedRegionCount: Int,
+): AndroidOcrWorkflowResult =
     when (this) {
         is AndroidOcrRecognitionOutcome.Detected ->
-            AndroidRecordOcrRunRequest(
-                scanId = scanId,
-                inputAssetId = prepared.inputAssetId,
+            AndroidOcrWorkflowResult(
+                status = OcrPresentationStatus.Detected,
+                preparedInput = prepared,
+                recordedRun = recordedRun,
+                recordedTextRegions = recordedTextRegions,
+                finalizedJob = finalizedJob,
+                textPreview = fullText.take(TEXT_PREVIEW_LIMIT),
+                providerLabel = provider,
+                modelName = modelName,
+                recognizedRegionCount = recordedRegionCount,
+            )
+        is AndroidOcrRecognitionOutcome.NoTextDetected ->
+            AndroidOcrWorkflowResult(
+                status = OcrPresentationStatus.NoTextDetected,
+                preparedInput = prepared,
+                recordedRun = recordedRun,
+                finalizedJob = finalizedJob,
+                providerLabel = provider,
+                modelName = modelName,
+            )
+        is AndroidOcrRecognitionOutcome.Unavailable ->
+            AndroidOcrWorkflowResult(
+                status = OcrPresentationStatus.Unavailable,
+                preparedInput = prepared,
+                recordedRun = recordedRun,
+                finalizedJob = finalizedJob,
+                unavailableReason = reason,
+                message = message,
+                retryAvailable = retryAvailable,
+            )
+        is AndroidOcrRecognitionOutcome.Cancelled ->
+            AndroidOcrWorkflowResult(
+                status = OcrPresentationStatus.Cancelled,
+                preparedInput = prepared,
+                recordedRun = recordedRun,
+                finalizedJob = finalizedJob,
+                unavailableReason = OcrUnavailableReason.Cancelled,
+                message = message,
+                retryAvailable = false,
+            )
+    }
+
+private fun AndroidOcrRecognitionOutcome.toFinalizeRequest(
+    jobId: String,
+    attemptCount: UInt,
+): AndroidFinalizeOcrJobRequest =
+    when (this) {
+        is AndroidOcrRecognitionOutcome.Detected ->
+            AndroidFinalizeOcrJobRequest(
+                jobId = jobId,
+                attemptCount = attemptCount,
                 provider = provider,
                 providerVersion = providerVersion,
                 modelName = modelName,
@@ -434,12 +551,13 @@ private fun AndroidOcrRecognitionOutcome.toRecordRequest(
                 unavailableMessage = null,
                 completedAtMs = completedAtMs,
                 warnings = warnings,
+                retryable = false,
+                regions = regions.map { it.toRecordRequest() },
             )
-
         is AndroidOcrRecognitionOutcome.NoTextDetected ->
-            AndroidRecordOcrRunRequest(
-                scanId = scanId,
-                inputAssetId = prepared.inputAssetId,
+            AndroidFinalizeOcrJobRequest(
+                jobId = jobId,
+                attemptCount = attemptCount,
                 provider = provider,
                 providerVersion = providerVersion,
                 modelName = modelName,
@@ -449,12 +567,13 @@ private fun AndroidOcrRecognitionOutcome.toRecordRequest(
                 unavailableMessage = null,
                 completedAtMs = completedAtMs,
                 warnings = warnings,
+                retryable = false,
+                regions = emptyList(),
             )
-
         is AndroidOcrRecognitionOutcome.Unavailable ->
-            AndroidRecordOcrRunRequest(
-                scanId = scanId,
-                inputAssetId = prepared.inputAssetId,
+            AndroidFinalizeOcrJobRequest(
+                jobId = jobId,
+                attemptCount = attemptCount,
                 provider = provider,
                 providerVersion = providerVersion,
                 modelName = modelName,
@@ -464,12 +583,13 @@ private fun AndroidOcrRecognitionOutcome.toRecordRequest(
                 unavailableMessage = message,
                 completedAtMs = completedAtMs,
                 warnings = warnings,
+                retryable = retryAvailable,
+                regions = emptyList(),
             )
-
         is AndroidOcrRecognitionOutcome.Cancelled ->
-            AndroidRecordOcrRunRequest(
-                scanId = scanId,
-                inputAssetId = prepared.inputAssetId,
+            AndroidFinalizeOcrJobRequest(
+                jobId = jobId,
+                attemptCount = attemptCount,
                 provider = provider,
                 providerVersion = providerVersion,
                 modelName = modelName,
@@ -479,16 +599,36 @@ private fun AndroidOcrRecognitionOutcome.toRecordRequest(
                 unavailableMessage = message,
                 completedAtMs = completedAtMs,
                 warnings = warnings,
+                retryable = false,
+                regions = emptyList(),
             )
     }
 
+private fun AndroidOcrRecognitionOutcome.toRecordRequest(
+    scanId: String,
+    prepared: PreparedAndroidOcrInput,
+): AndroidRecordOcrRunRequest =
+    when (this) {
+        is AndroidOcrRecognitionOutcome.Detected ->
+            AndroidRecordOcrRunRequest(scanId, prepared.inputAssetId, provider, providerVersion, modelName, OcrRunStatus.Detected, fullText, null, null, completedAtMs, warnings)
+        is AndroidOcrRecognitionOutcome.NoTextDetected ->
+            AndroidRecordOcrRunRequest(scanId, prepared.inputAssetId, provider, providerVersion, modelName, OcrRunStatus.NoTextDetected, "", null, null, completedAtMs, warnings)
+        is AndroidOcrRecognitionOutcome.Unavailable ->
+            AndroidRecordOcrRunRequest(scanId, prepared.inputAssetId, provider, providerVersion, modelName, OcrRunStatus.Unavailable, "", reason, message, completedAtMs, warnings)
+        is AndroidOcrRecognitionOutcome.Cancelled ->
+            AndroidRecordOcrRunRequest(scanId, prepared.inputAssetId, provider, providerVersion, modelName, OcrRunStatus.Unavailable, "", OcrUnavailableReason.Cancelled, message, completedAtMs, warnings)
+    }
+
+private fun AndroidOcrRecognitionOutcome.recordedStatus(): OcrRunStatus =
+    when (this) {
+        is AndroidOcrRecognitionOutcome.Detected -> OcrRunStatus.Detected
+        is AndroidOcrRecognitionOutcome.NoTextDetected -> OcrRunStatus.NoTextDetected
+        is AndroidOcrRecognitionOutcome.Unavailable,
+        is AndroidOcrRecognitionOutcome.Cancelled -> OcrRunStatus.Unavailable
+    }
+
 private fun AndroidRecognizedTextRegion.toRecordRequest(): AndroidRecordOcrTextRegionRequest =
-    AndroidRecordOcrTextRegionRequest(
-        polygon = polygon,
-        text = text,
-        confidence = confidence,
-        createdAtMs = createdAtMs,
-    )
+    AndroidRecordOcrTextRegionRequest(polygon, text, confidence, createdAtMs)
 
 private fun AndroidRecordOcrTextRegionRequest.toFfi(): FfiRecordOcrTextRegionRequest =
     FfiRecordOcrTextRegionRequest(
@@ -497,6 +637,22 @@ private fun AndroidRecordOcrTextRegionRequest.toFfi(): FfiRecordOcrTextRegionReq
         confidence = confidence,
         createdAtMs = createdAtMs,
     )
+
+private fun AndroidRecordOcrTextRegionRequest.toFinalizeFfi(): FfiFinalizeOcrTextRegionRequest =
+    FfiFinalizeOcrTextRegionRequest(
+        polygon = polygon.map { point -> FfiFinalizeOcrTextPoint(x = point.x, y = point.y) },
+        text = text,
+        confidence = confidence,
+        createdAtMs = createdAtMs,
+    )
+
+private fun FfiOcrFinalizationResolution.toAndroid(): OcrFinalizationResolution =
+    when (this) {
+        FfiOcrFinalizationResolution.COMPLETED -> OcrFinalizationResolution.Completed
+        FfiOcrFinalizationResolution.RETRY_SCHEDULED -> OcrFinalizationResolution.RetryScheduled
+        FfiOcrFinalizationResolution.TERMINAL_UNAVAILABLE -> OcrFinalizationResolution.TerminalUnavailable
+        FfiOcrFinalizationResolution.CANCELLED_BEFORE_COMMIT -> OcrFinalizationResolution.CancelledBeforeCommit
+    }
 
 private fun OcrInputKind.toFfi(): FfiOcrInputKind =
     when (this) {
