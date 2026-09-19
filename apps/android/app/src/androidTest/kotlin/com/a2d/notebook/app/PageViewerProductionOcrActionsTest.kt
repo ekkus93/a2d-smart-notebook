@@ -72,6 +72,11 @@ class PageViewerProductionOcrActionsTest {
             assertEquals(scan.scanId, runningJob.scanId)
             assertEquals(OcrQueueJobStatus.RUNNING, runningJob.status)
             assertEquals(1u, runningJob.attemptCount)
+            openProductionPageViewer(client = client, scan = scan)
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("attempt 1", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("attempt 1", substring = true).assertIsDisplayed()
             composeRule.onNodeWithTag(PageViewerTestTags.OCR_CANCEL).performScrollTo().performClick()
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule.onAllNodesWithText("cancellation requested", substring = true, ignoreCase = true).fetchSemanticsNodes().isNotEmpty()
@@ -150,6 +155,7 @@ class PageViewerProductionOcrActionsTest {
             val retryJob = requireNotNull(client.claimNextOcrJob()) { "Retry OCR must enqueue a Rust-owned durable job" }
             assertEquals(scan.scanId, retryJob.scanId)
             assertEquals(OcrQueueJobStatus.RUNNING, retryJob.status)
+            assertEquals(1u, retryJob.attemptCount)
         } finally { root.deleteRecursively() }
     }
 
