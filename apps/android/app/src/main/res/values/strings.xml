@@ -102,7 +102,7 @@
     <string name="page_viewer_updated">Updated: %1$s</string>
     <string name="page_viewer_needs_review_badge">Needs Review</string>
     <string name="page_viewer_boundary_title">Page viewer data boundary</string>
-    <string name="page_viewer_api_boundary">This screen is the presentation shell for page viewing. A later Rust page-view API will supply durable original, corrected, OCR, annotation, related-page, and skill-result rows. The UI does not fabricate images, OCR text, annotations, related pages, or model output.</string>
+    <string name="page_viewer_api_boundary">Page viewing hydrates durable scan metadata and OCR state from the open local Rust library. Annotations, related pages, and skill-result rows remain separate presentation work; the UI does not fabricate missing durable data.</string>
     <string name="page_viewer_original_title">Original</string>
     <string name="page_viewer_original_available">Original scan is available from Rust-owned asset metadata.</string>
     <string name="page_viewer_original_unavailable">No original scan is displayed until Rust supplies an immutable original asset.</string>
@@ -111,7 +111,7 @@
     <string name="page_viewer_corrected_unavailable">No corrected image is displayed until Rust supplies a derived corrected asset.</string>
     <string name="page_viewer_text_title">OCR text</string>
     <string name="page_viewer_text_available">Recognized text is available from OCR provenance.</string>
-    <string name="page_viewer_text_unavailable">OCR text remains unavailable until Milestone 11 supplies recognized and corrected text.</string>
+    <string name="page_viewer_text_unavailable">No persisted OCR text is available for this scan yet. Run OCR to create a durable local result.</string>
     <string name="page_viewer_text_not_started">OCR has not run for this page yet. Android must ask Rust to prepare the scan-owned image before any provider reads it.</string>
     <string name="page_viewer_text_preparing">Preparing OCR input through Rust scan and asset validation…</string>
     <string name="page_viewer_text_recognizing">Recognizing text with the Android OCR provider…</string>
@@ -128,7 +128,7 @@
     <string name="page_viewer_text_message">OCR detail: %1$s</string>
     <string name="page_viewer_start_ocr">Run OCR</string>
     <string name="page_viewer_split_title">Split</string>
-    <string name="page_viewer_split_boundary">Split image/text view remains disabled until both corrected image and OCR text are available from Rust-owned records.</string>
+    <string name="page_viewer_split_boundary">Split image/text view is enabled only when the required image and OCR text are both available from Rust-owned records.</string>
     <string name="page_viewer_metadata_title">Metadata</string>
     <string name="page_viewer_metadata_detail">Page %1$s is currently %2$s. Detailed capture, quality, storage, and provenance metadata must come from Rust.</string>
     <string name="page_viewer_versions_title">Versions</string>
