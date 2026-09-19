@@ -72,11 +72,6 @@ class PageViewerProductionOcrActionsTest {
             assertEquals(scan.scanId, runningJob.scanId)
             assertEquals(OcrQueueJobStatus.RUNNING, runningJob.status)
             assertEquals(1u, runningJob.attemptCount)
-            openProductionPageViewer(client = client, scan = scan)
-            composeRule.waitUntil(timeoutMillis = 10_000) {
-                composeRule.onAllNodesWithText("attempt 1", substring = true).fetchSemanticsNodes().isNotEmpty()
-            }
-            composeRule.onNodeWithText("attempt 1", substring = true).assertIsDisplayed()
             composeRule.onNodeWithTag(PageViewerTestTags.OCR_CANCEL).performScrollTo().performClick()
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule.onAllNodesWithText("cancellation requested", substring = true, ignoreCase = true).fetchSemanticsNodes().isNotEmpty()
@@ -85,6 +80,26 @@ class PageViewerProductionOcrActionsTest {
             assertEquals(runningJob.jobId, cancelledJob.jobId)
             assertEquals(OcrQueueJobStatus.RUNNING, cancelledJob.status)
             assertTrue(cancelledJob.cancellationRequested)
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test
+    fun pageViewerRouteOpenHydratesRunningOcrAttemptFromRustQueue() {
+        val root = composeRule.activity.filesDir.resolve("page-viewer-ocr-running-${UUID.randomUUID()}")
+        val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
+        try {
+            val scan = registerRealScan(client = client, root = root)
+            val queuedJob = client.enqueueOcrJob(EnqueueOcrJobRequest(scanId = scan.scanId, inputKind = OcrInputKind.ORIGINAL, widthPx = 1800u, heightPx = 2200u))
+            val runningJob = requireNotNull(client.claimNextOcrJob()) { "Fixture must claim the durable OCR job" }
+            assertEquals(queuedJob.jobId, runningJob.jobId)
+            assertEquals(OcrQueueJobStatus.RUNNING, runningJob.status)
+            assertEquals(1u, runningJob.attemptCount)
+            openProductionPageViewer(client = client, scan = scan)
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("attempt 1", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("attempt 1", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_CANCEL).performScrollTo().assertIsEnabled()
         } finally { root.deleteRecursively() }
     }
 
