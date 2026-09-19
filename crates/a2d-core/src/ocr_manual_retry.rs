@@ -192,7 +192,7 @@ mod tests {
         let mut job = storage.get_ocr_job(&job_id).unwrap().unwrap();
         job.status = PersistedOcrJobStatus::Unavailable;
         job.attempt_count = attempt_count;
-        job.completed_at_ms = Some(200);
+        job.completed_at_ms = Some(job.created_at_ms);
         job.retryable = false;
         job.next_retry_at_ms = None;
         job.provider = Some("manual-retry-provider".to_string());
