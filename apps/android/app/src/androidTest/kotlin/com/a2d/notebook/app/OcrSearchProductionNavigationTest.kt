@@ -5,9 +5,12 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -20,6 +23,7 @@ import com.a2d.notebook.feature.home.HomeScreenTestTags
 import com.a2d.notebook.feature.library.LibraryHubTestTags
 import com.a2d.notebook.feature.library.PageViewerTestTags
 import com.a2d.notebook.feature.ocr.OcrSearchTestTags
+import com.a2d.notebook.navigation.A2dDestinations
 import com.a2d.notebook.navigation.A2dNavHost
 import java.util.UUID
 import org.junit.Assert.assertEquals
@@ -29,6 +33,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.CreateNotebookRequest
+import uniffi.a2d_ffi.ListOcrCorrectionsForScanRequest
 import uniffi.a2d_ffi.OcrInputKind
 import uniffi.a2d_ffi.OcrRunStatus
 import uniffi.a2d_ffi.OpenLibraryRequest
@@ -215,6 +220,74 @@ class OcrSearchProductionNavigationTest {
             composeRule.onNodeWithTag(OcrSearchTestTags.OPEN_PAGE).performScrollTo().performClick()
             composeRule.onNodeWithTag(PageViewerTestTags.TITLE).assertIsDisplayed()
             composeRule.onNodeWithText("Page ID: $pageId").assertIsDisplayed()
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText(
+                    "persisted production notebook sentinel",
+                    substring = true,
+                ).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText(
+                "persisted production notebook sentinel",
+                substring = true,
+            ).assertIsDisplayed()
+
+            // Continue through the production Page Viewer correction seam instead of switching to
+            // a test-only controller. This makes one bounded scenario sentinel the Search controller,
+            // hit navigation, persisted OCR readback, correction wiring, and durable correction history.
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_CORRECTION)
+                .performScrollTo()
+                .assertIsDisplayed()
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_CORRECTION_INPUT)
+                .performScrollTo()
+                .performTextInput("corrected production notebook sentinel")
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_CORRECTION_SUBMIT)
+                .performScrollTo()
+                .assertIsEnabled()
+                .performClick()
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText(
+                    "Corrected text: corrected production notebook sentinel",
+                    substring = true,
+                ).fetchSemanticsNodes().isNotEmpty()
+            }
+
+            val corrections =
+                client.listOcrCorrectionsForScan(
+                    ListOcrCorrectionsForScanRequest(scanId = registered.scanId, limit = 10u),
+                )
+            assertEquals(1, corrections.corrections.size)
+            assertEquals(
+                "corrected production notebook sentinel",
+                corrections.corrections.single().correctedText,
+            )
+            assertEquals(
+                "persisted production notebook sentinel",
+                corrections.corrections.single().previousText,
+            )
+
+            // Recreate the production route and prove correction history is hydrated from Rust, not
+            // retained only in the previous composition's Kotlin state.
+            composeRule.activity.setContent {
+                MaterialTheme {
+                    val navController = rememberNavController()
+                    LaunchedEffect(pageId, registered.scanId) {
+                        navController.navigate(A2dDestinations.pageViewer(pageId, registered.scanId))
+                    }
+                    A2dNavHost(navController = navController, client = client)
+                }
+            }
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText(
+                    "Corrected text: corrected production notebook sentinel",
+                    substring = true,
+                ).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText(
+                "Text preview: persisted production notebook sentinel",
+                substring = true,
+            ).assertIsDisplayed()
         } finally {
             root.deleteRecursively()
         }
