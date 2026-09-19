@@ -285,7 +285,7 @@ class OcrSearchProductionNavigationTest {
             composeRule.onNodeWithText(
                 "Text preview: persisted production notebook sentinel",
                 substring = true,
-            ).assertIsDisplayed()
+            ).performScrollTo().assertIsDisplayed()
         } finally {
             root.deleteRecursively()
         }
