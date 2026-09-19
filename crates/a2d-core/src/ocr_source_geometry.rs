@@ -267,8 +267,8 @@ mod tests {
     use super::*;
     use crate::OpenLibraryRequest;
     use a2d_domain::{
-        CaptureSource, EncryptionState, LayoutId, Page, PageId, PageKind, PageState,
-        QualityStatus, SmartPageId,
+        CaptureSource, EncryptionState, LayoutId, Page, PageId, PageKind, PageState, QualityStatus,
+        SmartPageId,
     };
     use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
     use image::{ImageBuffer, Rgba};
@@ -296,11 +296,8 @@ mod tests {
     fn write_png(root: &Path, relative_path: &str, width: u32, height: u32) -> u64 {
         let path = root.join(relative_path);
         path.parent().unwrap().mkdirs_or_create();
-        let image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_pixel(
-            width,
-            height,
-            Rgba([255, 255, 255, 255]),
-        );
+        let image =
+            ImageBuffer::<Rgba<u8>, Vec<u8>>::from_pixel(width, height, Rgba([255, 255, 255, 255]));
         image.save(&path).unwrap();
         path.metadata().unwrap().len()
     }
