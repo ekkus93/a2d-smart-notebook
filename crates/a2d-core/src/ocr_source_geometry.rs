@@ -7,7 +7,7 @@
 
 use std::fs::File;
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use a2d_domain::{
     A2dError, Asset, AssetId, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, Scan, ScanId,
@@ -15,7 +15,8 @@ use a2d_domain::{
 use a2d_storage::{AssetRepository, ScanRepository};
 use image::{ImageFormat, ImageReader, Limits};
 
-use super::{A2dCore, CoreOcrInputKind};
+use super::A2dCore;
+use crate::CoreOcrInputKind;
 
 const MAX_OCR_SOURCE_DIMENSION_PX: u32 = 12_000;
 const MAX_OCR_SOURCE_PIXELS: u64 = 80_000_000;
@@ -271,6 +272,7 @@ mod tests {
     };
     use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
     use image::{ImageBuffer, Rgba};
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     struct ScanFixture {
@@ -294,7 +296,11 @@ mod tests {
     fn write_png(root: &Path, relative_path: &str, width: u32, height: u32) -> u64 {
         let path = root.join(relative_path);
         path.parent().unwrap().mkdirs_or_create();
-        let image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_pixel(width, height, Rgba([255, 255, 255, 255]));
+        let image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_pixel(
+            width,
+            height,
+            Rgba([255, 255, 255, 255]),
+        );
         image.save(&path).unwrap();
         path.metadata().unwrap().len()
     }
@@ -430,7 +436,10 @@ mod tests {
     fn missing_source_file_fails_closed() {
         let (core, root) = open_test_core("missing");
         let fixture = insert_scan_fixture(&core, &root);
-        let missing_file = root.join(format!("assets/originals/{}.png", fixture.original_asset_id));
+        let missing_file = root.join(format!(
+            "assets/originals/{}.png",
+            fixture.original_asset_id
+        ));
         std::fs::remove_file(missing_file).unwrap();
 
         let error = core
