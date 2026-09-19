@@ -583,7 +583,10 @@ mod tests {
                 }],
             })
             .unwrap_err();
-        assert_eq!(err.code.to_string(), "DOMAIN_OCR_POLYGON_POINT_COUNT_INVALID");
+        assert_eq!(
+            err.code.to_string(),
+            "DOMAIN_OCR_POLYGON_POINT_COUNT_INVALID"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -611,7 +614,10 @@ mod tests {
                 regions: vec![region("fabricated", Some(300))],
             })
             .unwrap_err();
-        assert_eq!(err.code.to_string(), "STORAGE_OCR_TEXT_REGION_RUN_STATUS_INVALID");
+        assert_eq!(
+            err.code.to_string(),
+            "STORAGE_OCR_TEXT_REGION_RUN_STATUS_INVALID"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -622,7 +628,9 @@ mod tests {
         let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
         let other_asset_id = AssetId::generate();
         let storage = core.lock_storage().unwrap();
-        storage.insert_asset(&asset(other_asset_id.clone())).unwrap();
+        storage
+            .insert_asset(&asset(other_asset_id.clone()))
+            .unwrap();
         drop(storage);
         let mismatched_run = OcrRun::detected(
             OcrRunId::generate(),
@@ -648,7 +656,10 @@ mod tests {
                 regions: vec![region("mismatch", Some(300))],
             })
             .unwrap_err();
-        assert_eq!(err.code.to_string(), "STORAGE_OCR_TEXT_REGION_INPUT_MISMATCH");
+        assert_eq!(
+            err.code.to_string(),
+            "STORAGE_OCR_TEXT_REGION_INPUT_MISMATCH"
+        );
         assert_ne!(run_id, mismatched_run_id);
         std::fs::remove_dir_all(&dir).ok();
     }
