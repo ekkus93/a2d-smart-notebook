@@ -46,6 +46,7 @@ class PageViewerUiTest {
         composeRule.onNodeWithTag(PageViewerTestTags.SUMMARY).assertIsDisplayed()
         composeRule.onNodeWithText("Page ID: page-empty").assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.API_BOUNDARY).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("does not fabricate missing durable data", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.ORIGINAL).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.CORRECTED).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
@@ -57,10 +58,6 @@ class PageViewerUiTest {
         composeRule.onNodeWithTag(PageViewerTestTags.RELATED).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.SKILL_RESULTS).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.VERSIONS).performScrollTo().assertIsDisplayed()
-        composeRule
-            .onNodeWithText("does not fabricate images, OCR text, annotations", substring = true)
-            .performScrollTo()
-            .assertIsDisplayed()
     }
 
     @Test
