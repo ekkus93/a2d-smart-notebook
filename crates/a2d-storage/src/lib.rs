@@ -27,6 +27,7 @@ mod json_columns;
 mod migration_history;
 mod migrations;
 mod ocr_job_repository;
+mod ocr_manual_retry_repository;
 pub use ocr_job_repository::{
     OcrJobRepository, PersistedOcrInputKind, PersistedOcrJob, PersistedOcrJobStatus,
     PersistedOcrProviderAvailability,

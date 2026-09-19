@@ -12,6 +12,9 @@ use super::A2dCore;
 mod ocr_queue;
 pub use ocr_queue::*;
 
+#[path = "ocr_manual_retry.rs"]
+mod ocr_manual_retry;
+
 #[cfg(test)]
 #[path = "ocr_retry_policy_tests.rs"]
 mod ocr_retry_policy_tests;
