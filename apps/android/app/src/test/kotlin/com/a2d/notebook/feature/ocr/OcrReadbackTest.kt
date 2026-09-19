@@ -80,6 +80,7 @@ class OcrReadbackTest {
                         fullText = "",
                         unavailableReason = OcrUnavailableReason.ProviderFailed,
                         unavailableMessage = "provider failed before returning text",
+                        retryAvailable = true,
                     ),
             )
 
@@ -120,6 +121,7 @@ class OcrReadbackTest {
         fullText: String,
         unavailableReason: OcrUnavailableReason? = null,
         unavailableMessage: String? = null,
+        retryAvailable: Boolean = false,
         textRegionCount: Int = 0,
         textRegions: List<LoadedAndroidOcrTextRegion> = emptyList(),
     ): LoadedAndroidOcrRun =
@@ -134,6 +136,7 @@ class OcrReadbackTest {
             fullText = fullText,
             unavailableReason = unavailableReason,
             unavailableMessage = unavailableMessage,
+            retryAvailable = retryAvailable,
             completedAtMs = 300,
             warnings = emptyList(),
             textRegionCount = textRegionCount,
@@ -151,7 +154,7 @@ class OcrReadbackTest {
                     OcrTextPoint(x = 10.0f, y = 10.0f),
                 ),
             text = text,
-            confidence = 0.91f,
+            confidence = 0.9f,
             createdAtMs = 300,
         )
 }

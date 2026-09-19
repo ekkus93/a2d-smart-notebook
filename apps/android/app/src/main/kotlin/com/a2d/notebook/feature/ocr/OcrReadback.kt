@@ -40,6 +40,7 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
                         fullText = run.fullText,
                         unavailableReason = run.unavailableReason?.toAndroid(),
                         unavailableMessage = run.unavailableMessage,
+                        retryAvailable = run.retryAvailable,
                         completedAtMs = run.completedAtMs,
                         warnings = run.warnings,
                         textRegionCount = run.textRegionCount.toInt(),
@@ -84,6 +85,7 @@ data class LoadedAndroidOcrRun(
     val fullText: String,
     val unavailableReason: OcrUnavailableReason?,
     val unavailableMessage: String?,
+    val retryAvailable: Boolean,
     val completedAtMs: Long?,
     val warnings: List<String>,
     val textRegionCount: Int,
@@ -109,7 +111,7 @@ data class LoadedAndroidOcrRun(
                 },
             unavailableReason = unavailableReason?.label,
             message = unavailableMessage,
-            retryAvailable = unavailableReason.isRetryableReadbackUnavailableReason(),
+            retryAvailable = retryAvailable,
             cancelAvailable = false,
         )
 
@@ -155,19 +157,6 @@ private fun FfiOcrUnavailableReason.toAndroid(): OcrUnavailableReason =
         FfiOcrUnavailableReason.RESOURCE_UNAVAILABLE -> OcrUnavailableReason.ResourceUnavailable
         FfiOcrUnavailableReason.UNSUPPORTED_INPUT -> OcrUnavailableReason.UnsupportedInput
         FfiOcrUnavailableReason.CANCELLED -> OcrUnavailableReason.Cancelled
-    }
-
-private fun OcrUnavailableReason?.isRetryableReadbackUnavailableReason(): Boolean =
-    when (this) {
-        OcrUnavailableReason.ProviderUnavailable,
-        OcrUnavailableReason.ProviderFailed,
-        OcrUnavailableReason.ResourceUnavailable,
-        -> true
-
-        OcrUnavailableReason.UnsupportedInput,
-        OcrUnavailableReason.Cancelled,
-        null,
-        -> false
     }
 
 private const val TEXT_PREVIEW_LIMIT = 240

@@ -8,86 +8,88 @@ import org.junit.Test
 
 class OcrRegionOverlayTest {
     @Test
-    fun noPersistedRegionsKeepsOverlayDisabled() {
-        val state =
-            OcrRegionOverlayState.fromPersisted(
-                LoadedAndroidOcrOutput(
-                    scanId = "scan-1",
-                    latestRun = loadedRun(textRegions = emptyList()),
-                ),
-            )
+    fun fitTransformUsesAuthoritativeSourceDimensionsWithLetterboxOffsets() {
+        val transform = OcrImageFitTransform.fit(sourceWidth = 400f, sourceHeight = 200f, viewportWidth = 300f, viewportHeight = 300f)
 
-        assertFalse(state.enabled)
-        assertTrue(state.renderableRegions.isEmpty())
-        assertNull(state.coordinateFrame)
+        assertEquals(0.75f, transform.scale, 0.0001f)
+        assertEquals(0f, transform.offsetX, 0.0001f)
+        assertEquals(75f, transform.offsetY, 0.0001f)
+        assertEquals(OcrOverlayPoint(0f, 75f), transform.sourceToViewport(OcrOverlayPoint(0f, 0f)))
+        assertEquals(OcrOverlayPoint(300f, 225f), transform.sourceToViewport(OcrOverlayPoint(400f, 200f)))
     }
 
     @Test
-    fun persistedDetectedRegionsArePreservedButNotRenderedWithoutSourceGeometry() {
-        val region = loadedRegion()
+    fun fitTransformPreservesNonSquareGeometryAndMapsSelectionBackToSource() {
+        val transform = OcrImageFitTransform.fit(sourceWidth = 200f, sourceHeight = 400f, viewportWidth = 400f, viewportHeight = 300f)
+        val viewportPoint = transform.sourceToViewport(OcrOverlayPoint(100f, 200f))
 
-        val state =
-            OcrRegionOverlayState.fromPersisted(
-                LoadedAndroidOcrOutput(
-                    scanId = "scan-1",
-                    latestRun = loadedRun(textRegions = listOf(region)),
-                ),
-            )
-
-        assertFalse(state.enabled)
-        assertEquals("text-region-1", state.regions.single().textRegionId)
-        assertEquals("stored text", state.regions.single().text)
-        assertEquals(0.91f, state.regions.single().confidence)
-        assertEquals(region.polygon, state.regions.single().polygon)
-        assertTrue(state.renderableRegions.isEmpty())
-        assertNull(state.coordinateFrame)
+        assertEquals(0.75f, transform.scale, 0.0001f)
+        assertEquals(125f, transform.offsetX, 0.0001f)
+        assertEquals(0f, transform.offsetY, 0.0001f)
+        assertEquals(OcrOverlayPoint(200f, 150f), viewportPoint)
+        assertEquals(OcrOverlayPoint(100f, 200f), transform.viewportToSource(viewportPoint.x, viewportPoint.y))
     }
 
     @Test
-    fun explicitSourceGeometryEnablesRegionRendering() {
-        val region = loadedRegion()
+    fun viewportToSourceRejectsLetterboxAndOutOfImageTouches() {
+        val transform = OcrImageFitTransform.fit(sourceWidth = 400f, sourceHeight = 200f, viewportWidth = 300f, viewportHeight = 300f)
 
-        val state =
-            OcrRegionOverlayState.withSourceGeometry(
-                sourceImageWidth = 240,
-                sourceImageHeight = 120,
-                regions = listOf(region.toOverlayRegion()),
-            )
-
-        assertTrue(state.enabled)
-        assertEquals("text-region-1", state.renderableRegions.single().textRegionId)
-        assertEquals("stored text", state.renderableRegions.single().text)
-        assertEquals(0.91f, state.renderableRegions.single().confidence)
-        assertEquals(region.polygon, state.renderableRegions.single().polygon)
-        assertEquals(240f, state.coordinateFrame?.width)
-        assertEquals(120f, state.coordinateFrame?.height)
+        assertNull(transform.viewportToSource(150f, 20f))
+        assertNull(transform.viewportToSource(150f, 260f))
+        assertNull(transform.viewportToSource(-1f, 100f))
+        assertEquals(OcrOverlayPoint(200f, 100f), transform.viewportToSource(150f, 150f))
     }
 
     @Test
-    fun unavailableRunCannotExposeTextRegionOverlay() {
+    fun persistedRegionsRetainSourceGeometryAndSupportEdgeSelection() {
         val state =
             OcrRegionOverlayState.fromPersisted(
                 LoadedAndroidOcrOutput(
                     scanId = "scan-1",
                     latestRun =
                         loadedRun(
-                            status = OcrRunStatus.Unavailable,
-                            textRegions = listOf(loadedRegion()),
+                            textRegions =
+                                listOf(
+                                    loadedRegion(
+                                        polygon =
+                                            listOf(
+                                                OcrTextPoint(0f, 0f),
+                                                OcrTextPoint(40f, 0f),
+                                                OcrTextPoint(40f, 40f),
+                                                OcrTextPoint(0f, 40f),
+                                            ),
+                                    ),
+                                ),
                         ),
                 ),
+                sourceWidth = 400f,
+                sourceHeight = 200f,
             )
 
-        assertFalse(state.enabled)
-        assertTrue(state.regions.isEmpty())
+        assertEquals(400f, state.sourceWidth, 0f)
+        assertEquals(200f, state.sourceHeight, 0f)
+        assertEquals("text-region-1", state.regionAt(sourceX = 0f, sourceY = 0f)?.textRegionId)
+        assertEquals("text-region-1", state.regionAt(sourceX = 40f, sourceY = 40f)?.textRegionId)
+        assertNull(state.regionAt(sourceX = 400f, sourceY = 200f))
     }
 
     @Test
-    fun selectionUsesStoredPolygonGeometryInsideSourceFrame() {
+    fun regionHitTestingUsesPolygonNotBoundingExtrema() {
+        val diamond =
+            loadedRegion(
+                polygon =
+                    listOf(
+                        OcrTextPoint(60f, 0f),
+                        OcrTextPoint(120f, 60f),
+                        OcrTextPoint(60f, 120f),
+                        OcrTextPoint(0f, 60f),
+                    ),
+            )
         val state =
-            OcrRegionOverlayState.withSourceGeometry(
-                sourceImageWidth = 240,
-                sourceImageHeight = 120,
-                regions = listOf(loadedRegion().toOverlayRegion()),
+            OcrRegionOverlayState(
+                sourceWidth = 240f,
+                sourceHeight = 160f,
+                regions = listOf(diamond.toOverlayRegion()),
             )
 
         assertEquals("text-region-1", state.regionAt(sourceX = 60f, sourceY = 20f)?.textRegionId)
@@ -110,33 +112,28 @@ class OcrRegionOverlayTest {
             fullText = "stored text",
             unavailableReason = null,
             unavailableMessage = null,
+            retryAvailable = false,
             completedAtMs = 10,
             warnings = emptyList(),
             textRegionCount = textRegions.size,
             textRegions = textRegions,
         )
 
-    private fun loadedRegion(): LoadedAndroidOcrTextRegion =
+    private fun loadedRegion(
+        polygon: List<OcrTextPoint> =
+            listOf(
+                OcrTextPoint(0f, 0f),
+                OcrTextPoint(20f, 0f),
+                OcrTextPoint(20f, 20f),
+                OcrTextPoint(0f, 20f),
+            ),
+    ): LoadedAndroidOcrTextRegion =
         LoadedAndroidOcrTextRegion(
             textRegionId = "text-region-1",
             ocrRunId = "ocr-run-1",
-            polygon =
-                listOf(
-                    OcrTextPoint(0f, 0f),
-                    OcrTextPoint(120f, 0f),
-                    OcrTextPoint(120f, 40f),
-                    OcrTextPoint(0f, 40f),
-                ),
-            text = "stored text",
-            confidence = 0.91f,
-            createdAtMs = 10,
-        )
-
-    private fun LoadedAndroidOcrTextRegion.toOverlayRegion(): OcrRegionOverlayRegion =
-        OcrRegionOverlayRegion(
-            textRegionId = textRegionId,
             polygon = polygon,
-            text = text,
-            confidence = confidence,
+            text = "region",
+            confidence = 0.8f,
+            createdAtMs = 10,
         )
 }

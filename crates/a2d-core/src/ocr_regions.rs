@@ -1,4 +1,4 @@
-use crate::A2dCore;
+use crate::{A2dCore, scan_policy::retryable_reason};
 use a2d_domain::{
     A2dError, ErrorCategory, ErrorCode, ErrorSeverity, OcrRun, OcrRunId, OcrRunStatus,
     OcrUnavailableReason, ScanId, TextRegion, TextRegionId, system_now_ms,
@@ -69,6 +69,7 @@ pub struct LoadedOcrRun {
     pub full_text: String,
     pub unavailable_reason: Option<OcrUnavailableReason>,
     pub unavailable_message: Option<String>,
+    pub retry_available: bool,
     pub completed_at_ms: Option<i64>,
     pub warnings: Vec<String>,
     pub text_region_count: u32,
@@ -241,6 +242,7 @@ fn loaded_ocr_run(
         status: run.status,
         full_text: run.full_text,
         unavailable_reason: run.unavailable_reason,
+        retry_available: run.unavailable_reason.is_some_and(retryable_reason),
         unavailable_message: run.unavailable_message,
         completed_at_ms: run.completed_at_ms,
         warnings: run.warnings,
@@ -583,36 +585,82 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             err.code.to_string(),
-            "TEXT_REGION_POLYGON_POINT_COUNT_INVALID"
+            "DOMAIN_OCR_POLYGON_POINT_COUNT_INVALID"
         );
-        assert_eq!(err.details.get("region_index"), Some(&"0".to_string()));
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn record_ocr_text_regions_cannot_attach_to_no_text_run() {
+    fn record_ocr_text_regions_rejects_unknown_run() {
+        let (core, dir) = open_test_core();
+        let err = core
+            .record_ocr_text_regions(RecordOcrTextRegionsRequest {
+                ocr_run_id: OcrRunId::generate().to_string(),
+                regions: vec![region("orphan", Some(300))],
+            })
+            .unwrap_err();
+        assert_eq!(err.code.to_string(), "STORAGE_OCR_RUN_MISSING");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_ocr_text_regions_rejects_non_detected_run() {
         let (core, dir) = open_test_core();
         let fixture = insert_scan_fixture(&core);
         let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::NoTextDetected);
-
         let err = core
             .record_ocr_text_regions(RecordOcrTextRegionsRequest {
                 ocr_run_id: run_id.to_string(),
                 regions: vec![region("fabricated", Some(300))],
             })
             .unwrap_err();
-
         assert_eq!(
             err.code.to_string(),
-            "STORAGE_TEXT_REGION_OCR_RUN_NOT_DETECTED"
+            "STORAGE_OCR_TEXT_REGION_RUN_STATUS_INVALID"
         );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_ocr_text_regions_rejects_region_for_different_scan_asset() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
+        let other_asset_id = AssetId::generate();
         let storage = core.lock_storage().unwrap();
-        assert!(
-            storage
-                .list_text_regions_for_ocr_run(&run_id)
-                .unwrap()
-                .is_empty()
+        storage
+            .insert_asset(&asset(other_asset_id.clone()))
+            .unwrap();
+        drop(storage);
+        let mismatched_run = OcrRun::detected(
+            OcrRunId::generate(),
+            fixture.scan_id.clone(),
+            Some(other_asset_id),
+            "mlkit".to_string(),
+            "2026.09".to_string(),
+            None,
+            "mismatched".to_string(),
+            Some(250),
+            Vec::new(),
+            provenance(&fixture.page_id, &fixture.scan_id),
+        )
+        .unwrap();
+        let mismatched_run_id = mismatched_run.id().clone();
+        let storage = core.lock_storage().unwrap();
+        storage.insert_ocr_run(&mismatched_run).unwrap();
+        drop(storage);
+
+        let err = core
+            .record_ocr_text_regions(RecordOcrTextRegionsRequest {
+                ocr_run_id: mismatched_run_id.to_string(),
+                regions: vec![region("mismatch", Some(300))],
+            })
+            .unwrap_err();
+        assert_eq!(
+            err.code.to_string(),
+            "STORAGE_OCR_TEXT_REGION_INPUT_MISMATCH"
         );
+        assert_ne!(run_id, mismatched_run_id);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

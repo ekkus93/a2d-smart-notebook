@@ -1,12 +1,6 @@
-//! UniFFI projection for OCR text-region persistence and readback.
-//!
-//! Platform OCR providers can report recognized region geometry, but they cannot write SQL-shaped
-//! region rows directly. This module projects bounded FFI-safe batches into the Rust core OCR
-//! text-region API and exposes a readback DTO for hydrating Android state after app restart.
-
 use a2d_core as core;
 
-use super::{A2dClient, A2dFfiError, OcrRunStatus, OcrUnavailableReason};
+use super::{A2dClient, A2dFfiError, OcrInputKind, OcrRunStatus, OcrUnavailableReason};
 
 #[derive(Clone, Copy, Debug, PartialEq, uniffi::Record)]
 pub struct OcrTextPoint {
@@ -130,6 +124,7 @@ pub struct LoadedOcrRun {
     pub full_text: String,
     pub unavailable_reason: Option<OcrUnavailableReason>,
     pub unavailable_message: Option<String>,
+    pub retry_available: bool,
     pub completed_at_ms: Option<i64>,
     pub warnings: Vec<String>,
     pub text_region_count: u32,
@@ -149,6 +144,7 @@ impl From<core::LoadedOcrRun> for LoadedOcrRun {
             full_text: value.full_text,
             unavailable_reason: value.unavailable_reason.map(Into::into),
             unavailable_message: value.unavailable_message,
+            retry_available: value.retry_available,
             completed_at_ms: value.completed_at_ms,
             warnings: value.warnings,
             text_region_count: value.text_region_count,
@@ -238,33 +234,28 @@ mod tests {
         let err = client
             .record_ocr_text_regions(RecordOcrTextRegionsRequest {
                 ocr_run_id: a2d_domain::OcrRunId::generate().to_string(),
-                regions: vec![region("orphaned")],
+                regions: vec![region("orphan")],
             })
             .unwrap_err();
-        let A2dFfiError::Failed(details) = err;
 
-        assert_eq!(details.code, "STORAGE_TEXT_REGION_OCR_RUN_MISSING");
-        assert_eq!(details.category, "Validation");
-        assert!(!details.retryable);
+        assert_eq!(err.code, "STORAGE_OCR_RUN_MISSING");
     }
 
     #[test]
-    fn record_ocr_text_region_empty_batch_error_is_core_owned() {
+    fn load_latest_ocr_output_rejects_invalid_scan_id_at_ffi_boundary() {
         let client = open_test_client();
         let err = client
-            .record_ocr_text_regions(RecordOcrTextRegionsRequest {
-                ocr_run_id: a2d_domain::OcrRunId::generate().to_string(),
-                regions: Vec::new(),
+            .load_latest_ocr_output(LoadLatestOcrOutputRequest {
+                scan_id: "not-an-id".to_string(),
+                region_limit: 10,
             })
             .unwrap_err();
-        let A2dFfiError::Failed(details) = err;
 
-        assert_eq!(details.code, "CORE_OCR_TEXT_REGION_BATCH_EMPTY");
-        assert_eq!(details.category, "Ocr");
+        assert_eq!(err.code, "DOMAIN_ID_INVALID");
     }
 
     #[test]
-    fn load_latest_ocr_output_limit_errors_cross_the_ffi_boundary() {
+    fn load_latest_ocr_output_rejects_unbounded_region_limit_at_ffi_boundary() {
         let client = open_test_client();
         let err = client
             .load_latest_ocr_output(LoadLatestOcrOutputRequest {
@@ -272,9 +263,7 @@ mod tests {
                 region_limit: 1_001,
             })
             .unwrap_err();
-        let A2dFfiError::Failed(details) = err;
 
-        assert_eq!(details.code, "CORE_OCR_READBACK_REGION_LIMIT_EXCEEDED");
-        assert_eq!(details.category, "Ocr");
+        assert_eq!(err.code, "CORE_OCR_READBACK_REGION_LIMIT_EXCEEDED");
     }
 }

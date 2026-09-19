@@ -392,7 +392,7 @@ fn retry_delay_ms(attempt_count: u32) -> i64 {
         .min(MAX_RETRY_DELAY_MS)
 }
 
-fn retryable_reason(reason: OcrUnavailableReason) -> bool {
+pub(crate) fn retryable_reason(reason: OcrUnavailableReason) -> bool {
     matches!(
         reason,
         OcrUnavailableReason::ProviderUnavailable
