@@ -35,6 +35,7 @@ import uniffi.a2d_ffi.EnqueueOcrJobRequest
 import uniffi.a2d_ffi.ListOcrCorrectionsForScanRequest
 import uniffi.a2d_ffi.LoadLatestOcrOutputRequest
 import uniffi.a2d_ffi.OcrInputKind
+import uniffi.a2d_ffi.OcrQueueJob
 import uniffi.a2d_ffi.OcrQueueJobStatus
 import uniffi.a2d_ffi.OcrRunStatus
 import uniffi.a2d_ffi.OcrUnavailableReason
@@ -159,18 +160,22 @@ class PageViewerProductionOcrActionsTest {
         val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
         try {
             val scan = registerRealScan(client = client, root = root)
-            val recorded = recordTerminalOcr(client, scan, OcrRunStatus.UNAVAILABLE, "", OcrUnavailableReason.PROVIDER_FAILED, "provider failed before returning text")
+            val terminalJob = createTerminalUnavailableOcrJob(client, scan)
+            val runId = requireNotNull(terminalJob.lastOcrRunId) { "terminal unavailable job must retain OCR run id" }
             openProductionPageViewer(client = client, scan = scan)
             composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("OCR unavailable: provider failed", substring = true).assertIsDisplayed()
             composeRule.onNodeWithText("provider failed before returning text", substring = true).assertIsDisplayed()
-            composeRule.onNodeWithText("OCR run: ${recorded.ocrRunId}").assertIsDisplayed()
+            composeRule.onNodeWithText("OCR run: $runId").assertIsDisplayed()
             composeRule.onNodeWithTag(PageViewerTestTags.OCR_RETRY).performScrollTo().assertIsEnabled().performClick()
-            composeRule.waitUntil(timeoutMillis = 10_000) { composeRule.onAllNodesWithText("OCR queued as durable job", substring = true).fetchSemanticsNodes().isNotEmpty() }
-            val retryJob = requireNotNull(client.claimNextOcrJob()) { "Retry OCR must enqueue a Rust-owned durable job" }
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("OCR queued as durable job ${terminalJob.jobId}", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            val retryJob = requireNotNull(client.claimNextOcrJob()) { "Retry OCR must re-queue the existing Rust-owned durable job" }
+            assertEquals(terminalJob.jobId, retryJob.jobId)
             assertEquals(scan.scanId, retryJob.scanId)
             assertEquals(OcrQueueJobStatus.RUNNING, retryJob.status)
-            assertEquals(1u, retryJob.attemptCount)
+            assertEquals(2u, retryJob.attemptCount)
         } finally { root.deleteRecursively() }
     }
 
@@ -245,12 +250,24 @@ class PageViewerProductionOcrActionsTest {
         }
     }
 
+    private fun createTerminalUnavailableOcrJob(client: A2dClient, scan: RegisteredScan): OcrQueueJob {
+        val queuedJob = client.enqueueOcrJob(EnqueueOcrJobRequest(scanId = scan.scanId, inputKind = OcrInputKind.ORIGINAL, widthPx = 1800u, heightPx = 2200u))
+        val runningJob = requireNotNull(client.claimNextOcrJob()) { "Fixture must claim OCR before completing it as unavailable" }
+        assertEquals(queuedJob.jobId, runningJob.jobId)
+        assertEquals(1u, runningJob.attemptCount)
+        val recorded = recordTerminalOcr(client, scan, OcrRunStatus.UNAVAILABLE, "", OcrUnavailableReason.PROVIDER_FAILED, "provider failed before returning text")
+        val terminalJob = completeRunningJobWithOcrRun(client, runningJob.jobId, recorded.ocrRunId, retryable = false)
+        assertEquals(OcrQueueJobStatus.UNAVAILABLE, terminalJob.status)
+        assertEquals(1u, terminalJob.attemptCount)
+        assertEquals(recorded.ocrRunId, terminalJob.lastOcrRunId)
+        return terminalJob
+    }
+
     private fun recordTerminalOcr(client: A2dClient, scan: RegisteredScan, status: OcrRunStatus, text: String, unavailableReason: OcrUnavailableReason?, unavailableMessage: String?): uniffi.a2d_ffi.RecordedOcrRun {
         val prepared = client.prepareOcrInput(PrepareOcrInputRequest(scanId = scan.scanId, inputKind = OcrInputKind.ORIGINAL, widthPx = 1800u, heightPx = 2200u))
         return client.recordOcrRun(RecordOcrRunRequest(scanId = scan.scanId, inputAssetId = prepared.inputAssetId, provider = "instrumentation-fixture", providerVersion = "1", modelName = "deterministic", status = status, fullText = text, unavailableReason = unavailableReason, unavailableMessage = unavailableMessage, completedAtMs = System.currentTimeMillis(), warnings = emptyList()))
     }
 
-    @Suppress("unused")
     private fun completeRunningJobWithOcrRun(client: A2dClient, jobId: String, ocrRunId: String, retryable: Boolean) = client.completeOcrJob(CompleteOcrJobRequest(jobId = jobId, ocrRunId = ocrRunId, retryable = retryable))
 
     private fun registerRealScan(client: A2dClient, root: File): RegisteredScan {
