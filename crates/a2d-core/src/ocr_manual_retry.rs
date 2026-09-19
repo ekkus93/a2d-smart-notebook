@@ -8,10 +8,7 @@ impl A2dCore {
     /// The cumulative automatic/manual attempt budget is `MAX_OCR_JOB_ATTEMPTS`. A manual retry
     /// does not increment or reset `attempt_count`; the next durable claim increments it. Prior
     /// provider, run, and error diagnostics remain attached to the same job for audit/readback.
-    pub fn manual_retry_ocr_job_for_scan(
-        &self,
-        scan_id: &str,
-    ) -> Result<OcrJobSnapshot, A2dError> {
+    pub fn manual_retry_ocr_job_for_scan(&self, scan_id: &str) -> Result<OcrJobSnapshot, A2dError> {
         let scan_id = ScanId::parse(scan_id)?;
         let now_ms = system_now_ms()?;
         let storage = self.lock_storage()?;
