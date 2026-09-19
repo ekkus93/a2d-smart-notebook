@@ -1,5 +1,13 @@
 # Milestone 11 OCR Closeout — 2026-09-15
 
+## Post-closeout remediation completion addendum — 2026-09-19
+
+This document remains the historical record of the original M11 closeout and merge chain. The post-closeout review addendum below correctly identified that the original closeout overstated production integration. That remediation has now been implemented through PR #112 and reconciled in `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_CLOSEOUT_2026-09-19.md`.
+
+Current status: M11 OCR implementation and post-closeout production-integration remediation are complete. Broader release/physical OCR-quality evidence, corrected+original unified search ranking, WorkManager/background-service guarantees, and Milestone 12 search scale remain outside this remediation unless separately implemented.
+
+Final remediated implementation baseline before the documentation closeout slice: `89c7e27264643f53a0f83da0d061b56fe7989feb`. PR #112 exact-head CI run `35429371063` passed, and post-merge `master` CI run `35430897974` passed.
+
 ## Post-closeout review addendum — remediation open
 
 This closeout document is a historical record of the original M11 merge chain and CI evidence. A later post-closeout source review found that the lower-level OCR infrastructure was substantially present, but the original closeout overstated production integration. Active remediation is tracked in `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-15.md` and specified in `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_SPEC_2026-09-15.md`.
