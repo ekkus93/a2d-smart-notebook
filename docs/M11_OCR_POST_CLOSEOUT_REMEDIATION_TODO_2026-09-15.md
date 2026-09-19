@@ -390,35 +390,35 @@ Review baseline:
 
 ## R8.1 Full production-path scenario
 
-- [ ] Open/create a test library.
-- [ ] Create/register a page and scan fixture through supported APIs.
-- [ ] Produce/persist OCR through the real supported path.
-- [ ] Navigate Library Hub -> OCR Search.
-- [ ] Search known text.
-- [ ] Open hit in Page Viewer.
-- [ ] Verify persisted OCR and regions hydrate.
-- [ ] Open correction workflow.
-- [ ] Persist correction.
-- [ ] Reopen and verify correction history.
+- [x] Open/create a test library.
+- [x] Create/register a page and scan fixture through supported APIs.
+- [x] Produce/persist OCR through the real supported path.
+- [x] Navigate Library Hub -> OCR Search.
+- [x] Search known text.
+- [x] Open hit in Page Viewer.
+- [x] Verify persisted OCR and regions hydrate.
+- [x] Open correction workflow.
+- [x] Persist correction.
+- [x] Reopen and verify correction history.
 
 ## R8.2 Composition-failure sentinels
 
-- [ ] Search integration test fails if production controller wiring is removed.
-- [ ] Page Viewer test fails if OCR readback wiring is removed.
-- [ ] Correction test fails if production correction wiring/navigation is removed.
-- [ ] OCR action test fails if Start/Retry/Cancel revert to no-ops.
+- [x] Search integration test fails if production controller wiring is removed.
+- [x] Page Viewer test fails if OCR readback wiring is removed.
+- [x] Correction test fails if production correction wiring/navigation is removed.
+- [x] OCR action test fails if Start/Retry/Cancel revert to no-ops.
 
 ## R8.3 CI registration/runtime
 
-- [ ] Register new instrumentation classes in `.github/workflows/ci.yml` if explicit class lists are used.
-- [ ] Keep emulator runtime bounded.
-- [ ] Avoid duplicating expensive scenarios when one integrated scenario proves multiple composition seams.
+- [x] Register new instrumentation classes in `.github/workflows/ci.yml` if explicit class lists are used.
+- [x] Keep emulator runtime bounded.
+- [x] Avoid duplicating expensive scenarios when one integrated scenario proves multiple composition seams.
 
 ## R8 acceptance/qualification
 
-- [ ] CI now covers the same class of production-wiring defects missed by the original closeout.
-- [ ] Full exact-head CI passes.
-- [ ] Merge exact green head, verify `master` CI, reload TODO.
+- [x] CI now covers the same class of production-wiring defects missed by the original closeout.
+- [x] Full exact-head CI passes.
+- [x] Merge exact green head, verify `master` CI, reload TODO.
 
 ---
 
@@ -426,22 +426,23 @@ Review baseline:
 
 ## R9.1 Reconcile stale UI/developer text
 
-- [ ] Search resources/source for statements that OCR is unavailable/future solely because M11 has not happened.
-- [ ] Correct stale Page Viewer/OCR placeholder wording.
-- [ ] Reconcile stale application placeholder comments when no longer true.
-- [ ] Preserve truthful limitations such as app-lifetime queue execution.
+- [x] Search resources/source for statements that OCR is unavailable/future solely because M11 has not happened.
+- [x] Correct stale Page Viewer/OCR placeholder wording.
+- [x] Reconcile stale application placeholder comments when no longer true.
+- [x] Preserve truthful limitations such as app-lifetime queue execution.
 
 ## R9.2 Targeted refactor only where it lowers remediation risk
 
-- [ ] Review whether Page Viewer/OCR wiring leaves oversized Android orchestration files harder to maintain.
-- [ ] Extract cohesive OCR-specific state/orchestration where useful.
-- [ ] Do not perform unrelated scanner/image refactors merely to reduce line counts.
-- [ ] Preserve behavior with tests around extraction.
+- [x] Review whether Page Viewer/OCR wiring leaves oversized Android orchestration files harder to maintain.
+- [x] Extract cohesive OCR-specific state/orchestration where useful.
+  - Review result: no additional extraction in R9; the current production composition keeps the app-lifetime client in `MainActivity`, OCR gateways/controllers are remembered from that client in navigation, and a structural move here would add churn without reducing remediation risk.
+- [x] Do not perform unrelated scanner/image refactors merely to reduce line counts.
+- [x] Preserve behavior with tests around extraction (no extraction performed; existing production-path instrumentation remains the regression sentinel).
 
 ## R9 acceptance/qualification
 
-- [ ] User/developer status text matches the remediated product.
-- [ ] Ownership boundaries remain clear.
+- [x] User/developer status text matches the remediated product.
+- [x] Ownership boundaries remain clear.
 - [ ] Required CI passes; merge/verify/reload if separate PR.
 
 ---
