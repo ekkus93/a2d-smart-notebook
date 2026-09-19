@@ -509,9 +509,9 @@ private fun OcrQueueJob.toViewerOcrPresentationState(): OcrPresentationState =
                 status = OcrPresentationStatus.Recognizing,
                 message =
                     if (cancellationRequested) {
-                        "OCR cancellation requested for durable job $jobId"
+                        "OCR cancellation requested for durable job $jobId (attempt $attemptCount)"
                     } else {
-                        "OCR running as durable job $jobId"
+                        "OCR running as durable job $jobId (attempt $attemptCount)"
                     },
                 retryAvailable = false,
                 cancelAvailable = !cancellationRequested,
