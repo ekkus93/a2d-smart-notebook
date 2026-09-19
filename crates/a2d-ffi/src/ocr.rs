@@ -12,6 +12,9 @@ use super::{A2dClient, A2dFfiError};
 mod ocr_queue;
 pub use ocr_queue::*;
 
+#[path = "ocr_manual_retry.rs"]
+mod ocr_manual_retry;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
 pub enum OcrInputKind {
     Original,
