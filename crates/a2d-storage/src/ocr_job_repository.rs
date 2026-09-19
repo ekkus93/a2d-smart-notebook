@@ -80,7 +80,6 @@ pub trait OcrJobRepository {
     fn find_active_ocr_job_for_scan(
         &self,
         scan_id: &ScanId,
-        input_kind: PersistedOcrInputKind,
     ) -> Result<Option<PersistedOcrJob>, A2dError>;
     fn count_active_ocr_jobs(&self) -> Result<usize, A2dError>;
     fn next_due_ocr_job(&self, now_ms: i64) -> Result<Option<PersistedOcrJob>, A2dError>;
@@ -112,9 +111,8 @@ impl OcrJobRepository for Storage {
     fn find_active_ocr_job_for_scan(
         &self,
         scan_id: &ScanId,
-        input_kind: PersistedOcrInputKind,
     ) -> Result<Option<PersistedOcrJob>, A2dError> {
-        OcrJobRepository::find_active_ocr_job_for_scan(&self.conn, scan_id, input_kind)
+        OcrJobRepository::find_active_ocr_job_for_scan(&self.conn, scan_id)
     }
 
     fn count_active_ocr_jobs(&self) -> Result<usize, A2dError> {
@@ -261,15 +259,14 @@ impl OcrJobRepository for Connection {
     fn find_active_ocr_job_for_scan(
         &self,
         scan_id: &ScanId,
-        input_kind: PersistedOcrInputKind,
     ) -> Result<Option<PersistedOcrJob>, A2dError> {
         self.query_row(
             &format!(
-                "{} WHERE scan_id = ?1 AND input_kind = ?2 \
-                 AND status IN ('Queued', 'Running') ORDER BY created_at_ms ASC, id ASC LIMIT 1",
+                "{} WHERE scan_id = ?1 AND status IN ('Queued', 'Running') \
+                 ORDER BY created_at_ms ASC, id ASC LIMIT 1",
                 OCR_JOB_SELECT
             ),
-            params![scan_id.to_string(), input_kind_to_str(input_kind)],
+            params![scan_id.to_string()],
             decode_job_row,
         )
         .optional()
