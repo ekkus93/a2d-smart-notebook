@@ -1,10 +1,119 @@
 package com.a2d.notebook.feature.ocr
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OcrQueueExecutorTest {
+    @Test
+    fun detectedOutcomeUsesOneTransactionalFinalizerWithAllRegions() {
+        val queue = FakeQueueGateway(completionStatus = AndroidOcrQueueJobStatus.Recognized)
+        val rust = FakeRustGateway()
+        val workflow =
+            AndroidOcrWorkflow(
+                gateway = rust,
+                provider =
+                    FakeProvider(
+                        AndroidOcrRecognitionOutcome.Detected(
+                            provider = "mlkit-bundled-text-recognition",
+                            providerVersion = "16.0.1",
+                            modelName = "latin-v2-bundled",
+                            fullText = "transactional production text",
+                            regions =
+                                listOf(
+                                    AndroidRecognizedTextRegion(
+                                        polygon =
+                                            listOf(
+                                                OcrTextPoint(0f, 0f),
+                                                OcrTextPoint(100f, 0f),
+                                                OcrTextPoint(100f, 40f),
+                                                OcrTextPoint(0f, 40f),
+                                            ),
+                                        text = "transactional production text",
+                                        confidence = 0.9f,
+                                        createdAtMs = 300,
+                                    ),
+                                ),
+                            completedAtMs = 300,
+                        ),
+                    ),
+            )
+
+        val step = AndroidOcrQueueProcessor(queue, workflow).processNext()
+
+        val completed = step as AndroidOcrQueueStep.Completed
+        assertEquals(AndroidOcrQueueJobStatus.Recognized, completed.job.status)
+        val finalized = rust.finalized.single()
+        assertEquals("job-1", finalized.jobId)
+        assertEquals(1u, finalized.attemptCount)
+        assertEquals(OcrRunStatus.Detected, finalized.status)
+        assertEquals("transactional production text", finalized.fullText)
+        assertEquals(1, finalized.regions.size)
+        assertEquals("transactional production text", finalized.regions.single().text)
+        assertTrue(rust.recorded.isEmpty())
+        assertTrue(rust.recordedRegionBatches.isEmpty())
+        assertNull(queue.lastCompletionRetryable)
+    }
+
+    @Test
+    fun noTextOutcomeUsesTransactionalFinalizerWithoutSplitPersistence() {
+        val queue = FakeQueueGateway(completionStatus = AndroidOcrQueueJobStatus.Recognized)
+        val rust = FakeRustGateway()
+        val workflow =
+            AndroidOcrWorkflow(
+                gateway = rust,
+                provider =
+                    FakeProvider(
+                        AndroidOcrRecognitionOutcome.NoTextDetected(
+                            provider = "mlkit-bundled-text-recognition",
+                            providerVersion = "16.0.1",
+                            modelName = "latin-v2-bundled",
+                            completedAtMs = 300,
+                        ),
+                    ),
+            )
+
+        val step = AndroidOcrQueueProcessor(queue, workflow).processNext()
+
+        val completed = step as AndroidOcrQueueStep.Completed
+        assertEquals(AndroidOcrQueueJobStatus.Recognized, completed.job.status)
+        assertEquals(OcrRunStatus.NoTextDetected, rust.finalized.single().status)
+        assertTrue(rust.finalized.single().regions.isEmpty())
+        assertTrue(rust.recorded.isEmpty())
+        assertTrue(rust.recordedRegionBatches.isEmpty())
+        assertNull(queue.lastCompletionRetryable)
+    }
+
+    @Test
+    fun finalizerFailureCannotFallThroughToLegacyQueueCompletion() {
+        val queue = FakeQueueGateway(completionStatus = AndroidOcrQueueJobStatus.Recognized)
+        val rust = FakeRustGateway(finalizeFailure = IllegalStateException("forced region persistence failure"))
+        val workflow =
+            AndroidOcrWorkflow(
+                gateway = rust,
+                provider =
+                    FakeProvider(
+                        AndroidOcrRecognitionOutcome.Detected(
+                            provider = "mlkit-bundled-text-recognition",
+                            providerVersion = "16.0.1",
+                            modelName = "latin-v2-bundled",
+                            fullText = "must roll back",
+                            completedAtMs = 300,
+                        ),
+                    ),
+            )
+
+        val step = AndroidOcrQueueProcessor(queue, workflow).processNext()
+
+        val failed = step as AndroidOcrQueueStep.RecoverableFailure
+        assertEquals("forced region persistence failure", failed.message)
+        assertEquals(1, rust.finalized.size)
+        assertTrue(rust.recorded.isEmpty())
+        assertTrue(rust.recordedRegionBatches.isEmpty())
+        assertNull(queue.lastCompletionRetryable)
+    }
+
     @Test
     fun retryableUnavailableOutcomeIsReturnedToRustQueueWithoutFakeText() {
         val queue = FakeQueueGateway(completionStatus = AndroidOcrQueueJobStatus.Queued)
@@ -34,6 +143,9 @@ class OcrQueueExecutorTest {
         assertEquals(OcrRunStatus.Unavailable, rust.finalized.single().status)
         assertEquals(OcrUnavailableReason.ProviderUnavailable, rust.finalized.single().unavailableReason)
         assertEquals("", rust.finalized.single().fullText)
+        assertTrue(rust.recorded.isEmpty())
+        assertTrue(rust.recordedRegionBatches.isEmpty())
+        assertNull(queue.lastCompletionRetryable)
     }
 
     @Test
@@ -57,6 +169,7 @@ class OcrQueueExecutorTest {
         assertEquals(false, rust.finalized.single().retryable)
         assertEquals(OcrUnavailableReason.Cancelled, rust.finalized.single().unavailableReason)
         assertTrue(completed.job.cancellationRequested)
+        assertNull(queue.lastCompletionRetryable)
     }
 
     @Test
@@ -81,6 +194,7 @@ class OcrQueueExecutorTest {
         assertEquals(true, rust.finalized.single().retryable)
         assertEquals(OcrUnavailableReason.ProviderFailed, rust.finalized.single().unavailableReason)
         assertEquals("provider exploded", rust.finalized.single().unavailableMessage)
+        assertNull(queue.lastCompletionRetryable)
     }
 
     private class FakeQueueGateway(
@@ -133,8 +247,11 @@ class OcrQueueExecutorTest {
         }
     }
 
-    private class FakeRustGateway : RustOcrGateway {
+    private class FakeRustGateway(
+        private val finalizeFailure: RuntimeException? = null,
+    ) : RustOcrGateway {
         val recorded = mutableListOf<AndroidRecordOcrRunRequest>()
+        val recordedRegionBatches = mutableListOf<AndroidRecordOcrTextRegionsRequest>()
         val finalized = mutableListOf<AndroidFinalizeOcrJobRequest>()
 
         override fun prepareOcrInput(request: AndroidOcrStartRequest): PreparedAndroidOcrInput =
@@ -152,11 +269,14 @@ class OcrQueueExecutorTest {
 
         override fun recordOcrTextRegions(
             request: AndroidRecordOcrTextRegionsRequest,
-        ): RecordedAndroidOcrTextRegions =
-            RecordedAndroidOcrTextRegions(ocrRunId = request.ocrRunId, regions = emptyList())
+        ): RecordedAndroidOcrTextRegions {
+            recordedRegionBatches += request
+            return RecordedAndroidOcrTextRegions(ocrRunId = request.ocrRunId, regions = emptyList())
+        }
 
         override fun finalizeOcrJob(request: AndroidFinalizeOcrJobRequest): FinalizedAndroidOcrJob {
             finalized += request
+            finalizeFailure?.let { throw it }
             val status =
                 when (request.unavailableReason) {
                     OcrUnavailableReason.Cancelled -> AndroidOcrQueueJobStatus.Cancelled
@@ -185,16 +305,17 @@ class OcrQueueExecutorTest {
                         providerVersion = request.providerVersion,
                         modelName = request.modelName,
                         providerAvailability = availability,
-                        lastOcrRunId = "ocr-run-1",
+                        lastOcrRunId = if (status == AndroidOcrQueueJobStatus.Cancelled) null else "ocr-run-1",
                         cancellationRequested = request.unavailableReason == OcrUnavailableReason.Cancelled,
                     ),
-                ocrRunId = "ocr-run-1",
+                ocrRunId = if (status == AndroidOcrQueueJobStatus.Cancelled) null else "ocr-run-1",
                 recordedRegionCount = request.regions.size.toUInt(),
                 resolution =
-                    if (status == AndroidOcrQueueJobStatus.Queued) {
-                        OcrFinalizationResolution.RetryScheduled
-                    } else {
-                        OcrFinalizationResolution.Completed
+                    when (status) {
+                        AndroidOcrQueueJobStatus.Queued -> OcrFinalizationResolution.RetryScheduled
+                        AndroidOcrQueueJobStatus.Cancelled -> OcrFinalizationResolution.CancelledBeforeCommit
+                        AndroidOcrQueueJobStatus.Unavailable -> OcrFinalizationResolution.TerminalUnavailable
+                        else -> OcrFinalizationResolution.Completed
                     },
             )
         }
