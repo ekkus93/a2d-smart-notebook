@@ -535,7 +535,10 @@ mod tests {
     }
 
     fn open_test_core() -> (Arc<A2dCore>, PathBuf) {
-        let dir = std::env::temp_dir().join(format!("a2d-core-ocr-queue-r13-test-{}", PageId::generate()));
+        let dir = std::env::temp_dir().join(format!(
+            "a2d-core-ocr-queue-r13-test-{}",
+            PageId::generate()
+        ));
         let core = A2dCore::open(OpenLibraryRequest {
             library_path: dir.to_string_lossy().into_owned(),
         })
@@ -635,7 +638,10 @@ mod tests {
         let (core, dir) = open_test_core();
         let fixture = insert_scan_fixture(&core);
         let queued = core
-            .enqueue_ocr_job(enqueue_request(&fixture.scan_id, CoreOcrInputKind::OcrOptimized))
+            .enqueue_ocr_job(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::OcrOptimized,
+            ))
             .unwrap();
 
         let found = core
@@ -653,8 +659,11 @@ mod tests {
     fn active_job_lookup_returns_running_ocr_optimized_job_for_original_request() {
         let (core, dir) = open_test_core();
         let fixture = insert_scan_fixture(&core);
-        core.enqueue_ocr_job(enqueue_request(&fixture.scan_id, CoreOcrInputKind::OcrOptimized))
-            .unwrap();
+        core.enqueue_ocr_job(enqueue_request(
+            &fixture.scan_id,
+            CoreOcrInputKind::OcrOptimized,
+        ))
+        .unwrap();
         let running = core.claim_next_ocr_job().unwrap().unwrap();
 
         let found = core
@@ -673,11 +682,17 @@ mod tests {
         let (core, dir) = open_test_core();
         let fixture = insert_scan_fixture(&core);
         let scanner_job = core
-            .enqueue_ocr_job(enqueue_request(&fixture.scan_id, CoreOcrInputKind::OcrOptimized))
+            .enqueue_ocr_job(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::OcrOptimized,
+            ))
             .unwrap();
 
         let page_viewer_start = core
-            .enqueue_ocr_job(enqueue_request(&fixture.scan_id, CoreOcrInputKind::Original))
+            .enqueue_ocr_job(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Original,
+            ))
             .unwrap();
 
         assert_eq!(page_viewer_start.job_id, scanner_job.job_id);
