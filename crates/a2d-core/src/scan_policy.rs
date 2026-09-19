@@ -15,6 +15,10 @@ pub use ocr_queue::*;
 #[path = "ocr_manual_retry.rs"]
 mod ocr_manual_retry;
 
+#[path = "ocr_source_geometry.rs"]
+mod ocr_source_geometry;
+pub use ocr_source_geometry::*;
+
 #[cfg(test)]
 #[path = "ocr_retry_policy_tests.rs"]
 mod ocr_retry_policy_tests;
