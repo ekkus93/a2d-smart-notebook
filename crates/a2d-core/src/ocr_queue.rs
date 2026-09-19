@@ -645,7 +645,10 @@ mod tests {
             .unwrap();
 
         let found = core
-            .find_active_ocr_job_for_scan(enqueue_request(&fixture.scan_id, CoreOcrInputKind::Original))
+            .find_active_ocr_job_for_scan(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Original,
+            ))
             .unwrap()
             .expect("active OCR job must be found by scan");
 
@@ -667,7 +670,10 @@ mod tests {
         let running = core.claim_next_ocr_job().unwrap().unwrap();
 
         let found = core
-            .find_active_ocr_job_for_scan(enqueue_request(&fixture.scan_id, CoreOcrInputKind::Original))
+            .find_active_ocr_job_for_scan(enqueue_request(
+                &fixture.scan_id,
+                CoreOcrInputKind::Original,
+            ))
             .unwrap()
             .expect("running OCR job must be found by scan");
 
