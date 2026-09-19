@@ -226,6 +226,7 @@ class OcrSearchProductionNavigationTest {
                     substring = true,
                 ).fetchSemanticsNodes().isNotEmpty()
             }
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText(
                 "persisted production notebook sentinel",
                 substring = true,
@@ -282,10 +283,11 @@ class OcrSearchProductionNavigationTest {
                     substring = true,
                 ).fetchSemanticsNodes().isNotEmpty()
             }
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText(
                 "Text preview: persisted production notebook sentinel",
                 substring = true,
-            ).performScrollTo().assertIsDisplayed()
+            ).assertIsDisplayed()
         } finally {
             root.deleteRecursively()
         }
