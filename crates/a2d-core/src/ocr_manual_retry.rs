@@ -97,8 +97,8 @@ mod tests {
     use super::*;
     use crate::{CoreOcrInputKind, EnqueueOcrJobRequest, OpenLibraryRequest};
     use a2d_domain::{
-        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, Page, PageId, PageKind,
-        PageState, QualityStatus, Scan, ScanId, SmartPageId,
+        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, Page, PageId,
+        PageKind, PageState, QualityStatus, Scan, ScanId, SmartPageId,
     };
     use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
     use std::path::{Path, PathBuf};
@@ -221,7 +221,10 @@ mod tests {
         assert_eq!(retried.attempt_count, 1);
         assert_eq!(retried.provider.as_deref(), Some("manual-retry-provider"));
         assert_eq!(retried.provider_version.as_deref(), Some("7"));
-        assert_eq!(retried.last_error_code.as_deref(), Some("OCR_PROVIDER_FAILED"));
+        assert_eq!(
+            retried.last_error_code.as_deref(),
+            Some("OCR_PROVIDER_FAILED")
+        );
         assert_eq!(
             retried.last_error_message.as_deref(),
             Some("transient provider failure")
