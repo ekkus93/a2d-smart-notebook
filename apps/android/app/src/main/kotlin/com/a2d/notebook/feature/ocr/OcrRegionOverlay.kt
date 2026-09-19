@@ -1,14 +1,6 @@
 package com.a2d.notebook.feature.ocr
 
-/**
- * Presentation-only projection of Rust-owned OCR text-region rows.
- *
- * Android never fabricates text regions for this overlay. The projection is enabled only when
- * persisted [LoadedAndroidOcrTextRegion] rows are returned by Rust readback for a detected OCR run
- * and an explicit source image coordinate frame is available. The overlay must never derive the
- * image frame from OCR polygon extrema because that changes the coordinate system when OCR only
- * covers part of the page.
- */
+/** Presentation-only projection of Rust-owned OCR text-region rows and source geometry. */
 data class OcrRegionOverlayRegion(
     val textRegionId: String,
     val polygon: List<OcrTextPoint>,
@@ -18,18 +10,17 @@ data class OcrRegionOverlayRegion(
     fun isRenderableIn(frame: OcrRegionCoordinateFrame): Boolean =
         polygon.size >= 3 &&
             polygon.all { point ->
-                point.x.isFinite() &&
-                    point.y.isFinite() &&
-                    point.x >= 0f &&
-                    point.y >= 0f &&
-                    point.x <= frame.width &&
-                    point.y <= frame.height
+                point.x.isFinite() && point.y.isFinite() &&
+                    point.x >= 0f && point.y >= 0f &&
+                    point.x <= frame.width && point.y <= frame.height
             }
 }
 
 data class OcrRegionOverlayState(
     val regions: List<OcrRegionOverlayRegion> = emptyList(),
     val sourceFrame: OcrRegionCoordinateFrame? = null,
+    val sourceAssetRelativePath: String? = null,
+    val sourceAssetMediaType: String? = null,
     val completeRegionHydration: Boolean = true,
 ) {
     val renderableRegions: List<OcrRegionOverlayRegion>
@@ -39,7 +30,7 @@ data class OcrRegionOverlayState(
         }
 
     val enabled: Boolean
-        get() = sourceFrame != null && renderableRegions.isNotEmpty()
+        get() = sourceFrame != null && sourceAssetRelativePath != null && renderableRegions.isNotEmpty()
 
     val coordinateFrame: OcrRegionCoordinateFrame?
         get() = sourceFrame
@@ -47,9 +38,7 @@ data class OcrRegionOverlayState(
     fun regionAt(sourceX: Float, sourceY: Float): OcrRegionOverlayRegion? {
         val frame = sourceFrame ?: return null
         if (!sourceX.isFinite() || !sourceY.isFinite()) return null
-        if (sourceX < 0f || sourceY < 0f || sourceX > frame.width || sourceY > frame.height) {
-            return null
-        }
+        if (sourceX < 0f || sourceY < 0f || sourceX > frame.width || sourceY > frame.height) return null
         return renderableRegions.asReversed().firstOrNull { region ->
             pointInPolygon(sourceX, sourceY, region.polygon)
         }
@@ -65,40 +54,45 @@ data class OcrRegionOverlayState(
             OcrRegionOverlayState(
                 regions = regions,
                 sourceFrame = OcrRegionCoordinateFrame.fromDimensions(sourceImageWidth, sourceImageHeight),
+                sourceAssetRelativePath = "test-source",
                 completeRegionHydration = completeRegionHydration,
             )
 
         fun fromPersisted(output: LoadedAndroidOcrOutput): OcrRegionOverlayState {
             val run = output.latestRun ?: return OcrRegionOverlayState()
             if (run.status != OcrRunStatus.Detected) return OcrRegionOverlayState()
+            val geometry = output.sourceGeometry ?: return OcrRegionOverlayState(
+                regions = run.toOverlayRegions(),
+                completeRegionHydration = run.textRegionCount == run.textRegions.size,
+            )
             return OcrRegionOverlayState(
-                regions =
-                    run.textRegions.map { region ->
-                        OcrRegionOverlayRegion(
-                            textRegionId = region.textRegionId,
-                            polygon = region.polygon,
-                            text = region.text,
-                            confidence = region.confidence,
-                        )
-                    },
-                sourceFrame = null,
+                regions = run.toOverlayRegions(),
+                sourceFrame = OcrRegionCoordinateFrame.fromDimensions(geometry.widthPx, geometry.heightPx),
+                sourceAssetRelativePath = geometry.relativePath,
+                sourceAssetMediaType = geometry.mediaType,
                 completeRegionHydration = run.textRegionCount == run.textRegions.size,
             )
         }
+
+        private fun LoadedAndroidOcrRun.toOverlayRegions(): List<OcrRegionOverlayRegion> =
+            textRegions.map { region ->
+                OcrRegionOverlayRegion(
+                    textRegionId = region.textRegionId,
+                    polygon = region.polygon,
+                    text = region.text,
+                    confidence = region.confidence,
+                )
+            }
     }
 }
 
-data class OcrRegionCoordinateFrame(
-    val width: Float,
-    val height: Float,
-) {
+data class OcrRegionCoordinateFrame(val width: Float, val height: Float) {
     init {
         require(width.isFinite() && width > 0f) { "source image width must be finite and positive" }
         require(height.isFinite() && height > 0f) { "source image height must be finite and positive" }
     }
 
-    val aspectRatio: Float
-        get() = width / height
+    val aspectRatio: Float get() = width / height
 
     companion object {
         fun fromDimensions(width: Int, height: Int): OcrRegionCoordinateFrame? {
@@ -108,13 +102,8 @@ data class OcrRegionCoordinateFrame(
     }
 }
 
-private fun pointInPolygon(
-    x: Float,
-    y: Float,
-    polygon: List<OcrTextPoint>,
-): Boolean {
+private fun pointInPolygon(x: Float, y: Float, polygon: List<OcrTextPoint>): Boolean {
     if (polygon.size < 3) return false
-
     var inside = false
     var previousIndex = polygon.lastIndex
     polygon.indices.forEach { currentIndex ->
@@ -122,9 +111,7 @@ private fun pointInPolygon(
         val previous = polygon[previousIndex]
         val intersects =
             (current.y > y) != (previous.y > y) &&
-                x <
-                (previous.x - current.x) * (y - current.y) /
-                (previous.y - current.y) + current.x
+                x < (previous.x - current.x) * (y - current.y) / (previous.y - current.y) + current.x
         if (intersects) inside = !inside
         previousIndex = currentIndex
     }
