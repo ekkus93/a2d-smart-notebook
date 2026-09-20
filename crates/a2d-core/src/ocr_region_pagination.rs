@@ -204,7 +204,6 @@ mod tests {
     use a2d_domain::{
         Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, OcrRun, OcrRunId,
         Page, PageId, PageKind, PageState, Provenance, QualityStatus, Scan, SmartPageId,
-        system_now_ms,
     };
     use a2d_storage::{AssetRepository, OcrRunRepository, PageRepository, ScanRepository};
     use image::{ImageBuffer, Rgba};
@@ -412,7 +411,7 @@ mod tests {
         assert_eq!(second.next_offset, None);
         assert!(!second.has_more);
         assert!(second.complete);
-        assert_eq!(second.regions.single().text, "region-1000");
+        assert_eq!(second.regions[0].text, "region-1000");
 
         let unique_ids: std::collections::HashSet<_> = first
             .regions
