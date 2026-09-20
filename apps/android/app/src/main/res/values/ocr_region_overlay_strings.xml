@@ -2,6 +2,8 @@
 <resources>
     <string name="page_viewer_ocr_region_overlay_title">OCR text-region overlay</string>
     <string name="page_viewer_ocr_region_overlay_disabled">No persisted OCR text regions are available, so the overlay is disabled.</string>
+    <string name="page_viewer_ocr_region_overlay_missing_image">The OCR source image is unavailable, so the overlay is disabled.</string>
+    <string name="page_viewer_ocr_region_overlay_image_unavailable">The OCR source image could not be loaded, so the overlay is disabled.</string>
     <string name="page_viewer_ocr_region_overlay_detail">%1$d selectable regions from Rust-owned OCR text-region rows.</string>
     <string name="page_viewer_ocr_region_tap_hint">Tap an outlined region to inspect its persisted text and confidence.</string>
     <string name="page_viewer_ocr_region_selected_text">Selected text: %1$s</string>

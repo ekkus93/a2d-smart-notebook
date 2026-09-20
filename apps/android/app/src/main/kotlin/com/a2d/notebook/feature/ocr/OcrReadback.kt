@@ -3,6 +3,7 @@ package com.a2d.notebook.feature.ocr
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.LoadLatestOcrOutputRequest as FfiLoadLatestOcrOutputRequest
 import uniffi.a2d_ffi.OcrRunStatus as FfiOcrRunStatus
+import uniffi.a2d_ffi.OcrInputKind as FfiOcrInputKind
 import uniffi.a2d_ffi.OcrTextPoint as FfiOcrTextPoint
 import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
 
@@ -27,6 +28,7 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
             )
         return LoadedAndroidOcrOutput(
             scanId = loaded.scanId,
+            sourceGeometry = loaded.latestRun?.let { loadSourceGeometry(loaded.scanId) },
             latestRun =
                 loaded.latestRun?.let { run ->
                     LoadedAndroidOcrRun(
@@ -63,11 +65,15 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
         scanId: String,
         regionLimit: UInt = DEFAULT_OCR_READBACK_REGION_LIMIT,
     ): OcrPresentationState = loadLatestOcrOutput(scanId, regionLimit).toPresentationState()
+
+    private fun loadSourceGeometry(scanId: String): AndroidOcrSourceGeometry? =
+        runCatching { AndroidOcrSourceGeometryGateway(client).resolve(scanId, FfiOcrInputKind.ORIGINAL) }.getOrNull()
 }
 
 data class LoadedAndroidOcrOutput(
     val scanId: String,
     val latestRun: LoadedAndroidOcrRun?,
+    val sourceGeometry: AndroidOcrSourceGeometry? = null,
 ) {
     fun toPresentationState(): OcrPresentationState =
         latestRun?.toPresentationState() ?: OcrPresentationState()

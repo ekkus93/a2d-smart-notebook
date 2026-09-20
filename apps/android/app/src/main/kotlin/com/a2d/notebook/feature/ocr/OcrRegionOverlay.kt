@@ -30,6 +30,7 @@ data class OcrRegionOverlayRegion(
 data class OcrRegionOverlayState(
     val regions: List<OcrRegionOverlayRegion> = emptyList(),
     val sourceFrame: OcrRegionCoordinateFrame? = null,
+    val sourceImagePath: String? = null,
     val completeRegionHydration: Boolean = true,
 ) {
     val renderableRegions: List<OcrRegionOverlayRegion>
@@ -60,17 +61,23 @@ data class OcrRegionOverlayState(
             sourceImageWidth: Int,
             sourceImageHeight: Int,
             regions: List<OcrRegionOverlayRegion>,
+            sourceImagePath: String? = null,
             completeRegionHydration: Boolean = true,
         ): OcrRegionOverlayState =
             OcrRegionOverlayState(
                 regions = regions,
                 sourceFrame = OcrRegionCoordinateFrame.fromDimensions(sourceImageWidth, sourceImageHeight),
+                sourceImagePath = sourceImagePath,
                 completeRegionHydration = completeRegionHydration,
             )
 
-        fun fromPersisted(output: LoadedAndroidOcrOutput): OcrRegionOverlayState {
+        fun fromPersisted(
+            output: LoadedAndroidOcrOutput,
+            sourceGeometry: AndroidOcrSourceGeometry? = null,
+        ): OcrRegionOverlayState {
             val run = output.latestRun ?: return OcrRegionOverlayState()
             if (run.status != OcrRunStatus.Detected) return OcrRegionOverlayState()
+            val resolvedSourceGeometry = sourceGeometry ?: output.sourceGeometry
             return OcrRegionOverlayState(
                 regions =
                     run.textRegions.map { region ->
@@ -81,7 +88,14 @@ data class OcrRegionOverlayState(
                             confidence = region.confidence,
                         )
                     },
-                sourceFrame = null,
+                sourceFrame =
+                    resolvedSourceGeometry?.let { geometry ->
+                        OcrRegionCoordinateFrame.fromDimensions(
+                            width = geometry.widthPx.toInt(),
+                            height = geometry.heightPx.toInt(),
+                        )
+                    },
+                sourceImagePath = resolvedSourceGeometry?.absolutePath,
                 completeRegionHydration = run.textRegionCount == run.textRegions.size,
             )
         }

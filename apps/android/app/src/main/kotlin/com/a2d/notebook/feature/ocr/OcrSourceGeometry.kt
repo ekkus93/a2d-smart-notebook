@@ -1,5 +1,6 @@
 package com.a2d.notebook.feature.ocr
 
+import java.io.File
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.OcrInputKind as FfiOcrInputKind
 import uniffi.a2d_ffi.OcrSourceGeometry as FfiOcrSourceGeometry
@@ -11,6 +12,7 @@ data class AndroidOcrSourceGeometry(
     val inputKind: FfiOcrInputKind,
     val mediaType: String,
     val relativePath: String,
+    val absolutePath: String,
     val byteLength: ULong,
     val widthPx: UInt,
     val heightPx: UInt,
@@ -35,17 +37,26 @@ class AndroidOcrSourceGeometryGateway(private val client: A2dClient) {
     fun resolve(
         scanId: String,
         inputKind: FfiOcrInputKind,
-    ): AndroidOcrSourceGeometry = client.resolveOcrSourceGeometry(scanId, inputKind).toAndroid()
+    ): AndroidOcrSourceGeometry {
+        val libraryRoot = File(client.libraryPath()).canonicalFile
+        return client.resolveOcrSourceGeometry(scanId, inputKind).toAndroid(libraryRoot)
+    }
 }
 
-private fun FfiOcrSourceGeometry.toAndroid(): AndroidOcrSourceGeometry =
-    AndroidOcrSourceGeometry(
+private fun FfiOcrSourceGeometry.toAndroid(libraryRoot: File): AndroidOcrSourceGeometry {
+    val sourceFile = libraryRoot.resolve(relativePath).canonicalFile
+    require(sourceFile.path == libraryRoot.path || sourceFile.path.startsWith(libraryRoot.path + File.separator)) {
+        "OCR source path must stay under the local library root"
+    }
+    return AndroidOcrSourceGeometry(
         scanId = scanId,
         inputAssetId = inputAssetId,
         inputKind = inputKind,
         mediaType = mediaType,
         relativePath = relativePath,
+        absolutePath = sourceFile.absolutePath,
         byteLength = byteLength,
         widthPx = widthPx,
         heightPx = heightPx,
     )
+}

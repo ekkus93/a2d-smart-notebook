@@ -1,28 +1,39 @@
 package com.a2d.notebook.feature.ocr
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.a2d.notebook.R
+import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 object OcrRegionOverlayTestTags {
     const val CARD = "ocr_region_overlay_card"
@@ -40,6 +51,7 @@ fun OcrRegionOverlayCard(
         mutableStateOf<String?>(null)
     }
     val frame = overlay.coordinateFrame
+    val sourceImage by rememberOcrSourceImage(overlay.sourceImagePath)
     val selectedRegion =
         overlay.renderableRegions.firstOrNull { it.textRegionId == selectedRegionId }
 
@@ -49,9 +61,10 @@ fun OcrRegionOverlayCard(
                 text = stringResource(R.string.page_viewer_ocr_region_overlay_title),
                 style = MaterialTheme.typography.titleMedium,
             )
-            if (!overlay.enabled || frame == null) {
+            val disabledReason = overlay.disabledReason(frame, sourceImage)
+            if (disabledReason != null) {
                 Text(
-                    text = stringResource(R.string.page_viewer_ocr_region_overlay_disabled),
+                    text = disabledReason,
                     modifier = Modifier.testTag(OcrRegionOverlayTestTags.DISABLED),
                 )
                 return@Column
@@ -69,20 +82,34 @@ fun OcrRegionOverlayCard(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .aspectRatio(frame.aspectRatio)
+                        .height(320.dp)
                         .testTag(OcrRegionOverlayTestTags.CANVAS)
                         .pointerInput(frame, overlay.renderableRegions) {
                             detectTapGestures { tap ->
-                                val sourceX = tap.x * frame.width / size.width
-                                val sourceY = tap.y * frame.height / size.height
-                                selectedRegionId = overlay.regionAt(sourceX, sourceY)?.textRegionId
+                                val transform = OcrOverlayTransform.contentFit(
+                                    sourceWidthPx = frame!!.width,
+                                    sourceHeightPx = frame.height,
+                                    viewportWidthPx = size.width.toFloat(),
+                                    viewportHeightPx = size.height.toFloat(),
+                                )
+                                val sourcePoint = transform.viewportToSource(OcrOverlayPoint(tap.x, tap.y))
+                                selectedRegionId = sourcePoint?.let { point -> overlay.regionAt(point.x, point.y)?.textRegionId }
                             }
                         },
             ) {
-                val scaleX = size.width / frame.width
-                val scaleY = size.height / frame.height
+                val transform = OcrOverlayTransform.contentFit(
+                    sourceWidthPx = frame!!.width,
+                    sourceHeightPx = frame.height,
+                    viewportWidthPx = size.width,
+                    viewportHeightPx = size.height,
+                )
+                drawImage(
+                    image = sourceImage!!,
+                    dstOffset = IntOffset(transform.offsetX.roundToInt(), transform.offsetY.roundToInt()),
+                    dstSize = IntSize(transform.renderedWidthPx.roundToInt(), transform.renderedHeightPx.roundToInt()),
+                )
                 overlay.renderableRegions.forEach { region ->
-                    val path = region.toCanvasPath(scaleX = scaleX, scaleY = scaleY)
+                    val path = region.toCanvasPath(transform)
                     if (region.textRegionId == selectedRegionId) {
                         drawPath(path = path, color = selectedFillColor)
                     }
@@ -120,14 +147,39 @@ fun OcrRegionOverlayCard(
     }
 }
 
-private fun OcrRegionOverlayRegion.toCanvasPath(
-    scaleX: Float,
-    scaleY: Float,
-): Path =
+@Composable
+private fun rememberOcrSourceImage(path: String?): State<ImageBitmap?> {
+    val image = remember(path) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(path) {
+        image.value = null
+        if (!path.isNullOrBlank()) {
+            image.value = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() }
+        }
+    }
+    return image
+}
+
+@Composable
+private fun OcrRegionOverlayState.disabledReason(
+    frame: OcrRegionCoordinateFrame?,
+    sourceImage: ImageBitmap?,
+): String? =
+    when {
+        !enabled || frame == null -> stringResource(R.string.page_viewer_ocr_region_overlay_disabled)
+        sourceImagePath.isNullOrBlank() -> stringResource(R.string.page_viewer_ocr_region_overlay_missing_image)
+        sourceImage == null -> stringResource(R.string.page_viewer_ocr_region_overlay_image_unavailable)
+        else -> null
+    }
+
+private fun OcrRegionOverlayRegion.toCanvasPath(transform: OcrOverlayTransform): Path =
     Path().apply {
         polygon.firstOrNull()?.let { first ->
-            moveTo(first.x * scaleX, first.y * scaleY)
-            polygon.drop(1).forEach { point -> lineTo(point.x * scaleX, point.y * scaleY) }
+            val start = transform.sourceToViewport(OcrOverlayPoint(first.x, first.y))
+            moveTo(start.x, start.y)
+            polygon.drop(1).forEach { point ->
+                val mapped = transform.sourceToViewport(OcrOverlayPoint(point.x, point.y))
+                lineTo(mapped.x, mapped.y)
+            }
             close()
         }
     }
