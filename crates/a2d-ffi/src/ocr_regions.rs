@@ -11,13 +11,19 @@ pub struct OcrTextPoint {
 
 impl From<OcrTextPoint> for core::CoreOcrTextPoint {
     fn from(value: OcrTextPoint) -> Self {
-        Self { x: value.x, y: value.y }
+        Self {
+            x: value.x,
+            y: value.y,
+        }
     }
 }
 
 impl From<core::CoreOcrTextPoint> for OcrTextPoint {
     fn from(value: core::CoreOcrTextPoint) -> Self {
-        Self { x: value.x, y: value.y }
+        Self {
+            x: value.x,
+            y: value.y,
+        }
     }
 }
 
