@@ -116,14 +116,9 @@ impl A2dCore {
         let ocr_run_id = OcrRunId::parse(&request.ocr_run_id)?;
         let (source_scan_id, source_input_kind, source_input_asset_id) = {
             let storage = self.lock_storage()?;
-            let run = storage.get_ocr_run(&ocr_run_id)?.ok_or_else(|| {
-                ocr_region_error(
-                    "CORE_OCR_TEXT_REGION_RUN_MISSING",
-                    "OCR text-region recording requires the referenced OCR run",
-                    false,
-                )
-                .with_detail("ocr_run_id", ocr_run_id.to_string())
-            })?;
+            let run = storage
+                .get_ocr_run(&ocr_run_id)?
+                .ok_or_else(|| missing_ocr_run_error(&ocr_run_id))?;
             let input_asset_id = run.input_asset_id.clone().ok_or_else(|| {
                 ocr_region_error(
                     "CORE_OCR_TEXT_REGION_SOURCE_ASSET_MISSING",
@@ -368,6 +363,18 @@ fn validate_region_source_bounds(
         }
     }
     Ok(())
+}
+
+fn missing_ocr_run_error(ocr_run_id: &OcrRunId) -> A2dError {
+    A2dError::new(
+        ErrorCode::new("STORAGE_TEXT_REGION_OCR_RUN_MISSING"),
+        ErrorCategory::Validation,
+        ErrorSeverity::Error,
+        "error.storage.text_region_ocr_run_missing",
+        "text region requires an existing OCR run",
+        false,
+    )
+    .with_detail("ocr_run_id", ocr_run_id.to_string())
 }
 
 fn ocr_region_error(
