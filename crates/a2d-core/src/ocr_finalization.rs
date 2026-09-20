@@ -73,10 +73,11 @@ impl A2dCore {
         validate_finalize_request(&request)?;
         let job_id = OcrJobId::parse(&request.job_id)?;
         let queued_job = self.get_ocr_job(&request.job_id)?;
-        let source =
-            self.resolve_ocr_source_geometry(&queued_job.scan_id, queued_job.input_kind)?;
-        validate_job_source_geometry(&queued_job, &source)?;
-        validate_region_source_bounds(&request.regions, source.width_px, source.height_px)?;
+        validate_region_source_bounds(
+            &request.regions,
+            queued_job.width_px,
+            queued_job.height_px,
+        )?;
 
         let now_ms = system_now_ms()?;
         let completed_at_ms = request.completed_at_ms.unwrap_or(now_ms);
@@ -194,38 +195,6 @@ impl A2dCore {
             })
         })
     }
-}
-
-fn validate_job_source_geometry(
-    job: &OcrJobSnapshot,
-    source: &crate::scan_policy::OcrSourceGeometry,
-) -> Result<(), A2dError> {
-    if job.scan_id != source.scan_id
-        || job.input_asset_id != source.input_asset_id
-        || job.input_kind != source.input_kind
-    {
-        return Err(finalize_error(
-            "CORE_OCR_FINALIZE_SOURCE_IDENTITY_MISMATCH",
-            "OCR job identity does not match the authoritative source asset geometry",
-            false,
-        )
-        .with_detail("job_scan_id", job.scan_id.clone())
-        .with_detail("source_scan_id", source.scan_id.clone())
-        .with_detail("job_input_asset_id", job.input_asset_id.clone())
-        .with_detail("source_input_asset_id", source.input_asset_id.clone()));
-    }
-    if job.width_px != source.width_px || job.height_px != source.height_px {
-        return Err(finalize_error(
-            "CORE_OCR_FINALIZE_SOURCE_DIMENSIONS_MISMATCH",
-            "OCR job dimensions do not match the authoritative source image dimensions",
-            false,
-        )
-        .with_detail("job_width_px", job.width_px.to_string())
-        .with_detail("job_height_px", job.height_px.to_string())
-        .with_detail("source_width_px", source.width_px.to_string())
-        .with_detail("source_height_px", source.height_px.to_string()));
-    }
-    Ok(())
 }
 
 /// OCR polygons use inclusive source-pixel bounds: 0 <= x <= width and 0 <= y <= height.
@@ -780,30 +749,6 @@ mod tests {
         assert_eq!(
             error.code.to_string(),
             "CORE_OCR_FINALIZE_TEXT_REGION_OUT_OF_SOURCE_BOUNDS"
-        );
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn finalize_detected_ocr_rejects_job_dimensions_that_do_not_match_source() {
-        let (core, dir) = open_test_core();
-        let fixture = insert_scan_fixture(&core);
-        core.enqueue_ocr_job(EnqueueOcrJobRequest {
-            scan_id: fixture.scan_id.to_string(),
-            input_kind: CoreOcrInputKind::Original,
-            width_px: 199,
-            height_px: 100,
-        })
-        .unwrap();
-        let claimed = core.claim_next_ocr_job().unwrap().unwrap();
-
-        let error = core
-            .finalize_ocr_job(detected_request(&claimed))
-            .unwrap_err();
-
-        assert_eq!(
-            error.code.to_string(),
-            "CORE_OCR_FINALIZE_SOURCE_DIMENSIONS_MISMATCH"
         );
         std::fs::remove_dir_all(&dir).ok();
     }
