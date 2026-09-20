@@ -30,6 +30,7 @@ data class OcrRegionOverlayRegion(
 data class OcrRegionOverlayState(
     val regions: List<OcrRegionOverlayRegion> = emptyList(),
     val sourceFrame: OcrRegionCoordinateFrame? = null,
+    val sourceImagePath: String? = null,
     val completeRegionHydration: Boolean = true,
 ) {
     val renderableRegions: List<OcrRegionOverlayRegion>
@@ -60,15 +61,20 @@ data class OcrRegionOverlayState(
             sourceImageWidth: Int,
             sourceImageHeight: Int,
             regions: List<OcrRegionOverlayRegion>,
+            sourceImagePath: String? = null,
             completeRegionHydration: Boolean = true,
         ): OcrRegionOverlayState =
             OcrRegionOverlayState(
                 regions = regions,
                 sourceFrame = OcrRegionCoordinateFrame.fromDimensions(sourceImageWidth, sourceImageHeight),
+                sourceImagePath = sourceImagePath,
                 completeRegionHydration = completeRegionHydration,
             )
 
-        fun fromPersisted(output: LoadedAndroidOcrOutput): OcrRegionOverlayState {
+        fun fromPersisted(
+            output: LoadedAndroidOcrOutput,
+            sourceGeometry: AndroidOcrSourceGeometry? = null,
+        ): OcrRegionOverlayState {
             val run = output.latestRun ?: return OcrRegionOverlayState()
             if (run.status != OcrRunStatus.Detected) return OcrRegionOverlayState()
             return OcrRegionOverlayState(
@@ -81,7 +87,14 @@ data class OcrRegionOverlayState(
                             confidence = region.confidence,
                         )
                     },
-                sourceFrame = null,
+                sourceFrame =
+                    sourceGeometry?.let { geometry ->
+                        OcrRegionCoordinateFrame.fromDimensions(
+                            width = geometry.widthPx.toInt(),
+                            height = geometry.heightPx.toInt(),
+                        )
+                    },
+                sourceImagePath = sourceGeometry?.absolutePath,
                 completeRegionHydration = run.textRegionCount == run.textRegions.size,
             )
         }
