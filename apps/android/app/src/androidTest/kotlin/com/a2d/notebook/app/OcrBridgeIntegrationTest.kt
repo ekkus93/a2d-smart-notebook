@@ -115,12 +115,16 @@ class OcrBridgeIntegrationTest {
         try {
             val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
             val scan = registerRealScan(client, root)
-            val geometry = client.resolveOcrSourceGeometry(scan.scanId, OcrInputKind.OCR_OPTIMIZED)
+            // A freshly registered scan has an immutable Original asset. OcrOptimized is only
+            // valid after the scanner's optimization pipeline has materialized that derivative.
+            // This sentinel targets queue -> provider -> transactional finalizer -> search
+            // composition, while scanner OcrOptimized identity is covered by its own sentinel.
+            val geometry = client.resolveOcrSourceGeometry(scan.scanId, OcrInputKind.ORIGINAL)
             val queueGateway = FfiAndroidOcrQueueGateway(client)
             val queued =
                 queueGateway.enqueue(
                     scanId = scan.scanId,
-                    inputKind = AndroidOcrInputKind.OcrOptimized,
+                    inputKind = AndroidOcrInputKind.Original,
                     widthPx = geometry.widthPx,
                     heightPx = geometry.heightPx,
                 )
