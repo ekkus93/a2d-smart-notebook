@@ -1,8 +1,10 @@
 package com.a2d.notebook.feature.ocr
 
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -92,6 +94,21 @@ class OcrSearchTest {
         assertEquals("notebook", state.query)
         assertEquals("STORAGE_OCR_SEARCH_LIMIT_INVALID", state.errorMessage)
         assertTrue(state.hits.isEmpty())
+    }
+
+    @Test
+    fun cancellationRemainsCancellationInsteadOfBecomingSearchError() {
+        val cancellation = CancellationException("search navigation cancelled")
+        val gateway = FakeOcrSearchGateway(failure = cancellation)
+        val controller = AndroidOcrSearchController(gateway, searchDispatcher = Dispatchers.Unconfined)
+
+        val thrown =
+            assertThrows(CancellationException::class.java) {
+                runBlocking { controller.submit("notebook") }
+            }
+
+        assertEquals(cancellation, thrown)
+        assertEquals(1, gateway.requests.size)
     }
 
     private class FakeOcrSearchGateway(
