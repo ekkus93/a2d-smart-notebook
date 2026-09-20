@@ -73,11 +73,7 @@ impl A2dCore {
         validate_finalize_request(&request)?;
         let job_id = OcrJobId::parse(&request.job_id)?;
         let queued_job = self.get_ocr_job(&request.job_id)?;
-        validate_region_source_bounds(
-            &request.regions,
-            queued_job.width_px,
-            queued_job.height_px,
-        )?;
+        validate_region_source_bounds(&request.regions, queued_job.width_px, queued_job.height_px)?;
 
         let now_ms = system_now_ms()?;
         let completed_at_ms = request.completed_at_ms.unwrap_or(now_ms);
