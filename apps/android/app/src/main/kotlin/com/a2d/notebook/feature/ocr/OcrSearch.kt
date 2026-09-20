@@ -1,5 +1,6 @@
 package com.a2d.notebook.feature.ocr
 
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,7 +43,8 @@ class FfiAndroidOcrSearchGateway(private val client: A2dClient) : AndroidOcrSear
  * Converts a search submission into presentation state.
  *
  * Validation and query syntax remain Rust-owned. Blocking FFI/database work is dispatched away
- * from the UI thread, and any Rust error text is preserved for local presentation.
+ * from the UI thread, and any Rust error text is preserved for local presentation. Coroutine
+ * cancellation is never converted into an ordinary search error state.
  */
 class AndroidOcrSearchController(
     private val gateway: AndroidOcrSearchGateway,
@@ -73,6 +75,8 @@ class AndroidOcrSearchController(
                     hits = results.hits.map { it.toPresentationHit() },
                 )
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (failure: Exception) {
             OcrSearchPresentationState.error(
                 query = trimmedQuery,
