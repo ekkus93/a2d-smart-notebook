@@ -105,6 +105,7 @@ class PageViewerProductionOcrActionsTest {
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule.onAllNodesWithText("attempt 1", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
+            composeRule.onNodeWithTag(PageViewerTestTags.TEXT).performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("attempt 1", substring = true).assertIsDisplayed()
             composeRule.onNodeWithTag(PageViewerTestTags.OCR_CANCEL).performScrollTo().assertIsEnabled()
         } finally { root.deleteRecursively() }
