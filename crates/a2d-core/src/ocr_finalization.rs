@@ -72,6 +72,9 @@ impl A2dCore {
     ) -> Result<FinalizedOcrJob, A2dError> {
         validate_finalize_request(&request)?;
         let job_id = OcrJobId::parse(&request.job_id)?;
+        let queued_job = self.get_ocr_job(&request.job_id)?;
+        validate_region_source_bounds(&request.regions, queued_job.width_px, queued_job.height_px)?;
+
         let now_ms = system_now_ms()?;
         let completed_at_ms = request.completed_at_ms.unwrap_or(now_ms);
         let mut storage = self.lock_storage()?;
@@ -188,6 +191,41 @@ impl A2dCore {
             })
         })
     }
+}
+
+/// OCR polygons use inclusive source-pixel bounds: 0 <= x <= width and 0 <= y <= height.
+fn validate_region_source_bounds(
+    regions: &[FinalizeOcrTextRegionRequest],
+    width_px: u32,
+    height_px: u32,
+) -> Result<(), A2dError> {
+    if width_px == 0 || height_px == 0 {
+        return Err(finalize_error(
+            "CORE_OCR_FINALIZE_SOURCE_DIMENSIONS_INVALID",
+            "OCR source dimensions must be positive before polygon validation",
+            false,
+        ));
+    }
+    let max_x = width_px as f32;
+    let max_y = height_px as f32;
+    for (region_index, region) in regions.iter().enumerate() {
+        for (point_index, point) in region.polygon.iter().enumerate() {
+            if point.x > max_x || point.y > max_y {
+                return Err(finalize_error(
+                    "CORE_OCR_FINALIZE_TEXT_REGION_OUT_OF_SOURCE_BOUNDS",
+                    "OCR text-region polygon point exceeds the authoritative source image bounds",
+                    false,
+                )
+                .with_detail("region_index", region_index.to_string())
+                .with_detail("point_index", point_index.to_string())
+                .with_detail("x", point.x.to_string())
+                .with_detail("y", point.y.to_string())
+                .with_detail("source_width_px", width_px.to_string())
+                .with_detail("source_height_px", height_px.to_string()));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_finalize_request(request: &FinalizeOcrJobRequest) -> Result<(), A2dError> {
@@ -522,6 +560,7 @@ mod tests {
         PageState, QualityStatus, ScanId, SmartPageId,
     };
     use a2d_storage::{AssetRepository, PageRepository, ScanRepository};
+    use image::{ImageBuffer, Rgba};
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -539,13 +578,13 @@ mod tests {
         (core, dir)
     }
 
-    fn asset(id: AssetId) -> Asset {
+    fn asset(id: AssetId, byte_length: u64) -> Asset {
         Asset::new(
             id.clone(),
             AssetKind::Original,
             format!("assets/originals/{id}.png"),
             "image/png".to_string(),
-            1_024,
+            byte_length,
             "test-sha256".to_string(),
             100,
             true,
@@ -564,6 +603,13 @@ mod tests {
     fn insert_scan_fixture(core: &A2dCore) -> ScanFixture {
         let page_id = PageId::generate();
         let original_asset_id = AssetId::generate();
+        let relative_path = format!("assets/originals/{original_asset_id}.png");
+        let source_path = core.library_path.join(&relative_path);
+        std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        ImageBuffer::<Rgba<u8>, Vec<u8>>::from_pixel(200, 100, Rgba([255, 255, 255, 255]))
+            .save(&source_path)
+            .unwrap();
+        let byte_length = source_path.metadata().unwrap().len();
         let scan_id = ScanId::generate();
         let page = Page::new(
             page_id.clone(),
@@ -597,7 +643,7 @@ mod tests {
         let storage = core.lock_storage().unwrap();
         storage.insert_page(&page).unwrap();
         storage
-            .insert_asset(&asset(original_asset_id.clone()))
+            .insert_asset(&asset(original_asset_id.clone(), byte_length))
             .unwrap();
         storage.insert_scan(&scan).unwrap();
         ScanFixture { scan_id }
@@ -607,8 +653,8 @@ mod tests {
         core.enqueue_ocr_job(EnqueueOcrJobRequest {
             scan_id: fixture.scan_id.to_string(),
             input_kind: CoreOcrInputKind::Original,
-            width_px: 1_000,
-            height_px: 1_400,
+            width_px: 200,
+            height_px: 100,
         })
         .unwrap();
         core.claim_next_ocr_job().unwrap().unwrap()
@@ -644,6 +690,63 @@ mod tests {
             retryable: false,
             regions: vec![region("transactional rollback text")],
         }
+    }
+
+    #[test]
+    fn finalize_detected_ocr_accepts_all_four_inclusive_source_edges() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let claimed = claim_job(&core, &fixture);
+        let mut request = detected_request(&claimed);
+        request.regions[0].polygon = vec![
+            CoreOcrTextPoint { x: 0.0, y: 0.0 },
+            CoreOcrTextPoint { x: 200.0, y: 0.0 },
+            CoreOcrTextPoint { x: 200.0, y: 100.0 },
+            CoreOcrTextPoint { x: 0.0, y: 100.0 },
+        ];
+
+        let finalized = core.finalize_ocr_job(request).unwrap();
+
+        assert_eq!(finalized.recorded_region_count, 1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn finalize_detected_ocr_rejects_polygon_beyond_source_width() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let claimed = claim_job(&core, &fixture);
+        let mut request = detected_request(&claimed);
+        request.regions[0].polygon[1].x = 200.5;
+
+        let error = core.finalize_ocr_job(request).unwrap_err();
+
+        assert_eq!(
+            error.code.to_string(),
+            "CORE_OCR_FINALIZE_TEXT_REGION_OUT_OF_SOURCE_BOUNDS"
+        );
+        assert_eq!(
+            core.get_ocr_job(&claimed.job_id).unwrap().status,
+            crate::CoreOcrJobStatus::Running
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn finalize_detected_ocr_rejects_polygon_beyond_source_height() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let claimed = claim_job(&core, &fixture);
+        let mut request = detected_request(&claimed);
+        request.regions[0].polygon[2].y = 100.5;
+
+        let error = core.finalize_ocr_job(request).unwrap_err();
+
+        assert_eq!(
+            error.code.to_string(),
+            "CORE_OCR_FINALIZE_TEXT_REGION_OUT_OF_SOURCE_BOUNDS"
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
