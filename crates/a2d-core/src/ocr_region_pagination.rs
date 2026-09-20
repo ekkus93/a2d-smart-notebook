@@ -85,14 +85,15 @@ impl A2dCore {
         };
 
         let run_id = run.id().clone();
-        let total_count = u32::try_from(storage.count_text_regions_for_ocr_run(&run_id)?).map_err(|_| {
-            pagination_error(
-                "CORE_OCR_REGION_COUNT_OVERFLOW",
-                ErrorCategory::Integrity,
-                "OCR region count exceeds the portable u32 representation",
-            )
-            .with_detail("ocr_run_id", run_id.to_string())
-        })?;
+        let total_count =
+            u32::try_from(storage.count_text_regions_for_ocr_run(&run_id)?).map_err(|_| {
+                pagination_error(
+                    "CORE_OCR_REGION_COUNT_OVERFLOW",
+                    ErrorCategory::Integrity,
+                    "OCR region count exceeds the portable u32 representation",
+                )
+                .with_detail("ocr_run_id", run_id.to_string())
+            })?;
         if total_count > MAX_OCR_REGIONS_PER_RUN {
             return Err(pagination_error(
                 "CORE_OCR_REGION_COUNT_EXCEEDS_SUPPORTED_MAXIMUM",
