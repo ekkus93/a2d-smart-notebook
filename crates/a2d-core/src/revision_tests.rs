@@ -1,5 +1,8 @@
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
+
+use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 
 use a2d_domain::{
     AssetKind, CaptureSource, LayoutId, OcrRunStatus, Page, PageId, PageKind, PageState,
@@ -37,6 +40,15 @@ fn fingerprint(corrected_sha256: &str, changed_cell: Option<(usize, u8)>) -> Str
     )
 }
 
+fn png_bytes(pixel: [u8; 4]) -> Vec<u8> {
+    let image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_pixel(300, 100, Rgba(pixel));
+    let mut encoded = Cursor::new(Vec::new());
+    DynamicImage::ImageRgba8(image)
+        .write_to(&mut encoded, ImageFormat::Png)
+        .unwrap();
+    encoded.into_inner()
+}
+
 fn fixture(candidate_changed_cell: Option<(usize, u8)>) -> Fixture {
     let root = std::env::temp_dir().join(format!("a2d-core-revision-{}", PageId::generate()));
     let core = A2dCore::open(OpenLibraryRequest {
@@ -64,23 +76,33 @@ fn fixture(candidate_changed_cell: Option<(usize, u8)>) -> Fixture {
         .asset_store
         .commit(b"baseline-original", AssetKind::Original, "image/jpeg")
         .unwrap();
+    let baseline_corrected_bytes = png_bytes([240, 240, 240, 255]);
     let mut baseline_corrected = core
         .asset_store
-        .commit(b"baseline-corrected", AssetKind::Corrected, "image/png")
+        .commit(
+            &baseline_corrected_bytes,
+            AssetKind::Corrected,
+            "image/png",
+        )
         .unwrap();
     baseline_corrected.immutable = true;
     let candidate_original = core
         .asset_store
         .commit(b"candidate-original", AssetKind::Original, "image/jpeg")
         .unwrap();
-    let candidate_corrected_bytes: &[u8] = if candidate_changed_cell.is_none() {
-        b"baseline-corrected"
-    } else {
-        b"candidate-corrected"
-    };
+    let candidate_corrected_bytes =
+        if candidate_changed_cell.is_none() {
+            baseline_corrected_bytes.clone()
+        } else {
+            png_bytes([220, 220, 220, 255])
+        };
     let mut candidate_corrected = core
         .asset_store
-        .commit(candidate_corrected_bytes, AssetKind::Corrected, "image/png")
+        .commit(
+            &candidate_corrected_bytes,
+            AssetKind::Corrected,
+            "image/png",
+        )
         .unwrap();
     candidate_corrected.immutable = true;
     let baseline_id = ScanId::generate();
@@ -157,8 +179,8 @@ fn enqueue_ocr(fixture: &Fixture) -> super::OcrJobSnapshot {
         .enqueue_ocr_job(EnqueueOcrJobRequest {
             scan_id: fixture.baseline_id.to_string(),
             input_kind: CoreOcrInputKind::Corrected,
-            width_px: 1_000,
-            height_px: 1_400,
+            width_px: 300,
+            height_px: 100,
         })
         .unwrap()
 }
