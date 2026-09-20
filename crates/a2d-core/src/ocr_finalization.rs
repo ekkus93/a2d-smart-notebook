@@ -73,7 +73,8 @@ impl A2dCore {
         validate_finalize_request(&request)?;
         let job_id = OcrJobId::parse(&request.job_id)?;
         let queued_job = self.get_ocr_job(&request.job_id)?;
-        let source = self.resolve_ocr_source_geometry(&queued_job.scan_id, queued_job.input_kind)?;
+        let source =
+            self.resolve_ocr_source_geometry(&queued_job.scan_id, queued_job.input_kind)?;
         validate_job_source_geometry(&queued_job, &source)?;
         validate_region_source_bounds(&request.regions, source.width_px, source.height_px)?;
 
@@ -759,7 +760,10 @@ mod tests {
             error.code.to_string(),
             "CORE_OCR_FINALIZE_TEXT_REGION_OUT_OF_SOURCE_BOUNDS"
         );
-        assert_eq!(core.get_ocr_job(&claimed.job_id).unwrap().status, crate::CoreOcrJobStatus::Running);
+        assert_eq!(
+            core.get_ocr_job(&claimed.job_id).unwrap().status,
+            crate::CoreOcrJobStatus::Running
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -793,7 +797,9 @@ mod tests {
         .unwrap();
         let claimed = core.claim_next_ocr_job().unwrap().unwrap();
 
-        let error = core.finalize_ocr_job(detected_request(&claimed)).unwrap_err();
+        let error = core
+            .finalize_ocr_job(detected_request(&claimed))
+            .unwrap_err();
 
         assert_eq!(
             error.code.to_string(),
