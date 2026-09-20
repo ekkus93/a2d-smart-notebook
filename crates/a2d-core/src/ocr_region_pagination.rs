@@ -1,6 +1,6 @@
 use crate::{A2dCore, CoreOcrTextPoint};
 use a2d_domain::{A2dError, ErrorCategory, ErrorCode, ErrorSeverity, OcrRunStatus, ScanId};
-use a2d_storage::{OcrReadbackRepository, OcrRunRepository, ScanRepository, TextRegionRepository};
+use a2d_storage::{OcrReadbackRepository, ScanRepository, TextRegionRepository};
 
 pub const MAX_OCR_REGIONS_PER_RUN: u32 = 20_000;
 pub const MAX_OCR_REGION_PAGE_SIZE: u32 = 1_000;
