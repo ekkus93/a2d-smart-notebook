@@ -208,11 +208,8 @@ mod tests {
     #[test]
     fn region_capacity_allows_exact_maximum_and_rejects_next_region() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute(
-            "CREATE TABLE text_regions (ocr_run_id TEXT NOT NULL)",
-            [],
-        )
-        .unwrap();
+        conn.execute("CREATE TABLE text_regions (ocr_run_id TEXT NOT NULL)", [])
+            .unwrap();
         let run_id = OcrRunId::generate();
         conn.execute(
             "WITH RECURSIVE n(value) AS (\
