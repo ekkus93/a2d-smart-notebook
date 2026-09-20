@@ -1,5 +1,7 @@
 package com.a2d.notebook.app
 
+import android.graphics.Bitmap
+import android.graphics.Color
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
@@ -18,6 +20,7 @@ import com.a2d.notebook.feature.ocr.OcrRegionOverlayRegion
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayState
 import com.a2d.notebook.feature.ocr.OcrRegionOverlayTestTags
 import com.a2d.notebook.feature.ocr.OcrTextPoint
+import java.io.File
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -111,6 +114,8 @@ class PageViewerUiTest {
 
     @Test
     fun pageViewerShowsPersistedOcrRegionOverlayWhenSourceGeometryAndRowsExist() {
+        val sourceImagePath = writeTestOcrSourceImage(width = 200, height = 100)
+
         composeRule.activity.setContent {
             MaterialTheme {
                 PageViewerContent(
@@ -135,6 +140,7 @@ class PageViewerUiTest {
                                             ),
                                         ),
                                     sourceFrame = OcrRegionCoordinateFrame(width = 200f, height = 100f),
+                                    sourceImagePath = sourceImagePath,
                                 ),
                         ),
                     onBack = {},
@@ -247,5 +253,18 @@ class PageViewerUiTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText("ML Kit model missing", substring = true).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(PageViewerTestTags.OCR_RETRY).performScrollTo().assertIsDisplayed()
+    }
+
+    private fun writeTestOcrSourceImage(width: Int, height: Int): String {
+        val file = File(composeRule.activity.cacheDir, "ocr-source-${System.nanoTime()}.png")
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(Color.WHITE)
+        file.outputStream().use { output ->
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                "failed to write OCR source fixture image"
+            }
+        }
+        bitmap.recycle()
+        return file.absolutePath
     }
 }
