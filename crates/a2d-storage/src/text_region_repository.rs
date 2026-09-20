@@ -12,6 +12,12 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::json_columns::{decode_json, encode_json};
 use crate::{Storage, map_rusqlite_error};
 
+/// Authoritative durable maximum for OCR regions belonging to one OCR run.
+///
+/// This mirrors the Rust product contract exposed by `a2d-core`; enforcing it at the storage write
+/// boundary makes the limit cumulative across repeated batches and keeps every caller fail-closed.
+const MAX_OCR_REGIONS_PER_RUN: i64 = 20_000;
+
 pub trait TextRegionRepository {
     fn insert_text_region(&self, region: &TextRegion) -> Result<(), A2dError>;
     fn get_text_region(&self, id: &TextRegionId) -> Result<Option<TextRegion>, A2dError>;
@@ -41,6 +47,7 @@ impl TextRegionRepository for Storage {
 impl TextRegionRepository for Connection {
     fn insert_text_region(&self, region: &TextRegion) -> Result<(), A2dError> {
         require_detected_ocr_run(self, &region.ocr_run_id)?;
+        require_region_capacity(self, &region.ocr_run_id)?;
         let polygon = encode_json(&region.polygon, "text_regions.polygon")?;
         self.execute(
             "INSERT INTO text_regions (id, ocr_run_id, polygon, text, confidence, created_at_ms) \
@@ -156,6 +163,30 @@ fn require_detected_ocr_run(conn: &Connection, ocr_run_id: &OcrRunId) -> Result<
     }
 }
 
+fn require_region_capacity(conn: &Connection, ocr_run_id: &OcrRunId) -> Result<(), A2dError> {
+    let region_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM text_regions WHERE ocr_run_id = ?1",
+            [ocr_run_id.to_string()],
+            |row| row.get(0),
+        )
+        .map_err(|error| map_rusqlite_error("insert_text_region.count_for_ocr_run", error))?;
+    if region_count >= MAX_OCR_REGIONS_PER_RUN {
+        return Err(A2dError::new(
+            ErrorCode::new("STORAGE_TEXT_REGION_RUN_LIMIT_EXCEEDED"),
+            ErrorCategory::Validation,
+            ErrorSeverity::Error,
+            "error.storage.text_region_run_limit_exceeded",
+            "OCR run already contains the maximum supported number of text regions",
+            false,
+        )
+        .with_detail("ocr_run_id", ocr_run_id.to_string())
+        .with_detail("region_count", region_count.to_string())
+        .with_detail("max_region_count", MAX_OCR_REGIONS_PER_RUN.to_string()));
+    }
+    Ok(())
+}
+
 fn text_region_from_row(
     row: (String, String, String, String, Option<f32>, i64),
 ) -> Result<TextRegion, A2dError> {
@@ -168,4 +199,45 @@ fn text_region_from_row(
         confidence,
         created_at_ms,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn region_capacity_allows_exact_maximum_and_rejects_next_region() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE text_regions (ocr_run_id TEXT NOT NULL)", [])
+            .unwrap();
+        let run_id = OcrRunId::generate();
+        conn.execute(
+            "WITH RECURSIVE n(value) AS (\
+                 SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < ?2\
+             ) INSERT INTO text_regions (ocr_run_id) SELECT ?1 FROM n",
+            params![run_id.to_string(), MAX_OCR_REGIONS_PER_RUN - 1],
+        )
+        .unwrap();
+
+        require_region_capacity(&conn, &run_id).unwrap();
+        conn.execute(
+            "INSERT INTO text_regions (ocr_run_id) VALUES (?1)",
+            [run_id.to_string()],
+        )
+        .unwrap();
+
+        let error = require_region_capacity(&conn, &run_id).unwrap_err();
+        assert_eq!(
+            error.code.to_string(),
+            "STORAGE_TEXT_REGION_RUN_LIMIT_EXCEEDED"
+        );
+        assert_eq!(
+            error.details.get("region_count"),
+            Some(&MAX_OCR_REGIONS_PER_RUN.to_string())
+        );
+        assert_eq!(
+            error.details.get("max_region_count"),
+            Some(&MAX_OCR_REGIONS_PER_RUN.to_string())
+        );
+    }
 }
