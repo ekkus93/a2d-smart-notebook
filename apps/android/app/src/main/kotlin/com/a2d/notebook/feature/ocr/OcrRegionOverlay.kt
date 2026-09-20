@@ -77,6 +77,7 @@ data class OcrRegionOverlayState(
         ): OcrRegionOverlayState {
             val run = output.latestRun ?: return OcrRegionOverlayState()
             if (run.status != OcrRunStatus.Detected) return OcrRegionOverlayState()
+            val resolvedSourceGeometry = sourceGeometry ?: output.sourceGeometry
             return OcrRegionOverlayState(
                 regions =
                     run.textRegions.map { region ->
@@ -88,13 +89,13 @@ data class OcrRegionOverlayState(
                         )
                     },
                 sourceFrame =
-                    sourceGeometry?.let { geometry ->
+                    resolvedSourceGeometry?.let { geometry ->
                         OcrRegionCoordinateFrame.fromDimensions(
                             width = geometry.widthPx.toInt(),
                             height = geometry.heightPx.toInt(),
                         )
                     },
-                sourceImagePath = sourceGeometry?.absolutePath,
+                sourceImagePath = resolvedSourceGeometry?.absolutePath,
                 completeRegionHydration = run.textRegionCount == run.textRegions.size,
             )
         }
