@@ -13,6 +13,10 @@ import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
  * Running OCR and reading previously persisted OCR are deliberately separate flows. This adapter
  * hydrates [OcrPresentationState] from Rust-owned OCR rows so Page Viewer callers can restore OCR
  * status after app restart without manufacturing an empty detected-text result on Android.
+ *
+ * The current Rust readback API returns a bounded region window plus the authoritative total count.
+ * Until R15's paginated FFI contract is available, this adapter fails closed when that window is
+ * incomplete. A partial overlay must never be presented as if it were complete.
  */
 class FfiAndroidOcrReadback(private val client: A2dClient) {
     fun loadLatestOcrOutput(
@@ -26,11 +30,22 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
                     regionLimit = regionLimit,
                 ),
             )
+        val latestRun = loaded.latestRun
+        if (
+            latestRun?.status == FfiOcrRunStatus.DETECTED &&
+                latestRun.textRegionCount.toInt() != latestRun.textRegions.size
+        ) {
+            throw IncompleteOcrRegionReadbackException(
+                ocrRunId = latestRun.ocrRunId,
+                expectedRegionCount = latestRun.textRegionCount.toInt(),
+                loadedRegionCount = latestRun.textRegions.size,
+            )
+        }
         return LoadedAndroidOcrOutput(
             scanId = loaded.scanId,
-            sourceGeometry = loaded.latestRun?.let { loadSourceGeometry(loaded.scanId) },
+            sourceGeometry = latestRun?.let { loadSourceGeometry(loaded.scanId) },
             latestRun =
-                loaded.latestRun?.let { run ->
+                latestRun?.let { run ->
                     LoadedAndroidOcrRun(
                         ocrRunId = run.ocrRunId,
                         scanId = run.scanId,
@@ -69,6 +84,14 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
     private fun loadSourceGeometry(scanId: String): AndroidOcrSourceGeometry? =
         runCatching { AndroidOcrSourceGeometryGateway(client).resolve(scanId, FfiOcrInputKind.ORIGINAL) }.getOrNull()
 }
+
+class IncompleteOcrRegionReadbackException(
+    val ocrRunId: String,
+    val expectedRegionCount: Int,
+    val loadedRegionCount: Int,
+) : IllegalStateException(
+        "OCR region readback is incomplete for run $ocrRunId: loaded $loadedRegionCount of $expectedRegionCount regions",
+    )
 
 data class LoadedAndroidOcrOutput(
     val scanId: String,
