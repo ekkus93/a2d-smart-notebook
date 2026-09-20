@@ -24,6 +24,7 @@ import com.a2d.notebook.navigation.A2dNavHost
 import java.io.File
 import java.util.UUID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -61,10 +62,15 @@ class PageViewerProductionOcrActionsTest {
         val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
         try {
             val scan = registerRealScan(client = client, root = root)
+            val geometry = client.resolveOcrSourceGeometry(scan.scanId, OcrInputKind.ORIGINAL)
+            assertNotEquals(1800u, geometry.widthPx)
+            assertNotEquals(2200u, geometry.heightPx)
             openProductionPageViewer(client = client, scan = scan)
             composeRule.onNodeWithTag(PageViewerTestTags.TITLE).assertIsDisplayed()
             composeRule.onNodeWithText("Page ID: ${scan.pageId}").assertIsDisplayed()
             composeRule.onNodeWithText("Scan ID: ${scan.scanId}").assertIsDisplayed()
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_SOURCE_GEOMETRY).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("OCR source: ${geometry.widthPx}×${geometry.heightPx} px (Original)").assertIsDisplayed()
             composeRule.onNodeWithTag(PageViewerTestTags.OCR_START).performScrollTo().performClick()
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule.onAllNodesWithText("OCR queued as durable job", substring = true).fetchSemanticsNodes().isNotEmpty()
@@ -90,7 +96,7 @@ class PageViewerProductionOcrActionsTest {
         val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
         try {
             val scan = registerRealScan(client = client, root = root)
-            val queuedJob = client.enqueueOcrJob(EnqueueOcrJobRequest(scanId = scan.scanId, inputKind = OcrInputKind.ORIGINAL, widthPx = 1800u, heightPx = 2200u))
+            val queuedJob = enqueueFixtureOcrJob(client, scan)
             val runningJob = requireNotNull(client.claimNextOcrJob()) { "Fixture must claim the durable OCR job" }
             assertEquals(queuedJob.jobId, runningJob.jobId)
             assertEquals(OcrQueueJobStatus.RUNNING, runningJob.status)
@@ -110,7 +116,7 @@ class PageViewerProductionOcrActionsTest {
         val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
         try {
             val scan = registerRealScan(client = client, root = root)
-            val queuedJob = client.enqueueOcrJob(EnqueueOcrJobRequest(scanId = scan.scanId, inputKind = OcrInputKind.ORIGINAL, widthPx = 1800u, heightPx = 2200u))
+            val queuedJob = enqueueFixtureOcrJob(client, scan)
             assertEquals(OcrQueueJobStatus.QUEUED, queuedJob.status)
             openProductionPageViewer(client = client, scan = scan)
             composeRule.waitUntil(timeoutMillis = 10_000) {
@@ -251,7 +257,7 @@ class PageViewerProductionOcrActionsTest {
     }
 
     private fun createTerminalUnavailableOcrJob(client: A2dClient, scan: RegisteredScan): OcrQueueJob {
-        val queuedJob = client.enqueueOcrJob(EnqueueOcrJobRequest(scanId = scan.scanId, inputKind = OcrInputKind.ORIGINAL, widthPx = 1800u, heightPx = 2200u))
+        val queuedJob = enqueueFixtureOcrJob(client, scan)
         val runningJob = requireNotNull(client.claimNextOcrJob()) { "Fixture must claim OCR before completing it as unavailable" }
         assertEquals(queuedJob.jobId, runningJob.jobId)
         assertEquals(1u, runningJob.attemptCount)
@@ -263,8 +269,28 @@ class PageViewerProductionOcrActionsTest {
         return terminalJob
     }
 
+    private fun enqueueFixtureOcrJob(client: A2dClient, scan: RegisteredScan): OcrQueueJob {
+        val geometry = client.resolveOcrSourceGeometry(scan.scanId, OcrInputKind.ORIGINAL)
+        return client.enqueueOcrJob(
+            EnqueueOcrJobRequest(
+                scanId = scan.scanId,
+                inputKind = geometry.inputKind,
+                widthPx = geometry.widthPx,
+                heightPx = geometry.heightPx,
+            ),
+        )
+    }
+
     private fun recordTerminalOcr(client: A2dClient, scan: RegisteredScan, status: OcrRunStatus, text: String, unavailableReason: OcrUnavailableReason?, unavailableMessage: String?): uniffi.a2d_ffi.RecordedOcrRun {
-        val prepared = client.prepareOcrInput(PrepareOcrInputRequest(scanId = scan.scanId, inputKind = OcrInputKind.ORIGINAL, widthPx = 1800u, heightPx = 2200u))
+        val geometry = client.resolveOcrSourceGeometry(scan.scanId, OcrInputKind.ORIGINAL)
+        val prepared = client.prepareOcrInput(
+            PrepareOcrInputRequest(
+                scanId = scan.scanId,
+                inputKind = geometry.inputKind,
+                widthPx = geometry.widthPx,
+                heightPx = geometry.heightPx,
+            ),
+        )
         return client.recordOcrRun(RecordOcrRunRequest(scanId = scan.scanId, inputAssetId = prepared.inputAssetId, provider = "instrumentation-fixture", providerVersion = "1", modelName = "deterministic", status = status, fullText = text, unavailableReason = unavailableReason, unavailableMessage = unavailableMessage, completedAtMs = System.currentTimeMillis(), warnings = emptyList()))
     }
 
