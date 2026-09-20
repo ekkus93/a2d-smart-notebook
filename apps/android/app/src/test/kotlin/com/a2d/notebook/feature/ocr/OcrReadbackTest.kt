@@ -94,7 +94,15 @@ class OcrReadbackTest {
     fun androidPaginationRejectsConflictingDuplicateRegionsDuringRecreationOverlap() {
         val pages =
             mapOf(
-                0u to regionPage(offset = 0u, nextOffset = 2u, hasMore = true, complete = false, range = 0 until 2),
+                0u to
+                    regionPage(
+                        offset = 0u,
+                        nextOffset = 2u,
+                        hasMore = true,
+                        complete = false,
+                        range = 0 until 2,
+                        totalCount = 2u,
+                    ),
                 2u to
                     regionPage(
                         offset = 2u,
@@ -102,6 +110,7 @@ class OcrReadbackTest {
                         hasMore = false,
                         complete = true,
                         regions = listOf(regionPageRegion(1, text = "conflicting duplicate")),
+                        totalCount = 2u,
                     ),
             )
 
@@ -120,7 +129,15 @@ class OcrReadbackTest {
 
     @Test
     fun androidPaginationSurfacesLaterPageFailuresInsteadOfPublishingPartialOverlay() {
-        val first = regionPage(offset = 0u, nextOffset = 2u, hasMore = true, complete = false, range = 0 until 2)
+        val first =
+            regionPage(
+                offset = 0u,
+                nextOffset = 2u,
+                hasMore = true,
+                complete = false,
+                range = 0 until 2,
+                totalCount = 3u,
+            )
 
         val error =
             expectPaginationError {
