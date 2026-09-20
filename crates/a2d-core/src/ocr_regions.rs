@@ -1,9 +1,9 @@
-use crate::A2dCore;
+use crate::{A2dCore, CoreOcrInputKind};
 use a2d_domain::{
     A2dError, ErrorCategory, ErrorCode, ErrorSeverity, OcrRun, OcrRunId, OcrRunStatus,
     OcrUnavailableReason, ScanId, TextRegion, TextRegionId, system_now_ms,
 };
-use a2d_storage::{OcrReadbackRepository, ScanRepository, TextRegionRepository};
+use a2d_storage::{OcrReadbackRepository, OcrRunRepository, ScanRepository, TextRegionRepository};
 
 const MAX_OCR_TEXT_REGION_BATCH_SIZE: usize = 20_000;
 const MAX_OCR_READBACK_REGION_LIMIT: u32 = 1_000;
@@ -114,6 +114,44 @@ impl A2dCore {
         }
 
         let ocr_run_id = OcrRunId::parse(&request.ocr_run_id)?;
+        let (source_scan_id, source_input_kind, source_input_asset_id) = {
+            let storage = self.lock_storage()?;
+            let run = storage
+                .get_ocr_run(&ocr_run_id)?
+                .ok_or_else(|| missing_ocr_run_error(&ocr_run_id))?;
+            let input_asset_id = run.input_asset_id.clone().ok_or_else(|| {
+                ocr_region_error(
+                    "CORE_OCR_TEXT_REGION_SOURCE_ASSET_MISSING",
+                    "OCR text regions require a run bound to a source asset",
+                    false,
+                )
+                .with_detail("ocr_run_id", ocr_run_id.to_string())
+            })?;
+            let scan = storage.get_scan(&run.scan_id)?.ok_or_else(|| {
+                ocr_region_error(
+                    "CORE_OCR_TEXT_REGION_SCAN_MISSING",
+                    "OCR text-region recording requires the run's persisted scan",
+                    false,
+                )
+                .with_detail("scan_id", run.scan_id.to_string())
+            })?;
+            let input_kind = input_kind_for_scan_asset(&scan, &input_asset_id)?;
+            (
+                run.scan_id.to_string(),
+                input_kind,
+                input_asset_id.to_string(),
+            )
+        };
+        let source = self.resolve_ocr_source_geometry(&source_scan_id, source_input_kind)?;
+        if source.input_asset_id != source_input_asset_id {
+            return Err(ocr_region_error(
+                "CORE_OCR_TEXT_REGION_SOURCE_ASSET_MISMATCH",
+                "OCR run input asset does not match the authoritative source geometry",
+                false,
+            )
+            .with_detail("run_input_asset_id", source_input_asset_id)
+            .with_detail("source_input_asset_id", source.input_asset_id));
+        }
         let fallback_created_at_ms = system_now_ms()?;
         let mut typed_regions = Vec::with_capacity(request.regions.len());
         for (index, region) in request.regions.into_iter().enumerate() {
@@ -126,6 +164,12 @@ impl A2dCore {
                 )
                 .with_detail("region_index", index.to_string()));
             }
+            validate_region_source_bounds(
+                &region.polygon,
+                source.width_px,
+                source.height_px,
+                index,
+            )?;
             let polygon = region
                 .polygon
                 .into_iter()
@@ -264,6 +308,75 @@ fn loaded_text_region(region: TextRegion) -> LoadedOcrTextRegion {
     }
 }
 
+fn input_kind_for_scan_asset(
+    scan: &a2d_domain::Scan,
+    input_asset_id: &a2d_domain::AssetId,
+) -> Result<CoreOcrInputKind, A2dError> {
+    if input_asset_id == &scan.original_asset_id {
+        return Ok(CoreOcrInputKind::Original);
+    }
+    if scan
+        .corrected_asset_id
+        .as_ref()
+        .is_some_and(|asset_id| asset_id == input_asset_id)
+    {
+        return Ok(CoreOcrInputKind::Corrected);
+    }
+    if scan
+        .ocr_asset_id
+        .as_ref()
+        .is_some_and(|asset_id| asset_id == input_asset_id)
+    {
+        return Ok(CoreOcrInputKind::OcrOptimized);
+    }
+    Err(ocr_region_error(
+        "CORE_OCR_TEXT_REGION_SOURCE_ASSET_NOT_OWNED_BY_SCAN",
+        "OCR run input asset is not one of the scan's OCR-readable assets",
+        false,
+    )
+    .with_detail("scan_id", scan.id().to_string())
+    .with_detail("input_asset_id", input_asset_id.to_string()))
+}
+
+/// Inclusive source-pixel convention shared with finalization: 0 <= x <= width, 0 <= y <= height.
+fn validate_region_source_bounds(
+    polygon: &[CoreOcrTextPoint],
+    width_px: u32,
+    height_px: u32,
+    region_index: usize,
+) -> Result<(), A2dError> {
+    let max_x = width_px as f32;
+    let max_y = height_px as f32;
+    for (point_index, point) in polygon.iter().enumerate() {
+        if point.x > max_x || point.y > max_y {
+            return Err(ocr_region_error(
+                "CORE_OCR_TEXT_REGION_OUT_OF_SOURCE_BOUNDS",
+                "OCR text-region polygon point exceeds the authoritative source image bounds",
+                false,
+            )
+            .with_detail("region_index", region_index.to_string())
+            .with_detail("point_index", point_index.to_string())
+            .with_detail("x", point.x.to_string())
+            .with_detail("y", point.y.to_string())
+            .with_detail("source_width_px", width_px.to_string())
+            .with_detail("source_height_px", height_px.to_string()));
+        }
+    }
+    Ok(())
+}
+
+fn missing_ocr_run_error(ocr_run_id: &OcrRunId) -> A2dError {
+    A2dError::new(
+        ErrorCode::new("STORAGE_TEXT_REGION_OCR_RUN_MISSING"),
+        ErrorCategory::Validation,
+        ErrorSeverity::Error,
+        "error.storage.text_region_ocr_run_missing",
+        "text region requires an existing OCR run",
+        false,
+    )
+    .with_detail("ocr_run_id", ocr_run_id.to_string())
+}
+
 fn ocr_region_error(
     code: &'static str,
     developer_message: impl Into<String>,
@@ -290,6 +403,7 @@ mod tests {
     use a2d_storage::{
         AssetRepository, OcrRunRepository, PageRepository, ScanRepository, TextRegionRepository,
     };
+    use image::{ImageBuffer, Rgba};
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -309,13 +423,13 @@ mod tests {
         (core, dir)
     }
 
-    fn asset(id: AssetId) -> Asset {
+    fn asset(id: AssetId, byte_length: u64) -> Asset {
         Asset::new(
             id.clone(),
             AssetKind::Original,
             format!("assets/originals/{id}.png"),
             "image/png".to_string(),
-            1_024,
+            byte_length,
             "test-sha256".to_string(),
             100,
             true,
@@ -346,6 +460,13 @@ mod tests {
     fn insert_scan_fixture(core: &A2dCore) -> ScanFixture {
         let page_id = PageId::generate();
         let original_asset_id = AssetId::generate();
+        let relative_path = format!("assets/originals/{original_asset_id}.png");
+        let source_path = core.library_path.join(&relative_path);
+        std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        ImageBuffer::<Rgba<u8>, Vec<u8>>::from_pixel(200, 100, Rgba([255, 255, 255, 255]))
+            .save(&source_path)
+            .unwrap();
+        let byte_length = source_path.metadata().unwrap().len();
         let scan_id = ScanId::generate();
         let page = Page::new(
             page_id.clone(),
@@ -379,7 +500,7 @@ mod tests {
         let storage = core.lock_storage().unwrap();
         storage.insert_page(&page).unwrap();
         storage
-            .insert_asset(&asset(original_asset_id.clone()))
+            .insert_asset(&asset(original_asset_id.clone(), byte_length))
             .unwrap();
         storage.insert_scan(&scan).unwrap();
         ScanFixture {
@@ -562,6 +683,35 @@ mod tests {
             })
             .unwrap_err();
         assert_eq!(err.code.to_string(), "CORE_OCR_TEXT_REGION_BATCH_EMPTY");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_ocr_text_regions_rejects_polygon_beyond_authoritative_source_bounds() {
+        let (core, dir) = open_test_core();
+        let fixture = insert_scan_fixture(&core);
+        let run_id = insert_ocr_run(&core, &fixture, OcrRunStatus::Detected);
+        let mut out_of_bounds = region("outside", Some(300));
+        out_of_bounds.polygon[1].x = 200.5;
+
+        let error = core
+            .record_ocr_text_regions(RecordOcrTextRegionsRequest {
+                ocr_run_id: run_id.to_string(),
+                regions: vec![out_of_bounds],
+            })
+            .unwrap_err();
+
+        assert_eq!(
+            error.code.to_string(),
+            "CORE_OCR_TEXT_REGION_OUT_OF_SOURCE_BOUNDS"
+        );
+        let storage = core.lock_storage().unwrap();
+        assert!(
+            storage
+                .list_text_regions_for_ocr_run(&run_id)
+                .unwrap()
+                .is_empty()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
