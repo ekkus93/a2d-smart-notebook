@@ -4,7 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
+import uniffi.a2d_ffi.OcrInputKind as FfiOcrInputKind
 
 class OcrReadbackTest {
     @Test
@@ -45,6 +47,140 @@ class OcrReadbackTest {
         assertEquals(12, state.recognizedRegionCount)
         assertFalse(state.retryAvailable)
         assertFalse(state.cancelAvailable)
+    }
+
+    @Test
+    fun androidPaginationHydratesMoreThanFiftyRegionsBeforeOverlayIsComplete() {
+        val pages =
+            mapOf(
+                0u to regionPage(offset = 0u, nextOffset = 50u, hasMore = true, complete = false, range = 0 until 50),
+                50u to regionPage(offset = 50u, nextOffset = null, hasMore = false, complete = true, range = 50 until 64),
+            )
+
+        val hydrated =
+            AndroidOcrRegionPaginationHydrator.hydrate(
+                scanId = "scan-1",
+                expectedOcrRunId = "ocr-run-1",
+                expectedTotalCount = 64u,
+                pageSize = 50u,
+            ) { offset -> pages.getValue(offset) }
+
+        assertEquals(64, hydrated.size)
+        assertEquals("text-region-000", hydrated.first().textRegionId)
+        assertEquals("text-region-063", hydrated.last().textRegionId)
+        assertEquals(64, hydrated.map { it.textRegionId }.toSet().size)
+
+        val output =
+            LoadedAndroidOcrOutput(
+                scanId = "scan-1",
+                latestRun =
+                    loadedRun(
+                        status = OcrRunStatus.Detected,
+                        fullText = hydrated.joinToString("\n") { it.text },
+                        textRegionCount = 64,
+                        textRegions = hydrated,
+                    ),
+                sourceGeometry = resolvedSourceGeometry(),
+            )
+        val overlay = OcrRegionOverlayState.fromPersisted(output, resolvedSourceGeometry())
+        val presentation = output.toPresentationState()
+
+        assertTrue(overlay.enabled)
+        assertEquals(64, overlay.renderableRegions.size)
+        assertEquals(64, presentation.recognizedRegionCount)
+    }
+
+    @Test
+    fun androidPaginationRejectsConflictingDuplicateRegionsDuringRecreationOverlap() {
+        val pages =
+            mapOf(
+                0u to
+                    regionPage(
+                        offset = 0u,
+                        nextOffset = 2u,
+                        hasMore = true,
+                        complete = false,
+                        range = 0 until 2,
+                        totalCount = 2u,
+                    ),
+                2u to
+                    regionPage(
+                        offset = 2u,
+                        nextOffset = null,
+                        hasMore = false,
+                        complete = true,
+                        regions = listOf(regionPageRegion(1, text = "conflicting duplicate")),
+                        totalCount = 2u,
+                    ),
+            )
+
+        val error =
+            expectPaginationError {
+                AndroidOcrRegionPaginationHydrator.hydrate(
+                    scanId = "scan-1",
+                    expectedOcrRunId = "ocr-run-1",
+                    expectedTotalCount = 2u,
+                    pageSize = 2u,
+                ) { offset -> pages.getValue(offset) }
+            }
+
+        assertEquals("Conflicting duplicate OCR region ID text-region-001", error.message)
+    }
+
+    @Test
+    fun androidPaginationSurfacesLaterPageFailuresInsteadOfPublishingPartialOverlay() {
+        val first =
+            regionPage(
+                offset = 0u,
+                nextOffset = 2u,
+                hasMore = true,
+                complete = false,
+                range = 0 until 2,
+                totalCount = 3u,
+            )
+
+        val error =
+            expectPaginationError {
+                AndroidOcrRegionPaginationHydrator.hydrate(
+                    scanId = "scan-1",
+                    expectedOcrRunId = "ocr-run-1",
+                    expectedTotalCount = 3u,
+                    pageSize = 2u,
+                ) { offset ->
+                    if (offset == 0u) {
+                        first
+                    } else {
+                        throw OcrRegionPaginationException("simulated later page failure")
+                    }
+                }
+            }
+
+        assertEquals("simulated later page failure", error.message)
+    }
+
+    @Test
+    fun androidPaginationRejectsCompletenessBeforeAuthoritativeEnd() {
+        val premature =
+            regionPage(
+                offset = 0u,
+                nextOffset = null,
+                hasMore = false,
+                complete = true,
+                range = 0 until 2,
+                totalCount = 3u,
+            )
+
+        val error =
+            expectPaginationError {
+                AndroidOcrRegionPaginationHydrator.hydrate(
+                    scanId = "scan-1",
+                    expectedOcrRunId = "ocr-run-1",
+                    expectedTotalCount = 3u,
+                    pageSize = 2u,
+                ) { premature }
+            }
+
+        assertEquals("OCR region pagination claimed completeness before the authoritative end", error.message)
     }
 
     @Test
@@ -154,4 +290,81 @@ class OcrReadbackTest {
             confidence = 0.91f,
             createdAtMs = 300,
         )
+
+    private fun resolvedSourceGeometry(): AndroidOcrSourceGeometry =
+        AndroidOcrSourceGeometry(
+            scanId = "scan-1",
+            inputAssetId = "asset-1",
+            inputKind = FfiOcrInputKind.ORIGINAL,
+            mediaType = "image/png",
+            relativePath = "assets/ocr/source.png",
+            absolutePath = "/library/assets/ocr/source.png",
+            byteLength = 42uL,
+            widthPx = 240u,
+            heightPx = 120u,
+        )
+
+    private fun regionPage(
+        offset: UInt,
+        nextOffset: UInt?,
+        hasMore: Boolean,
+        complete: Boolean,
+        range: IntRange,
+        totalCount: UInt = 64u,
+    ): AndroidOcrRegionPage =
+        regionPage(
+            offset = offset,
+            nextOffset = nextOffset,
+            hasMore = hasMore,
+            complete = complete,
+            regions = range.map { regionPageRegion(it) },
+            totalCount = totalCount,
+        )
+
+    private fun regionPage(
+        offset: UInt,
+        nextOffset: UInt?,
+        hasMore: Boolean,
+        complete: Boolean,
+        regions: List<AndroidOcrRegionPageRegion>,
+        totalCount: UInt = regions.size.toUInt(),
+    ): AndroidOcrRegionPage =
+        AndroidOcrRegionPage(
+            scanId = "scan-1",
+            ocrRunId = "ocr-run-1",
+            totalCount = totalCount,
+            returnedCount = regions.size.toUInt(),
+            offset = offset,
+            nextOffset = nextOffset,
+            hasMore = hasMore,
+            complete = complete,
+            regions = regions,
+        )
+
+    private fun regionPageRegion(
+        index: Int,
+        text: String = "region-$index",
+    ): AndroidOcrRegionPageRegion =
+        AndroidOcrRegionPageRegion(
+            textRegionId = "text-region-${index.toString().padStart(3, '0')}",
+            ocrRunId = "ocr-run-1",
+            polygon =
+                listOf(
+                    OcrTextPoint(x = 0.0f, y = 0.0f),
+                    OcrTextPoint(x = 10.0f, y = 0.0f),
+                    OcrTextPoint(x = 10.0f, y = 10.0f),
+                ),
+            text = text,
+            confidence = 0.91f,
+            createdAtMs = 300L + index,
+        )
+
+    private fun expectPaginationError(block: () -> Unit): OcrRegionPaginationException =
+        try {
+            block()
+            fail("expected OcrRegionPaginationException")
+            throw AssertionError("unreachable")
+        } catch (error: OcrRegionPaginationException) {
+            error
+        }
 }

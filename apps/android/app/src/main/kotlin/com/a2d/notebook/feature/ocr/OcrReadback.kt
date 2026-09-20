@@ -3,8 +3,8 @@ package com.a2d.notebook.feature.ocr
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.LoadLatestOcrOutputRequest as FfiLoadLatestOcrOutputRequest
 import uniffi.a2d_ffi.LoadOcrRegionPageRequest as FfiLoadOcrRegionPageRequest
-import uniffi.a2d_ffi.OcrRunStatus as FfiOcrRunStatus
 import uniffi.a2d_ffi.OcrInputKind as FfiOcrInputKind
+import uniffi.a2d_ffi.OcrRunStatus as FfiOcrRunStatus
 import uniffi.a2d_ffi.OcrTextPoint as FfiOcrTextPoint
 import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
 
@@ -81,10 +81,13 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
         expectedOcrRunId: String,
         expectedTotalCount: UInt,
         pageSize: UInt,
-    ): List<LoadedAndroidOcrTextRegion> {
-        val regionsById = LinkedHashMap<String, LoadedAndroidOcrTextRegion>()
-        var offset = 0u
-        while (true) {
+    ): List<LoadedAndroidOcrTextRegion> =
+        AndroidOcrRegionPaginationHydrator.hydrate(
+            scanId = scanId,
+            expectedOcrRunId = expectedOcrRunId,
+            expectedTotalCount = expectedTotalCount,
+            pageSize = pageSize,
+        ) { offset ->
             val page =
                 client.loadOcrRegionPage(
                     FfiLoadOcrRegionPageRequest(
@@ -93,6 +96,48 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
                         pageSize = pageSize,
                     ),
                 )
+            AndroidOcrRegionPage(
+                scanId = page.scanId,
+                ocrRunId = page.ocrRunId,
+                totalCount = page.totalCount,
+                returnedCount = page.returnedCount,
+                offset = page.offset,
+                nextOffset = page.nextOffset,
+                hasMore = page.hasMore,
+                complete = page.complete,
+                regions =
+                    page.regions.map { region ->
+                        AndroidOcrRegionPageRegion(
+                            textRegionId = region.textRegionId,
+                            ocrRunId = region.ocrRunId,
+                            polygon = region.polygon.map { point -> point.toAndroid() },
+                            text = region.text,
+                            confidence = region.confidence,
+                            createdAtMs = region.createdAtMs,
+                        )
+                    },
+            )
+        }
+
+    private fun loadSourceGeometry(scanId: String): AndroidOcrSourceGeometry? =
+        runCatching { AndroidOcrSourceGeometryGateway(client).resolve(scanId, FfiOcrInputKind.ORIGINAL) }.getOrNull()
+}
+
+internal object AndroidOcrRegionPaginationHydrator {
+    fun hydrate(
+        scanId: String,
+        expectedOcrRunId: String,
+        expectedTotalCount: UInt,
+        pageSize: UInt,
+        loadPage: (offset: UInt) -> AndroidOcrRegionPage,
+    ): List<LoadedAndroidOcrTextRegion> {
+        val regionsById = LinkedHashMap<String, LoadedAndroidOcrTextRegion>()
+        var offset = 0u
+        while (true) {
+            val page = loadPage(offset)
+            if (page.scanId != scanId) {
+                throw OcrRegionPaginationException("OCR region page belongs to an unexpected scan")
+            }
             if (page.ocrRunId != expectedOcrRunId) {
                 throw OcrRegionPaginationException("OCR run changed while regions were being hydrated")
             }
@@ -110,7 +155,7 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
                     LoadedAndroidOcrTextRegion(
                         textRegionId = region.textRegionId,
                         ocrRunId = region.ocrRunId,
-                        polygon = region.polygon.map { point -> point.toAndroid() },
+                        polygon = region.polygon,
                         text = region.text,
                         confidence = region.confidence,
                         createdAtMs = region.createdAtMs,
@@ -137,10 +182,28 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
             offset = nextOffset
         }
     }
-
-    private fun loadSourceGeometry(scanId: String): AndroidOcrSourceGeometry? =
-        runCatching { AndroidOcrSourceGeometryGateway(client).resolve(scanId, FfiOcrInputKind.ORIGINAL) }.getOrNull()
 }
+
+internal data class AndroidOcrRegionPage(
+    val scanId: String,
+    val ocrRunId: String?,
+    val totalCount: UInt,
+    val returnedCount: UInt,
+    val offset: UInt,
+    val nextOffset: UInt?,
+    val hasMore: Boolean,
+    val complete: Boolean,
+    val regions: List<AndroidOcrRegionPageRegion>,
+)
+
+internal data class AndroidOcrRegionPageRegion(
+    val textRegionId: String,
+    val ocrRunId: String,
+    val polygon: List<OcrTextPoint>,
+    val text: String,
+    val confidence: Float?,
+    val createdAtMs: Long,
+)
 
 class OcrRegionPaginationException(message: String) : IllegalStateException(message)
 
