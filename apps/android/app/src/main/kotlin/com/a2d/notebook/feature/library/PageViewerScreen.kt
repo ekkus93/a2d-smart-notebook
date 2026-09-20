@@ -45,6 +45,7 @@ object PageViewerTestTags {
     const val OCR_CORRECTION_INPUT = "page_viewer_ocr_correction_input"
     const val OCR_CORRECTION_SUBMIT = "page_viewer_ocr_correction_submit"
     const val OCR_CORRECTION_HISTORY = "page_viewer_ocr_correction_history"
+    const val OCR_SOURCE_GEOMETRY = "page_viewer_ocr_source_geometry"
     const val SPLIT = "page_viewer_split"
     const val METADATA = "page_viewer_metadata"
     const val VERSIONS = "page_viewer_versions"
@@ -69,6 +70,13 @@ data class PageViewerState(
     val displayAssetRelativePath: String? = null,
     val displayAssetMediaType: String? = null,
     val displayAssetByteLength: ULong? = null,
+    val ocrSourceAssetId: String? = null,
+    val ocrSourceInputKind: String? = null,
+    val ocrSourceRelativePath: String? = null,
+    val ocrSourceMediaType: String? = null,
+    val ocrSourceByteLength: ULong? = null,
+    val ocrSourceWidthPx: UInt? = null,
+    val ocrSourceHeightPx: UInt? = null,
     val hasRecognizedText: Boolean = false,
     val ocrState: OcrPresentationState = OcrPresentationState(),
     val ocrRegionOverlay: OcrRegionOverlayState = OcrRegionOverlayState(),
@@ -259,10 +267,24 @@ private fun PageViewerSummaryCard(state: PageViewerState) {
             state.updatedSummary?.let { updated ->
                 Text(stringResource(R.string.page_viewer_updated, updated))
             }
+            OcrSourceGeometrySummary(state)
             if (state.needsReview) {
                 Text(stringResource(R.string.page_viewer_needs_review_badge))
             }
         }
+    }
+}
+
+@Composable
+private fun OcrSourceGeometrySummary(state: PageViewerState) {
+    val width = state.ocrSourceWidthPx ?: return
+    val height = state.ocrSourceHeightPx ?: return
+    Text(
+        text = "OCR source: ${width}×${height} px (${state.ocrSourceInputKind ?: "unknown"})",
+        modifier = Modifier.testTag(PageViewerTestTags.OCR_SOURCE_GEOMETRY),
+    )
+    state.ocrSourceRelativePath?.let { path ->
+        Text("OCR source path: $path")
     }
 }
 
