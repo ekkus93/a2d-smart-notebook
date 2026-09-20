@@ -2,6 +2,7 @@ package com.a2d.notebook.feature.ocr
 
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.LoadLatestOcrOutputRequest as FfiLoadLatestOcrOutputRequest
+import uniffi.a2d_ffi.LoadOcrRegionPageRequest as FfiLoadOcrRegionPageRequest
 import uniffi.a2d_ffi.OcrRunStatus as FfiOcrRunStatus
 import uniffi.a2d_ffi.OcrInputKind as FfiOcrInputKind
 import uniffi.a2d_ffi.OcrTextPoint as FfiOcrTextPoint
@@ -14,33 +15,37 @@ import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
  * hydrates [OcrPresentationState] from Rust-owned OCR rows so Page Viewer callers can restore OCR
  * status after app restart without manufacturing an empty detected-text result on Android.
  *
- * The current Rust readback API returns a bounded region window plus the authoritative total count.
- * Until R15's paginated FFI contract is available, this adapter fails closed when that window is
- * incomplete. A partial overlay must never be presented as if it were complete.
+ * Run metadata is loaded independently from region data. Detected runs are then hydrated through
+ * the Rust-owned bounded pagination contract until the authoritative durable count is complete.
+ * No partially accumulated region list is returned to Page Viewer.
  */
 class FfiAndroidOcrReadback(private val client: A2dClient) {
     fun loadLatestOcrOutput(
         scanId: String,
         regionLimit: UInt = DEFAULT_OCR_READBACK_REGION_LIMIT,
     ): LoadedAndroidOcrOutput {
+        require(regionLimit in 1u..MAX_OCR_REGION_PAGE_SIZE) {
+            "OCR region page size must be between 1 and $MAX_OCR_REGION_PAGE_SIZE"
+        }
         val loaded =
             client.loadLatestOcrOutput(
                 FfiLoadLatestOcrOutputRequest(
                     scanId = scanId,
-                    regionLimit = regionLimit,
+                    regionLimit = 0u,
                 ),
             )
         val latestRun = loaded.latestRun
-        if (
-            latestRun?.status == FfiOcrRunStatus.DETECTED &&
-                latestRun.textRegionCount.toInt() != latestRun.textRegions.size
-        ) {
-            throw IncompleteOcrRegionReadbackException(
-                ocrRunId = latestRun.ocrRunId,
-                expectedRegionCount = latestRun.textRegionCount.toInt(),
-                loadedRegionCount = latestRun.textRegions.size,
-            )
-        }
+        val hydratedRegions =
+            if (latestRun?.status == FfiOcrRunStatus.DETECTED) {
+                loadAllDetectedRegions(
+                    scanId = loaded.scanId,
+                    expectedOcrRunId = latestRun.ocrRunId,
+                    expectedTotalCount = latestRun.textRegionCount,
+                    pageSize = regionLimit,
+                )
+            } else {
+                emptyList()
+            }
         return LoadedAndroidOcrOutput(
             scanId = loaded.scanId,
             sourceGeometry = latestRun?.let { loadSourceGeometry(loaded.scanId) },
@@ -60,17 +65,7 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
                         completedAtMs = run.completedAtMs,
                         warnings = run.warnings,
                         textRegionCount = run.textRegionCount.toInt(),
-                        textRegions =
-                            run.textRegions.map { region ->
-                                LoadedAndroidOcrTextRegion(
-                                    textRegionId = region.textRegionId,
-                                    ocrRunId = region.ocrRunId,
-                                    polygon = region.polygon.map { point -> point.toAndroid() },
-                                    text = region.text,
-                                    confidence = region.confidence,
-                                    createdAtMs = region.createdAtMs,
-                                )
-                            },
+                        textRegions = hydratedRegions,
                     )
                 },
         )
@@ -81,17 +76,73 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
         regionLimit: UInt = DEFAULT_OCR_READBACK_REGION_LIMIT,
     ): OcrPresentationState = loadLatestOcrOutput(scanId, regionLimit).toPresentationState()
 
+    private fun loadAllDetectedRegions(
+        scanId: String,
+        expectedOcrRunId: String,
+        expectedTotalCount: UInt,
+        pageSize: UInt,
+    ): List<LoadedAndroidOcrTextRegion> {
+        val regionsById = LinkedHashMap<String, LoadedAndroidOcrTextRegion>()
+        var offset = 0u
+        while (true) {
+            val page =
+                client.loadOcrRegionPage(
+                    FfiLoadOcrRegionPageRequest(
+                        scanId = scanId,
+                        offset = offset,
+                        pageSize = pageSize,
+                    ),
+                )
+            if (page.ocrRunId != expectedOcrRunId) {
+                throw OcrRegionPaginationException("OCR run changed while regions were being hydrated")
+            }
+            if (page.totalCount != expectedTotalCount) {
+                throw OcrRegionPaginationException("OCR region count changed while regions were being hydrated")
+            }
+            if (page.offset != offset || page.returnedCount.toInt() != page.regions.size) {
+                throw OcrRegionPaginationException("OCR region page metadata is inconsistent")
+            }
+            page.regions.forEach { region ->
+                if (region.ocrRunId != expectedOcrRunId) {
+                    throw OcrRegionPaginationException("OCR region belongs to an unexpected run")
+                }
+                val mapped =
+                    LoadedAndroidOcrTextRegion(
+                        textRegionId = region.textRegionId,
+                        ocrRunId = region.ocrRunId,
+                        polygon = region.polygon.map { point -> point.toAndroid() },
+                        text = region.text,
+                        confidence = region.confidence,
+                        createdAtMs = region.createdAtMs,
+                    )
+                val previous = regionsById.putIfAbsent(mapped.textRegionId, mapped)
+                if (previous != null && previous != mapped) {
+                    throw OcrRegionPaginationException("Conflicting duplicate OCR region ID ${mapped.textRegionId}")
+                }
+            }
+            if (page.complete) {
+                if (page.hasMore || page.nextOffset != null || regionsById.size != expectedTotalCount.toInt()) {
+                    throw OcrRegionPaginationException("OCR region pagination claimed completeness before the authoritative end")
+                }
+                return regionsById.values.toList()
+            }
+            if (!page.hasMore) {
+                throw OcrRegionPaginationException("OCR region pagination stopped before completion")
+            }
+            val nextOffset = page.nextOffset
+                ?: throw OcrRegionPaginationException("OCR region pagination omitted its continuation offset")
+            if (nextOffset <= offset) {
+                throw OcrRegionPaginationException("OCR region pagination did not advance")
+            }
+            offset = nextOffset
+        }
+    }
+
     private fun loadSourceGeometry(scanId: String): AndroidOcrSourceGeometry? =
         runCatching { AndroidOcrSourceGeometryGateway(client).resolve(scanId, FfiOcrInputKind.ORIGINAL) }.getOrNull()
 }
 
-class IncompleteOcrRegionReadbackException(
-    val ocrRunId: String,
-    val expectedRegionCount: Int,
-    val loadedRegionCount: Int,
-) : IllegalStateException(
-        "OCR region readback is incomplete for run $ocrRunId: loaded $loadedRegionCount of $expectedRegionCount regions",
-    )
+class OcrRegionPaginationException(message: String) : IllegalStateException(message)
 
 data class LoadedAndroidOcrOutput(
     val scanId: String,
@@ -201,3 +252,4 @@ private fun OcrUnavailableReason?.isRetryableReadbackUnavailableReason(): Boolea
 
 private const val TEXT_PREVIEW_LIMIT = 240
 private const val DEFAULT_OCR_READBACK_REGION_LIMIT: UInt = 1_000u
+private const val MAX_OCR_REGION_PAGE_SIZE: UInt = 1_000u
