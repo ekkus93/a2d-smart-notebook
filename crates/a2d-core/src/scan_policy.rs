@@ -19,6 +19,10 @@ mod ocr_manual_retry;
 mod ocr_source_geometry;
 pub use ocr_source_geometry::*;
 
+#[path = "ocr_region_pagination.rs"]
+mod ocr_region_pagination;
+pub use ocr_region_pagination::*;
+
 #[cfg(test)]
 #[path = "ocr_retry_policy_tests.rs"]
 mod ocr_retry_policy_tests;
