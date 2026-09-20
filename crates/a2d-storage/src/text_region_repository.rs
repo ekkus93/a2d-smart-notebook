@@ -200,3 +200,47 @@ fn text_region_from_row(
         created_at_ms,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn region_capacity_allows_exact_maximum_and_rejects_next_region() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE text_regions (ocr_run_id TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        let run_id = OcrRunId::generate();
+        conn.execute(
+            "WITH RECURSIVE n(value) AS (\
+                 SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < ?2\
+             ) INSERT INTO text_regions (ocr_run_id) SELECT ?1 FROM n",
+            params![run_id.to_string(), MAX_OCR_REGIONS_PER_RUN - 1],
+        )
+        .unwrap();
+
+        require_region_capacity(&conn, &run_id).unwrap();
+        conn.execute(
+            "INSERT INTO text_regions (ocr_run_id) VALUES (?1)",
+            [run_id.to_string()],
+        )
+        .unwrap();
+
+        let error = require_region_capacity(&conn, &run_id).unwrap_err();
+        assert_eq!(
+            error.code.to_string(),
+            "STORAGE_TEXT_REGION_RUN_LIMIT_EXCEEDED"
+        );
+        assert_eq!(
+            error.details.get("region_count"),
+            Some(&MAX_OCR_REGIONS_PER_RUN.to_string())
+        );
+        assert_eq!(
+            error.details.get("max_region_count"),
+            Some(&MAX_OCR_REGIONS_PER_RUN.to_string())
+        );
+    }
+}
