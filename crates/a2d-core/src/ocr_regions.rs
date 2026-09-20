@@ -3,9 +3,7 @@ use a2d_domain::{
     A2dError, ErrorCategory, ErrorCode, ErrorSeverity, OcrRun, OcrRunId, OcrRunStatus,
     OcrUnavailableReason, ScanId, TextRegion, TextRegionId, system_now_ms,
 };
-use a2d_storage::{
-    OcrReadbackRepository, OcrRunRepository, ScanRepository, TextRegionRepository,
-};
+use a2d_storage::{OcrReadbackRepository, OcrRunRepository, ScanRepository, TextRegionRepository};
 
 const MAX_OCR_TEXT_REGION_BATCH_SIZE: usize = 20_000;
 const MAX_OCR_READBACK_REGION_LIMIT: u32 = 1_000;
@@ -143,7 +141,11 @@ impl A2dCore {
                 .with_detail("scan_id", run.scan_id.to_string())
             })?;
             let input_kind = input_kind_for_scan_asset(&scan, &input_asset_id)?;
-            (run.scan_id.to_string(), input_kind, input_asset_id.to_string())
+            (
+                run.scan_id.to_string(),
+                input_kind,
+                input_asset_id.to_string(),
+            )
         };
         let source = self.resolve_ocr_source_geometry(&source_scan_id, source_input_kind)?;
         if source.input_asset_id != source_input_asset_id {

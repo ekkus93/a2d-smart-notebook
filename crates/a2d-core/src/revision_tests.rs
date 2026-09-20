@@ -79,23 +79,18 @@ fn fixture(candidate_changed_cell: Option<(usize, u8)>) -> Fixture {
     let baseline_corrected_bytes = png_bytes([240, 240, 240, 255]);
     let mut baseline_corrected = core
         .asset_store
-        .commit(
-            &baseline_corrected_bytes,
-            AssetKind::Corrected,
-            "image/png",
-        )
+        .commit(&baseline_corrected_bytes, AssetKind::Corrected, "image/png")
         .unwrap();
     baseline_corrected.immutable = true;
     let candidate_original = core
         .asset_store
         .commit(b"candidate-original", AssetKind::Original, "image/jpeg")
         .unwrap();
-    let candidate_corrected_bytes =
-        if candidate_changed_cell.is_none() {
-            baseline_corrected_bytes.clone()
-        } else {
-            png_bytes([220, 220, 220, 255])
-        };
+    let candidate_corrected_bytes = if candidate_changed_cell.is_none() {
+        baseline_corrected_bytes.clone()
+    } else {
+        png_bytes([220, 220, 220, 255])
+    };
     let mut candidate_corrected = core
         .asset_store
         .commit(
