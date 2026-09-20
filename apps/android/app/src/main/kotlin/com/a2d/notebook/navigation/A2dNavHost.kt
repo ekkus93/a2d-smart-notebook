@@ -27,6 +27,8 @@ import com.a2d.notebook.feature.notebook.PageCodeScreen
 import com.a2d.notebook.feature.ocr.AndroidOcrCorrectionController
 import com.a2d.notebook.feature.ocr.AndroidOcrManualRetryGateway
 import com.a2d.notebook.feature.ocr.AndroidOcrSearchController
+import com.a2d.notebook.feature.ocr.AndroidOcrSourceGeometry
+import com.a2d.notebook.feature.ocr.AndroidOcrSourceGeometryGateway
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrCorrectionGateway
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrReadback
 import com.a2d.notebook.feature.ocr.FfiAndroidOcrSearchGateway
@@ -92,6 +94,7 @@ fun A2dNavHost(
         }
     val ocrReadback = remember(client) { client?.let(::FfiAndroidOcrReadback) }
     val ocrManualRetryGateway = remember(client) { client?.let(::AndroidOcrManualRetryGateway) }
+    val ocrSourceGeometryGateway = remember(client) { client?.let(::AndroidOcrSourceGeometryGateway) }
     val ocrCorrectionController =
         remember(client) {
             client?.let { AndroidOcrCorrectionController(FfiAndroidOcrCorrectionGateway(it)) }
@@ -163,11 +166,17 @@ fun A2dNavHost(
                         ),
                     )
                 }
-            LaunchedEffect(pageId, scanId, client, ocrReadback, ocrCorrectionController) {
+            LaunchedEffect(pageId, scanId, client, ocrReadback, ocrCorrectionController, ocrSourceGeometryGateway) {
                 if (client != null && ocrReadback != null) {
                     viewerState = hydratePageViewerMetadata(viewerState, pageId, scanId, client)
                     viewerState.preferredScanId?.let { selectedScanId ->
-                        viewerState = hydrateOcrForViewer(viewerState, selectedScanId, client, ocrReadback)
+                        viewerState = hydrateOcrForViewer(
+                            current = viewerState,
+                            scanId = selectedScanId,
+                            client = client,
+                            ocrReadback = ocrReadback,
+                            ocrSourceGeometryGateway = ocrSourceGeometryGateway,
+                        )
                         viewerState = hydrateOcrCorrectionReviewForViewer(viewerState, selectedScanId, ocrCorrectionController)
                     }
                 }
@@ -180,7 +189,12 @@ fun A2dNavHost(
                 state = viewerState,
                 onStartOcr = { selectedScanId ->
                     scope.launch {
-                        viewerState = enqueueOcrJobForViewer(viewerState, selectedScanId, client)
+                        viewerState = enqueueOcrJobForViewer(
+                            current = viewerState,
+                            scanId = selectedScanId,
+                            client = client,
+                            ocrSourceGeometryGateway = ocrSourceGeometryGateway,
+                        )
                     }
                 },
                 onRetryOcr = { selectedScanId ->
@@ -360,28 +374,24 @@ private suspend fun hydrateOcrForViewer(
     scanId: String,
     client: A2dClient,
     ocrReadback: FfiAndroidOcrReadback,
+    ocrSourceGeometryGateway: AndroidOcrSourceGeometryGateway?,
 ): PageViewerState =
     try {
+        val sourceGeometry = resolveOcrSourceGeometryForViewer(scanId, ocrSourceGeometryGateway)
+        val currentWithGeometry = current.withOcrSourceGeometry(sourceGeometry)
         val activeJob =
             withContext(Dispatchers.IO) {
-                client.findActiveOcrJobForScan(
-                    EnqueueOcrJobRequest(
-                        scanId = scanId,
-                        inputKind = OcrInputKind.ORIGINAL,
-                        widthPx = DEFAULT_OCR_INPUT_WIDTH_PX,
-                        heightPx = DEFAULT_OCR_INPUT_HEIGHT_PX,
-                    ),
-                )
+                client.findActiveOcrJobForScan(sourceGeometry.toEnqueueOcrJobRequest())
             }
         if (activeJob != null) {
-            current.copy(
+            currentWithGeometry.copy(
                 preferredScanId = scanId,
                 activeOcrJobId = activeJob.jobId,
                 ocrState = activeJob.toViewerOcrPresentationState(),
                 viewerApiConnected = true,
             )
         } else {
-            hydrateOcrReadback(current, scanId, ocrReadback)
+            hydrateOcrReadback(currentWithGeometry, scanId, ocrReadback)
         }
     } catch (failure: Exception) {
         current.copy(
@@ -424,6 +434,7 @@ private suspend fun enqueueOcrJobForViewer(
     current: PageViewerState,
     scanId: String,
     client: A2dClient?,
+    ocrSourceGeometryGateway: AndroidOcrSourceGeometryGateway?,
 ): PageViewerState {
     if (client == null) {
         return current.copy(
@@ -436,18 +447,12 @@ private suspend fun enqueueOcrJobForViewer(
         )
     }
     return try {
+        val sourceGeometry = resolveOcrSourceGeometryForViewer(scanId, ocrSourceGeometryGateway)
         val job =
             withContext(Dispatchers.IO) {
-                client.enqueueOcrJob(
-                    EnqueueOcrJobRequest(
-                        scanId = scanId,
-                        inputKind = OcrInputKind.ORIGINAL,
-                        widthPx = DEFAULT_OCR_INPUT_WIDTH_PX,
-                        heightPx = DEFAULT_OCR_INPUT_HEIGHT_PX,
-                    ),
-                )
+                client.enqueueOcrJob(sourceGeometry.toEnqueueOcrJobRequest())
             }
-        current.copy(
+        current.withOcrSourceGeometry(sourceGeometry).copy(
             preferredScanId = scanId,
             activeOcrJobId = job.jobId,
             ocrState = job.toViewerOcrPresentationState(),
@@ -531,6 +536,37 @@ private suspend fun cancelOcrJobForViewer(
     }
 }
 
+private suspend fun resolveOcrSourceGeometryForViewer(
+    scanId: String,
+    gateway: AndroidOcrSourceGeometryGateway?,
+): AndroidOcrSourceGeometry {
+    if (gateway == null) {
+        throw IllegalStateException("No open local library is available for OCR source geometry")
+    }
+    return withContext(Dispatchers.IO) { gateway.resolve(scanId, OcrInputKind.ORIGINAL) }
+}
+
+private fun AndroidOcrSourceGeometry.toEnqueueOcrJobRequest(): EnqueueOcrJobRequest =
+    EnqueueOcrJobRequest(
+        scanId = scanId,
+        inputKind = inputKind,
+        widthPx = widthPx,
+        heightPx = heightPx,
+    )
+
+private fun PageViewerState.withOcrSourceGeometry(geometry: AndroidOcrSourceGeometry): PageViewerState =
+    copy(
+        preferredScanId = geometry.scanId,
+        ocrSourceAssetId = geometry.inputAssetId,
+        ocrSourceInputKind = geometry.inputKindLabel,
+        ocrSourceRelativePath = geometry.relativePath,
+        ocrSourceMediaType = geometry.mediaType,
+        ocrSourceByteLength = geometry.byteLength,
+        ocrSourceWidthPx = geometry.widthPx,
+        ocrSourceHeightPx = geometry.heightPx,
+        viewerApiConnected = true,
+    )
+
 private fun OcrQueueJob.toViewerOcrPresentationState(): OcrPresentationState =
     when (status) {
         OcrQueueJobStatus.QUEUED ->
@@ -598,6 +634,4 @@ private fun Exception.toOcrPresentationState(): OcrPresentationState =
         cancelAvailable = false,
     )
 
-private const val DEFAULT_OCR_INPUT_WIDTH_PX: UInt = 1_800u
-private const val DEFAULT_OCR_INPUT_HEIGHT_PX: UInt = 2_200u
 private const val VIEWER_OCR_REGION_LIMIT: UInt = 1_000u
