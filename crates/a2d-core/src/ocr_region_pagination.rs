@@ -202,9 +202,9 @@ mod tests {
         RecordOcrTextRegionRequest, RecordOcrTextRegionsRequest,
     };
     use a2d_domain::{
-        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, OcrRun,
-        OcrRunId, Page, PageId, PageKind, PageState, Provenance, QualityStatus, Scan,
-        SmartPageId, system_now_ms,
+        Asset, AssetId, AssetKind, CaptureSource, EncryptionState, LayoutId, OcrRun, OcrRunId,
+        Page, PageId, PageKind, PageState, Provenance, QualityStatus, Scan, SmartPageId,
+        system_now_ms,
     };
     use a2d_storage::{AssetRepository, OcrRunRepository, PageRepository, ScanRepository};
     use image::{ImageBuffer, Rgba};
@@ -386,7 +386,10 @@ mod tests {
                 page_size: 1_000,
             })
             .unwrap();
-        assert_eq!(first.ocr_run_id.as_deref(), Some(run_id.to_string().as_str()));
+        assert_eq!(
+            first.ocr_run_id.as_deref(),
+            Some(run_id.to_string().as_str())
+        );
         assert_eq!(first.total_count, 1_001);
         assert_eq!(first.returned_count, 1_000);
         assert_eq!(first.offset, 0);
