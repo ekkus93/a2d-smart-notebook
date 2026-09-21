@@ -378,42 +378,50 @@ This tracker reopens M11 remediation because the prior TODO reached zero uncheck
 
 ## R17.1 Cancellation audit
 
-- [ ] Audit OCR Search suspend paths.
-- [ ] Audit Page Viewer hydration suspend paths.
-- [ ] Audit Start/Retry/Cancel suspend paths.
-- [ ] Audit correction suspend paths.
-- [ ] Audit queue/executor suspend paths.
-- [ ] For broad `catch (Exception)` paths, rethrow `CancellationException` before ordinary error mapping.
-- [ ] Ensure cancellation does not update stale UI state after navigation/recreation.
-- [ ] Ensure cancellation does not appear as ordinary OCR/search failure unless deliberately specified.
+- [x] Audit OCR Search suspend paths.
+- [x] Audit Page Viewer hydration suspend paths.
+- [x] Audit Start/Retry/Cancel suspend paths.
+- [x] Audit correction suspend paths.
+- [x] Audit queue/executor suspend paths.
+- [x] For broad `catch (Exception)` paths, rethrow `CancellationException` before ordinary error mapping.
+- [x] Ensure cancellation does not update stale UI state after navigation/recreation.
+- [x] Ensure cancellation does not appear as ordinary OCR/search failure unless deliberately specified.
 
 ## R17.2 Cancellation tests
 
-- [ ] Cancel Search while FFI work is pending.
-- [ ] Cancel Page Viewer hydration during navigation away.
-- [ ] Cancel correction submission/hydration where supported.
-- [ ] Verify cancellation is rethrown/preserved.
-- [ ] Verify no stale error state is written after cancellation.
+- [x] Cancel Search while FFI work is pending.
+- [x] Cancel Page Viewer hydration during navigation away.
+- [x] Cancel correction submission/hydration where supported.
+- [x] Verify cancellation is rethrown/preserved.
+- [x] Verify no stale error state is written after cancellation.
 
 ## R17.3 Active-library client lifecycle
 
-- [ ] Identify one production owner of the active `A2dClient`.
-- [ ] Ensure recomposing composables never open unrelated native clients.
-- [ ] Define close/dispose behavior.
-- [ ] Define active-library switch behavior.
-- [ ] Dispose/recreate OCR gateways/controllers when the active library changes.
-- [ ] Ensure Search/Page Viewer/correction/queue actions bind to the same active client.
-- [ ] Preserve explicit no-library/unavailable behavior.
-- [ ] If library switching is intentionally unsupported, document that limitation instead of claiming it is implemented.
+- [x] Identify one production owner of the active `A2dClient`.
+- [x] Ensure recomposing composables never open unrelated native clients.
+- [x] Define close/dispose behavior.
+- [x] Define active-library switch behavior.
+- [x] Dispose/recreate OCR gateways/controllers when the active library changes.
+- [x] Ensure Search/Page Viewer/correction/queue actions bind to the same active client.
+- [x] Preserve explicit no-library/unavailable behavior.
+- [x] If library switching is intentionally unsupported, document that limitation instead of claiming it is implemented.
 
 ## R17 acceptance/qualification
 
-- [ ] Coroutine cancellation remains cancellation across OCR UI orchestration.
-- [ ] Active-client lifecycle claims match real product behavior.
-- [ ] Required CI passes.
-- [ ] Merge exact green head.
-- [ ] Verify post-merge `master` CI.
-- [ ] Reload TODO.
+- [x] Coroutine cancellation remains cancellation across OCR UI orchestration.
+- [x] Active-client lifecycle claims match real product behavior.
+- [x] Required CI passes.
+- [x] Merge exact green head.
+- [x] Verify post-merge `master` CI.
+- [x] Reload TODO.
+
+
+R17 reconciliation evidence:
+
+- PR #141 exact head `df69e3d8e001a71abb2ea7015df0594bf0955b54`; merged `master` `8f8d4a82c316a924f7fc78b2a06419d3c2209270`; exact-head CI `35542220821`; post-merge CI `35544717141`.
+- PR #142 exact head `e84510051fa0e233ab6858eea6f5e8a47b9b60aa`; merged `master` `9acd2d5cf1f74807bac5480dbefe609e45e3a292`; exact-head CI `35547909851`; post-merge CI `35549580451`.
+- PR #143 exact head `39e452562d6bc4f0e802330669b35ef0a5e17c76`; merged `master` `bedfba3c2d61f8df8967ffc9fefac5812a70ff2a`; exact-head CI `35551236334`; post-merge CI `35554477106`; hosted-status publication `35555226089`.
+- Active-library switching remains intentionally unsupported in-process; the production contract is one app-private `A2dClient` per process, shared by queue, Search, Page Viewer, and correction composition. Any future switch must coordinate disposal/recreation rather than silently opening unrelated native clients.
 
 ---
 
