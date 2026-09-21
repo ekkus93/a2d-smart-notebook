@@ -26,6 +26,9 @@ import com.a2d.notebook.feature.ocr.OcrInputKind as AndroidOcrInputKind
 import com.a2d.notebook.feature.ocr.OcrTextPoint
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -190,6 +193,83 @@ class OcrBridgeIntegrationTest {
             assertTrue(search.hits.any { it.ocrRunId == run.ocrRunId })
         } finally {
             root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun productionStaleClaimCannotFinalizeAfterAnotherWorkerReclaimsTheJob() {
+        withProductionFixture { client, root, scan, queue, queued ->
+            val actual = FfiRustOcrGateway(client)
+            val gateway = object : RustOcrGateway by actual {
+                override fun finalizeOcrJob(request: AndroidFinalizeOcrJobRequest): FinalizedAndroidOcrJob {
+                    val replacement = requireNotNull(queue.claimNext())
+                    assertEquals(queued.jobId, replacement.jobId)
+                    assertEquals(request.attemptCount + 1u, replacement.attemptCount)
+                    return actual.finalizeOcrJob(request)
+                }
+            }
+            val provider = object : AndroidOcrProvider {
+                override fun recognize(input: com.a2d.notebook.feature.ocr.PreparedAndroidOcrInput) = detectedSentinel()
+            }
+            val step = AndroidOcrQueueProcessor(queue, AndroidOcrWorkflow(gateway, provider)).processNext()
+            assertTrue(step is AndroidOcrQueueStep.RecoverableFailure)
+            assertTrue((step as AndroidOcrQueueStep.RecoverableFailure).message.contains("CORE_OCR_FINALIZE_STALE_ATTEMPT"))
+            assertEquals(2u, queue.get(queued.jobId).attemptCount)
+            assertNoAcceptedOutput(client, scan.scanId, queued.jobId)
+            A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+                assertEquals(2u, FfiAndroidOcrQueueGateway(reopened).get(queued.jobId).attemptCount)
+                assertNoAcceptedOutput(reopened, scan.scanId, queued.jobId)
+            }
+        }
+    }
+
+    @Test
+    fun productionConcurrentCancellationAndFinalizationHaveOneDurableWinner() {
+        withProductionFixture { client, root, scan, queue, queued ->
+            val worker = Executors.newSingleThreadExecutor()
+            val start = CountDownLatch(1)
+            val cancellation = worker.submit {
+                check(start.await(10, TimeUnit.SECONDS))
+                try {
+                    queue.requestCancellation(queued.jobId)
+                } catch (error: A2dFfiException.Failed) {
+                    assertEquals("CORE_OCR_JOB_TERMINAL_TRANSITION_INVALID", error.v1.code)
+                }
+            }
+            try {
+                val actual = FfiRustOcrGateway(client)
+                val gateway = object : RustOcrGateway by actual {
+                    override fun finalizeOcrJob(request: AndroidFinalizeOcrJobRequest): FinalizedAndroidOcrJob {
+                        start.countDown()
+                        return actual.finalizeOcrJob(request)
+                    }
+                }
+                val provider = object : AndroidOcrProvider {
+                    override fun recognize(input: com.a2d.notebook.feature.ocr.PreparedAndroidOcrInput) = detectedSentinel()
+                }
+                val step = AndroidOcrQueueProcessor(queue, AndroidOcrWorkflow(gateway, provider)).processNext()
+                cancellation.get(10, TimeUnit.SECONDS)
+                assertTrue(step is AndroidOcrQueueStep.Completed)
+                val completed = (step as AndroidOcrQueueStep.Completed).job
+                assertTrue(completed.status == AndroidOcrQueueJobStatus.Recognized || completed.status == AndroidOcrQueueJobStatus.Cancelled)
+                A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+                    val job = FfiAndroidOcrQueueGateway(reopened).get(queued.jobId)
+                    assertEquals(completed.status, job.status)
+                    if (job.status == AndroidOcrQueueJobStatus.Cancelled) {
+                        assertNoAcceptedOutput(reopened, scan.scanId, queued.jobId)
+                    } else {
+                        val run = requireNotNull(FfiAndroidOcrReadback(reopened).loadLatestOcrOutput(scan.scanId).latestRun)
+                        assertEquals(job.lastOcrRunId, run.ocrRunId)
+                        assertEquals(1, run.textRegions.size)
+                        assertEquals(1, run.textRegionCount)
+                        assertTrue(FfiAndroidOcrSearchGateway(reopened).searchOcrText(AndroidOcrSearchRequest("rollbacksentinel", 20u)).hits.isNotEmpty())
+                    }
+                }
+            } finally {
+                start.countDown()
+                worker.shutdownNow()
+                check(worker.awaitTermination(10, TimeUnit.SECONDS))
+            }
         }
     }
 
