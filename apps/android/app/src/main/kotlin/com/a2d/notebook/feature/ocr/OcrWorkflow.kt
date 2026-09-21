@@ -19,6 +19,7 @@ class AndroidOcrWorkflow(
     private val gateway: RustOcrGateway,
     private val provider: AndroidOcrProvider,
 ) {
+    /** Compatibility/test-only split persistence; normal queue execution must use [runClaimedJob]. */
     fun run(request: AndroidOcrStartRequest): AndroidOcrWorkflowResult {
         val prepared =
             try {
@@ -127,8 +128,10 @@ interface AndroidOcrProvider {
 interface RustOcrGateway {
     fun prepareOcrInput(request: AndroidOcrStartRequest): PreparedAndroidOcrInput
 
+    /** Compatibility/test-only; forbidden for normal claimed queue execution. */
     fun recordOcrRun(request: AndroidRecordOcrRunRequest): RecordedAndroidOcrRun
 
+    /** Compatibility/test-only; normal queue results include regions in [finalizeOcrJob]. */
     fun recordOcrTextRegions(request: AndroidRecordOcrTextRegionsRequest): RecordedAndroidOcrTextRegions
 
     fun finalizeOcrJob(request: AndroidFinalizeOcrJobRequest): FinalizedAndroidOcrJob =

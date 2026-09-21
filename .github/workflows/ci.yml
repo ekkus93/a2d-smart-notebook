@@ -163,6 +163,8 @@ jobs:
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Prepare CI-only feature-enabled FFI panic test build
         run: bash ./tools/prepare-android-ffi-panic-test.sh
+      # OcrBridgeIntegrationTest also covers real queue terminal outcomes, region-write rollback,
+      # cancellation at production boundaries, and durable readback after reopening the library.
       - name: Run scanner, recovery, panic-containment, scan-revision, Needs Review, version, and OCR navigation UI tests
         uses: reactivecircus/android-emulator-runner@v2
         with:

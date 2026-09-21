@@ -84,6 +84,7 @@ interface AndroidOcrQueueGateway {
 
     fun requestCancellation(jobId: String): AndroidOcrQueueJob
 
+    /** Compatibility/test-only split completion; the processor must use transactional finalization. */
     fun complete(
         jobId: String,
         ocrRunId: String,
@@ -143,7 +144,7 @@ internal sealed interface AndroidOcrQueueStep {
 
 /**
  * Executes exactly one Rust-claimed OCR job. The queue transition remains Rust-owned; Android only
- * invokes the local provider and reports the resulting persisted OCR run back to Rust.
+ * invokes the local provider and submits its outcome to one Rust transactional finalizer.
  */
 internal class AndroidOcrQueueProcessor(
     private val gateway: AndroidOcrQueueGateway,

@@ -252,6 +252,8 @@ impl A2dClient {
             .map_err(Into::into)
     }
 
+    /// Compatibility/test/migration-only split completion. Normal queue workers must call
+    /// `finalize_ocr_job` with the provider outcome and all required regions instead.
     pub fn complete_ocr_job(
         &self,
         request: CompleteOcrJobRequest,
