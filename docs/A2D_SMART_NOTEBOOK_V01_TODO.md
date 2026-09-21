@@ -1,8 +1,8 @@
 # A2D Smart Notebook v0.1 — Authoritative Implementation Roadmap
 
-**Status:** Reconciled through Milestone 11 closeout on 2026-09-15. Milestones 1–6 have substantial production implementation but are not blanket release-complete; Milestone 7 is software/synthetic-evidence complete with photographed and physical-device calibration evidence pending; Milestone 8.1–8.5 and scanner recovery are implemented while part of 8.6 remains open; Milestone 9.1–9.5 are implemented without calibrated duplicate/revision classification; Milestone 10 is partial; Milestone 11 OCR and its local OCR-search surface are implemented; Milestone 12 retains broader search scale/integrity work; Milestones 13–19 remain partial or open as stated below.  
+**Status:** Reconciled through the Milestone 11 second post-closeout review remediation in September 2026. Milestones 1–6 have substantial production implementation but are not blanket release-complete; Milestone 7 is software/synthetic-evidence complete with photographed and physical-device calibration evidence pending; Milestone 8.1–8.5 and scanner recovery are implemented while part of 8.6 remains open; Milestone 9.1–9.5 are implemented without calibrated duplicate/revision classification; Milestone 10 is partial; Milestone 11 OCR and its local OCR-search surface are implemented and are undergoing final second-review closeout reconciliation in `docs/M11_OCR_POST_CLOSEOUT_REVIEW_2_REMEDIATION_TODO_2026-09-19.md`; Milestone 12 retains broader search scale/integrity work; Milestones 13–19 remain partial or open as stated below.  
 **Version:** 0.1  
-**Date:** 2026-09-15  
+**Date:** 2026-09-21  
 **Repository:** `ekkus93/a2d-smart-notebook`  
 **Authoritative specification:** `docs/A2D_SMART_NOTEBOOK_V01_SPEC.md`  
 **Remediation plan:** `docs/A2D_SMART_NOTEBOOK_CODE_REVIEW_FIX_TODO_2026-07-28.md`  
@@ -10,7 +10,7 @@
 
 This file is the authoritative execution roadmap. A checked item means production code and focused evidence exist. A milestone marked **Partial** may contain many checked implementation items while still having explicit evidence, physical-validation, workflow, or product-scope gaps.
 
-The last code-bearing remediation candidate, `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`, passed permanent CI run `30673255456` and Milestone 7 native validation run `30673255457`. Milestone 9.3's code-bearing closeout head, `e3984b8261de80c0c542c3dba5657c6914cef2bb`, passed permanent CI run `31652574271`. The combined batch-scanner, Needs Review, and Version UI source head `3e9ddf6b2043c374a91abb02304a41bbbb970a72` passed permanent CI run `31738664552`. Milestone 11 queue/retry orchestration merged through PR #60 to `38a1bae9713df6b805ed11f2ad4d579130d35b52`, which passed permanent CI run `34958132321`. Future code-bearing completion claims require permanent CI on the exact claimed source head.
+The last code-bearing remediation candidate, `d2cb054d2489cf2b0f1e66d9370b5650b31404d0`, passed permanent CI run `30673255456` and Milestone 7 native validation run `30673255457`. Milestone 9.3's code-bearing closeout head, `e3984b8261de80c0c542c3dba5657c6914cef2bb`, passed permanent CI run `31652574271`. The combined batch-scanner, Needs Review, and Version UI source head `3e9ddf6b2043c374a91abb02304a41bbbb970a72` passed permanent CI run `31738664552`. Milestone 11 queue/retry orchestration merged through PR #60 to `38a1bae9713df6b805ed11f2ad4d579130d35b52`, which passed permanent CI run `34958132321`. That earlier green CI remains historical fact, but the second post-closeout review subsequently found production composition paths that still used compatibility APIs; the active second-review tracker above is authoritative for the final M11 remediation claim. Future code-bearing completion claims require permanent CI on the exact claimed source head.
 
 ---
 
@@ -58,7 +58,7 @@ Do not:
 | 8 — CameraX scanning | **Partial** | 8.1–8.5, process-death recovery, durable batch-session semantics, duplicate/session summary and Needs Review integration | Remaining 8.6/FIX-111 matrix cases and physical low-storage evidence |
 | 9 — Durable scans and revisions | **Partial** | 9.1 durable registration; 9.2 asset-backed fingerprints/changed regions; 9.3 safe audited revision decisions; 9.4 Needs Review; 9.5 Version UI | Calibrated duplicate/revision thresholds from reviewed physical evidence |
 | 10 — Library UI | **Partial** | Home dashboard, Library Hub integrations, Page Viewer/version/OCR surfaces used by completed slices | Complete data-backed browsing surface, collections, trash lifecycle and remaining Page Viewer modes |
-| 11 — OCR | **Implementation complete** | Durable OCR runs/regions/corrections, readback, local OCR search/UI, bundled ML Kit provider, durable queue/retry/cancellation/diagnostics | Broader release/physical-quality evidence; corrected+original unified search ranking is deferred |
+| 11 — OCR | **Second-review closeout in progress** | Durable OCR runs/regions/corrections, transactional queue finalization, readback/pagination, local OCR search/UI, bundled ML Kit provider, bounded Rust-owned retry, cancellation semantics, source-image/overlay geometry, production integration sentinels | Final second-review source/resource/evidence reconciliation; broader release/physical-quality evidence; corrected+original unified search ranking is deferred |
 | 12 — Search | **Partial** | Rust-owned local OCR text index/API and Android OCR search UI | Broader filters/pagination/syntax contract, 10,000-page scale evidence, integrity-report integration |
 | 13 — Backup/restore/export | **Not implemented** | Crate scaffolding only | `.atnb`, encryption, create/inspect/restore/export workflows |
 | 14 — Models and skills | **Not implemented** | Crate scaffolding only | Providers, runtime, permissions, tools, built-ins and UI |
@@ -355,7 +355,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 
 # Milestone 11 — OCR and correction
 
-**Status: Implementation complete for the M11 scope. See `docs/M11_OCR_CLOSEOUT_2026-09-15.md`.**
+**Status: Second post-closeout review remediation is implemented through R17 and is in final R18 closeout reconciliation. The active source of truth is `docs/M11_OCR_POST_CLOSEOUT_REVIEW_2_REMEDIATION_TODO_2026-09-19.md`; `docs/M11_OCR_CLOSEOUT_2026-09-15.md` is historical and contains a second-review addendum.**
 
 - [x] Rust OCR request/result/provider contract with bounded input validation, explicit terminal status, provenance, warnings, cancellation/unavailable semantics, and immutable scan-owned input selection.
 - [x] Durable Rust-owned OCR run and text-region persistence plus Page Viewer readback.
@@ -366,6 +366,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 - [x] Stored text-region polygons drive selectable Page Viewer overlays with text/confidence presentation.
 - [x] Rust-owned local OCR search index/API and Android OCR Search UI are implemented.
 - [x] Current M11 search precedence intentionally indexes original OCR text; unified original+corrected ranking/source labels are deferred rather than hiding immutable provenance.
+- [x] Second-review remediation wires normal production queue completion through the Rust transactional finalizer, preserves one cancellation/commit-point rule, uses durable active-job/input identity and bounded Rust-owned manual retry, validates authoritative source geometry/polygon bounds, renders the actual source image with a shared overlay/hit-test transform, hydrates regions completely through explicit pagination, and adds production composition sentinels.
 
 ---
 
@@ -564,7 +565,7 @@ Still incomplete or not yet demonstrated at the required specificity:
 # Recommended execution order from the reconciled state
 
 1. [x] **Milestones 9.3–9.5 and 8.5** — safe revisions, Needs Review, Version UI, and batch scanner.
-2. [x] **Milestone 11 — OCR closeout** — durable OCR persistence/readback, correction, real local provider, OCR search surface, and queue/retry orchestration.
+2. [ ] **Milestone 11 — second-review closeout** — implementation through R17 is complete; finish R18 source/resource/evidence reconciliation before restoring an unqualified completion claim.
 3. [ ] Complete the consolidated **Milestone 8.6 / FIX-111 camera failure matrix**.
 4. [ ] In parallel, collect **Milestone 7/17 photographed and physical-device evidence** and calibrate versioned capture/comparison/OCR-quality thresholds.
 5. [ ] Complete remaining **Milestone 10 Library** and **Milestone 12 broader search** scope.
