@@ -297,7 +297,10 @@ class OcrBridgeIntegrationTest {
             val step = productionProcessor(client, queue, detectedSentinel()).processNext()
             assertTrue(step is AndroidOcrQueueStep.Completed)
             val completed = (step as AndroidOcrQueueStep.Completed).job
-            assertEquals(AndroidOcrQueueJobStatus.Recognized, queue.requestCancellation(queued.jobId).status)
+            val error = assertThrows(A2dFfiException.Failed::class.java) {
+                queue.requestCancellation(queued.jobId)
+            }
+            assertEquals("CORE_OCR_JOB_TERMINAL_TRANSITION_INVALID", error.v1.code)
             A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
                 val job = FfiAndroidOcrQueueGateway(reopened).get(queued.jobId)
                 assertEquals(AndroidOcrQueueJobStatus.Recognized, job.status)
