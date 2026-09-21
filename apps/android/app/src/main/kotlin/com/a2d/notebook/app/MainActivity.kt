@@ -11,8 +11,14 @@ import com.a2d.notebook.navigation.A2dNavHost
 import com.a2d.notebook.rustbridge.A2dBridge
 
 /**
- * Android composition root. Rust owns persistent/business state; this Activity owns the
- * app-lifetime native client and passes that same open-library handle into production navigation.
+ * Android composition root. Rust owns persistent/business state; this Activity obtains the one
+ * process-lifetime native client from [A2dBridge] and passes that same handle to both the OCR queue
+ * runtime and production navigation. Search, Page Viewer readback/actions, and correction gateways
+ * are all derived from this handle inside `A2dNavHost`.
+ *
+ * Runtime active-library switching is intentionally unsupported in the current product. The
+ * process-lifetime handle is therefore not closed on Activity recreation; doing so would invalidate
+ * the queue runtime and other client-bound work that deliberately outlives one Activity instance.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
