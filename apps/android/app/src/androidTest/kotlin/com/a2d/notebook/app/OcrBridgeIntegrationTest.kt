@@ -197,6 +197,30 @@ class OcrBridgeIntegrationTest {
     }
 
     @Test
+    fun productionReadbackHydratesBeyondOldCeilingAndPreservesRegionIdsOnReopen() {
+        withProductionFixture { client, root, scan, queue, _ ->
+            val base = detectedSentinel()
+            val outcome = base.copy(regions = List(1_001) { index ->
+                base.regions.single().copy(text = "region $index", createdAtMs = 1_000L + index)
+            })
+            val step = productionProcessor(client, queue, outcome).processNext()
+            assertTrue(step is AndroidOcrQueueStep.Completed)
+            val run = requireNotNull(FfiAndroidOcrReadback(client).loadLatestOcrOutput(scan.scanId, regionLimit = 37u).latestRun)
+            assertEquals(1_001, run.textRegionCount)
+            assertEquals(1_001, run.textRegions.size)
+            val ids = run.textRegions.map { it.textRegionId }
+            assertEquals(1_001, ids.toSet().size)
+            A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+                val reloaded = requireNotNull(FfiAndroidOcrReadback(reopened).loadLatestOcrOutput(scan.scanId, regionLimit = 50u).latestRun)
+                assertEquals(run.ocrRunId, reloaded.ocrRunId)
+                assertEquals(ids, reloaded.textRegions.map { it.textRegionId })
+                assertEquals(1_001, reloaded.textRegionCount)
+                assertTrue(FfiAndroidOcrSearchGateway(reopened).searchOcrText(AndroidOcrSearchRequest("rollbacksentinel", 20u)).hits.isNotEmpty())
+            }
+        }
+    }
+
+    @Test
     fun productionStaleClaimCannotFinalizeAfterAnotherWorkerReclaimsTheJob() {
         withProductionFixture { client, root, scan, queue, queued ->
             val actual = FfiRustOcrGateway(client)
