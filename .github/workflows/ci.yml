@@ -163,6 +163,7 @@ jobs:
           cargo install cargo-ndk --version "${A2D_CARGO_NDK_VERSION}" --locked
       - name: Prepare CI-only feature-enabled FFI panic test build
         run: bash ./tools/prepare-android-ffi-panic-test.sh
+      # OcrSearchProductionNavigationTest traverses queue/provider/finalizer through correction UI.
       - name: Run scanner, recovery, panic-containment, scan-revision, Needs Review, version, and OCR navigation UI tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -233,6 +234,8 @@ jobs:
           grep -q 'getPageVersionTimeline' "$binding"
           grep -q 'comparePageVersions' "$binding"
           grep -q 'movePageVersionToReview' "$binding"
+          grep -q 'resolveOcrSourceGeometryForViewer' "$binding"
+          grep -q 'resolveOcrRunSourceGeometry' "$binding"
           grep -q 'prepareOcrInput' "$binding"
           grep -q 'recordOcrRun' "$binding"
           grep -q 'recordOcrTextRegions' "$binding"
@@ -255,3 +258,4 @@ jobs:
             apps/android/app/src/main/kotlin/uniffi/a2d_ffi/a2d_ffi.kt
             Cargo.lock
           if-no-files-found: error
+

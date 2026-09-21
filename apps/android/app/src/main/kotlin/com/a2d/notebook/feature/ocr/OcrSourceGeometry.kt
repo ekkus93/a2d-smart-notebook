@@ -34,6 +34,12 @@ data class AndroidOcrSourceGeometry(
  * image dimensions from the committed immutable file.
  */
 class AndroidOcrSourceGeometryGateway(private val client: A2dClient) {
+    fun resolveForViewer(scanId: String): AndroidOcrSourceGeometry =
+        client.resolveOcrSourceGeometryForViewer(scanId).toAndroid(File(client.libraryPath()).canonicalFile)
+
+    fun resolveRun(ocrRunId: String): AndroidOcrSourceGeometry =
+        client.resolveOcrRunSourceGeometry(ocrRunId).toAndroid(File(client.libraryPath()).canonicalFile)
+
     fun resolve(
         scanId: String,
         inputKind: FfiOcrInputKind,

@@ -12,7 +12,7 @@ use std::path::Path;
 use a2d_domain::{
     A2dError, Asset, AssetId, AssetKind, ErrorCategory, ErrorCode, ErrorSeverity, Scan, ScanId,
 };
-use a2d_storage::{AssetRepository, ScanRepository};
+use a2d_storage::{AssetRepository, OcrJobRepository, OcrRunRepository, ScanRepository};
 use image::{ImageFormat, ImageReader, Limits};
 
 use super::A2dCore;
@@ -34,6 +34,75 @@ pub struct OcrSourceGeometry {
 }
 
 impl A2dCore {
+    /// Select the actual active input, then the latest committed run's input, or the scanner's
+    /// preferred available input for a first run. Android must not select a different asset.
+    pub fn resolve_ocr_source_geometry_for_viewer(
+        &self,
+        scan_id: &str,
+    ) -> Result<OcrSourceGeometry, A2dError> {
+        let parsed = ScanId::parse(scan_id)?;
+        let active = self.lock_storage()?.find_active_ocr_job_for_scan(&parsed)?;
+        if let Some(job) = active {
+            let job: crate::OcrJobSnapshot = job.into();
+            return self.resolve_ocr_source_geometry(scan_id, job.input_kind);
+        }
+        let output = self.load_latest_ocr_output(crate::LoadLatestOcrOutputRequest {
+            scan_id: scan_id.to_string(),
+            region_limit: 0,
+        })?;
+        if let Some(run) = output.latest_run {
+            return self.resolve_ocr_run_source_geometry(&run.ocr_run_id);
+        }
+        let scan = self.lock_storage()?.get_scan(&parsed)?.ok_or_else(|| {
+            geometry_error("CORE_OCR_SOURCE_SCAN_MISSING", "OCR source scan is missing")
+        })?;
+        let kind = if scan.ocr_asset_id.is_some() {
+            CoreOcrInputKind::OcrOptimized
+        } else {
+            CoreOcrInputKind::Original
+        };
+        self.resolve_ocr_source_geometry(scan_id, kind)
+    }
+
+    /// Bind overlay geometry to one immutable OCR run even when a newer job uses another input.
+    pub fn resolve_ocr_run_source_geometry(
+        &self,
+        ocr_run_id: &str,
+    ) -> Result<OcrSourceGeometry, A2dError> {
+        let run_id = a2d_domain::OcrRunId::parse(ocr_run_id)?;
+        let storage = self.lock_storage()?;
+        let run = storage.get_ocr_run(&run_id)?.ok_or_else(|| {
+            geometry_error("CORE_OCR_SOURCE_RUN_MISSING", "OCR source run is missing")
+        })?;
+        let scan = storage.get_scan(&run.scan_id)?.ok_or_else(|| {
+            geometry_error("CORE_OCR_SOURCE_SCAN_MISSING", "OCR source scan is missing")
+        })?;
+        let asset_id = run.input_asset_id.as_ref().ok_or_else(|| {
+            geometry_error("CORE_OCR_SOURCE_RUN_INPUT_MISSING", "OCR run has no source asset")
+        })?;
+        let kind = if asset_id == &scan.original_asset_id {
+            CoreOcrInputKind::Original
+        } else if scan.ocr_asset_id.as_ref() == Some(asset_id) {
+            CoreOcrInputKind::OcrOptimized
+        } else if scan.corrected_asset_id.as_ref() == Some(asset_id) {
+            CoreOcrInputKind::Corrected
+        } else {
+            return Err(geometry_error(
+                "CORE_OCR_SOURCE_RUN_INPUT_MISMATCH",
+                "OCR run source asset does not belong to its scan",
+            ));
+        };
+        drop(storage);
+        let source = self.resolve_ocr_source_geometry(&run.scan_id.to_string(), kind)?;
+        if source.input_asset_id != asset_id.to_string() {
+            return Err(geometry_error(
+                "CORE_OCR_SOURCE_RUN_INPUT_MISMATCH",
+                "OCR run source changed during geometry resolution",
+            ));
+        }
+        Ok(source)
+    }
+
     /// Resolve one scan-owned OCR source asset and its real encoded image dimensions.
     pub fn resolve_ocr_source_geometry(
         &self,
@@ -426,6 +495,69 @@ mod tests {
         assert_eq!(source.height_px, 17);
         assert!(source.relative_path.starts_with("assets/ocr/"));
         drop(core);
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn viewer_and_run_geometry_follow_durable_input_identity() {
+        let (core, root) = open_test_core("durable-input");
+        let fixture = insert_scan_fixture(&core, &root);
+        let scan_id = fixture.scan_id.to_string();
+        let preferred = core.resolve_ocr_source_geometry_for_viewer(&scan_id).unwrap();
+        assert_eq!(preferred.input_asset_id, fixture.ocr_asset_id.to_string());
+        assert_eq!((preferred.width_px, preferred.height_px), (13, 17));
+        core.enqueue_ocr_job(crate::EnqueueOcrJobRequest {
+            scan_id: scan_id.clone(),
+            input_kind: CoreOcrInputKind::OcrOptimized,
+            width_px: 13,
+            height_px: 17,
+        })
+        .unwrap();
+        let claimed = core.claim_next_ocr_job().unwrap().unwrap();
+        assert_eq!(
+            core.resolve_ocr_source_geometry_for_viewer(&scan_id).unwrap(),
+            preferred
+        );
+        let finalized = core
+            .finalize_ocr_job(crate::FinalizeOcrJobRequest {
+                job_id: claimed.job_id,
+                attempt_count: claimed.attempt_count,
+                provider: "geometry-test".to_string(),
+                provider_version: "1".to_string(),
+                model_name: None,
+                status: a2d_domain::OcrRunStatus::NoTextDetected,
+                full_text: String::new(),
+                unavailable_reason: None,
+                unavailable_message: None,
+                completed_at_ms: Some(200),
+                warnings: Vec::new(),
+                retryable: false,
+                regions: Vec::new(),
+            })
+            .unwrap();
+        let run_id = finalized.ocr_run_id.unwrap();
+        assert_eq!(
+            core.resolve_ocr_source_geometry_for_viewer(&scan_id).unwrap(),
+            preferred
+        );
+        core.enqueue_ocr_job(crate::EnqueueOcrJobRequest {
+            scan_id: scan_id.clone(),
+            input_kind: CoreOcrInputKind::Original,
+            width_px: 31,
+            height_px: 43,
+        })
+        .unwrap();
+        let active = core.resolve_ocr_source_geometry_for_viewer(&scan_id).unwrap();
+        assert_eq!(active.input_asset_id, fixture.original_asset_id.to_string());
+        assert_eq!((active.width_px, active.height_px), (31, 43));
+        assert_eq!(core.resolve_ocr_run_source_geometry(&run_id).unwrap(), preferred);
+        drop(core);
+        let reopened = A2dCore::open(OpenLibraryRequest {
+            library_path: root.to_string_lossy().into_owned(),
+        })
+        .unwrap();
+        assert_eq!(reopened.resolve_ocr_run_source_geometry(&run_id).unwrap(), preferred);
+        drop(reopened);
         std::fs::remove_dir_all(root).ok();
     }
 

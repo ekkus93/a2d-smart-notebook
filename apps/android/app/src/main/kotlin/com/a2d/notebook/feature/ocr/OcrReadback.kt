@@ -3,7 +3,6 @@ package com.a2d.notebook.feature.ocr
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.LoadLatestOcrOutputRequest as FfiLoadLatestOcrOutputRequest
 import uniffi.a2d_ffi.LoadOcrRegionPageRequest as FfiLoadOcrRegionPageRequest
-import uniffi.a2d_ffi.OcrInputKind as FfiOcrInputKind
 import uniffi.a2d_ffi.OcrRunStatus as FfiOcrRunStatus
 import uniffi.a2d_ffi.OcrTextPoint as FfiOcrTextPoint
 import uniffi.a2d_ffi.OcrUnavailableReason as FfiOcrUnavailableReason
@@ -48,7 +47,7 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
             }
         return LoadedAndroidOcrOutput(
             scanId = loaded.scanId,
-            sourceGeometry = latestRun?.let { loadSourceGeometry(loaded.scanId) },
+            sourceGeometry = latestRun?.let { loadSourceGeometry(it.ocrRunId) },
             latestRun =
                 latestRun?.let { run ->
                     LoadedAndroidOcrRun(
@@ -119,8 +118,8 @@ class FfiAndroidOcrReadback(private val client: A2dClient) {
             )
         }
 
-    private fun loadSourceGeometry(scanId: String): AndroidOcrSourceGeometry? =
-        runCatching { AndroidOcrSourceGeometryGateway(client).resolve(scanId, FfiOcrInputKind.ORIGINAL) }.getOrNull()
+    private fun loadSourceGeometry(ocrRunId: String): AndroidOcrSourceGeometry? =
+        runCatching { AndroidOcrSourceGeometryGateway(client).resolveRun(ocrRunId) }.getOrNull()
 }
 
 internal object AndroidOcrRegionPaginationHydrator {

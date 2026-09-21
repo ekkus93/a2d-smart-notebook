@@ -80,6 +80,26 @@ impl From<a2d_core::PageViewerSnapshot> for PageViewerSnapshot {
 
 #[uniffi::export]
 impl A2dClient {
+    pub fn resolve_ocr_source_geometry_for_viewer(
+        &self,
+        scan_id: String,
+    ) -> Result<OcrSourceGeometry, A2dFfiError> {
+        self.core
+            .resolve_ocr_source_geometry_for_viewer(&scan_id)
+            .map(Into::into)
+            .map_err(Into::into)
+    }
+
+    pub fn resolve_ocr_run_source_geometry(
+        &self,
+        ocr_run_id: String,
+    ) -> Result<OcrSourceGeometry, A2dFfiError> {
+        self.core
+            .resolve_ocr_run_source_geometry(&ocr_run_id)
+            .map(Into::into)
+            .map_err(Into::into)
+    }
+
     pub fn load_page_viewer_snapshot(
         &self,
         page_id: String,

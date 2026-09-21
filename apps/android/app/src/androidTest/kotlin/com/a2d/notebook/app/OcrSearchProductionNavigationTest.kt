@@ -23,6 +23,19 @@ import com.a2d.notebook.feature.home.HomeScreenTestTags
 import com.a2d.notebook.feature.library.LibraryHubTestTags
 import com.a2d.notebook.feature.library.PageViewerTestTags
 import com.a2d.notebook.feature.ocr.OcrSearchTestTags
+import com.a2d.notebook.feature.ocr.AndroidOcrProvider
+import com.a2d.notebook.feature.ocr.AndroidOcrQueueProcessor
+import com.a2d.notebook.feature.ocr.AndroidOcrQueueStep
+import com.a2d.notebook.feature.ocr.AndroidOcrQueueJobStatus
+import com.a2d.notebook.feature.ocr.AndroidOcrWorkflow
+import com.a2d.notebook.feature.ocr.AndroidOcrRecognitionOutcome
+import com.a2d.notebook.feature.ocr.AndroidRecognizedTextRegion
+import com.a2d.notebook.feature.ocr.FfiAndroidOcrQueueGateway
+import com.a2d.notebook.feature.ocr.FfiAndroidOcrReadback
+import com.a2d.notebook.feature.ocr.FfiRustOcrGateway
+import com.a2d.notebook.feature.ocr.OcrTextPoint
+import com.a2d.notebook.feature.ocr.OcrRegionOverlayTestTags
+import com.a2d.notebook.feature.ocr.OcrInputKind as AndroidOcrInputKind
 import com.a2d.notebook.navigation.A2dDestinations
 import com.a2d.notebook.navigation.A2dNavHost
 import java.util.UUID
@@ -35,11 +48,8 @@ import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.CreateNotebookRequest
 import uniffi.a2d_ffi.ListOcrCorrectionsForScanRequest
 import uniffi.a2d_ffi.OcrInputKind
-import uniffi.a2d_ffi.OcrRunStatus
 import uniffi.a2d_ffi.OpenLibraryRequest
 import uniffi.a2d_ffi.PageResolution
-import uniffi.a2d_ffi.PrepareOcrInputRequest
-import uniffi.a2d_ffi.RecordOcrRunRequest
 import uniffi.a2d_ffi.RegistrationImageFormat
 import uniffi.a2d_ffi.RegistrationImageRotation
 import uniffi.a2d_ffi.RegistrationMarker
@@ -174,31 +184,31 @@ class OcrSearchProductionNavigationTest {
                     ),
                 )
             assertEquals(pageId, registered.pageId)
-            val prepared =
-                client.prepareOcrInput(
-                    PrepareOcrInputRequest(
-                        scanId = registered.scanId,
-                        inputKind = OcrInputKind.ORIGINAL,
-                        widthPx = 1800u,
-                        heightPx = 2200u,
-                    ),
-                )
-            val recorded =
-                client.recordOcrRun(
-                    RecordOcrRunRequest(
-                        scanId = registered.scanId,
-                        inputAssetId = prepared.inputAssetId,
-                        provider = "instrumentation-fixture",
-                        providerVersion = "1",
-                        modelName = "deterministic",
-                        status = OcrRunStatus.DETECTED,
-                        fullText = "persisted production notebook sentinel",
-                        unavailableReason = null,
-                        unavailableMessage = null,
+            val geometry = client.resolveOcrSourceGeometry(registered.scanId, OcrInputKind.ORIGINAL)
+            val queue = FfiAndroidOcrQueueGateway(client)
+            val queued = queue.enqueue(registered.scanId, AndroidOcrInputKind.Original, geometry.widthPx, geometry.heightPx)
+            val provider = object : AndroidOcrProvider {
+                override fun recognize(input: com.a2d.notebook.feature.ocr.PreparedAndroidOcrInput) =
+                    AndroidOcrRecognitionOutcome.Detected(
+                        provider = "production-navigation-sentinel", providerVersion = "1",
+                        modelName = "deterministic", fullText = "persisted production notebook sentinel",
                         completedAtMs = System.currentTimeMillis(),
-                        warnings = emptyList(),
-                    ),
-                )
+                        regions = listOf(AndroidRecognizedTextRegion(
+                            polygon = listOf(OcrTextPoint(1f, 1f), OcrTextPoint(20f, 1f), OcrTextPoint(20f, 20f)),
+                            text = "overlay region", confidence = 0.9f, createdAtMs = System.currentTimeMillis(),
+                        )),
+                    )
+            }
+            val step = AndroidOcrQueueProcessor(queue, AndroidOcrWorkflow(FfiRustOcrGateway(client), provider)).processNext()
+            assertTrue(step is AndroidOcrQueueStep.Completed)
+            val job = (step as AndroidOcrQueueStep.Completed).job
+            assertEquals(queued.jobId, job.jobId)
+            assertEquals(AndroidOcrQueueJobStatus.Recognized, job.status)
+            val output = FfiAndroidOcrReadback(client).loadLatestOcrOutput(registered.scanId)
+            val recorded = requireNotNull(output.latestRun)
+            assertEquals(job.lastOcrRunId, recorded.ocrRunId)
+            assertEquals(1, recorded.textRegions.size)
+            assertEquals(geometry.inputAssetId, requireNotNull(output.sourceGeometry).inputAssetId)
 
             composeRule.activity.setContent {
                 MaterialTheme {
@@ -231,6 +241,13 @@ class OcrSearchProductionNavigationTest {
                 "persisted production notebook sentinel",
                 substring = true,
             ).assertIsDisplayed()
+
+            composeRule.onNodeWithTag(PageViewerTestTags.OCR_SOURCE_GEOMETRY).performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("OCR source: ${geometry.widthPx}×${geometry.heightPx} px (Original)").assertIsDisplayed()
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithTag(OcrRegionOverlayTestTags.CANVAS).fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag(OcrRegionOverlayTestTags.CANVAS).performScrollTo().assertIsDisplayed()
 
             // Continue through the production Page Viewer correction seam instead of switching to
             // a test-only controller. This makes one bounded scenario sentinel the Search controller,

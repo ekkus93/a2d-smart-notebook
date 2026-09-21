@@ -48,7 +48,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.a2d_ffi.A2dClient
 import uniffi.a2d_ffi.EnqueueOcrJobRequest
-import uniffi.a2d_ffi.OcrInputKind
 import uniffi.a2d_ffi.OcrQueueJob
 import uniffi.a2d_ffi.OcrQueueJobStatus
 
@@ -543,7 +542,7 @@ private suspend fun resolveOcrSourceGeometryForViewer(
     if (gateway == null) {
         throw IllegalStateException("No open local library is available for OCR source geometry")
     }
-    return withContext(Dispatchers.IO) { gateway.resolve(scanId, OcrInputKind.ORIGINAL) }
+    return withContext(Dispatchers.IO) { gateway.resolveForViewer(scanId) }
 }
 
 private fun AndroidOcrSourceGeometry.toEnqueueOcrJobRequest(): EnqueueOcrJobRequest =
