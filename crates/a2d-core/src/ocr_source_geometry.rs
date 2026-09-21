@@ -78,7 +78,10 @@ impl A2dCore {
             geometry_error("CORE_OCR_SOURCE_SCAN_MISSING", "OCR source scan is missing")
         })?;
         let asset_id = run.input_asset_id.as_ref().ok_or_else(|| {
-            geometry_error("CORE_OCR_SOURCE_RUN_INPUT_MISSING", "OCR run has no source asset")
+            geometry_error(
+                "CORE_OCR_SOURCE_RUN_INPUT_MISSING",
+                "OCR run has no source asset",
+            )
         })?;
         let kind = if asset_id == &scan.original_asset_id {
             CoreOcrInputKind::Original
@@ -503,7 +506,9 @@ mod tests {
         let (core, root) = open_test_core("durable-input");
         let fixture = insert_scan_fixture(&core, &root);
         let scan_id = fixture.scan_id.to_string();
-        let preferred = core.resolve_ocr_source_geometry_for_viewer(&scan_id).unwrap();
+        let preferred = core
+            .resolve_ocr_source_geometry_for_viewer(&scan_id)
+            .unwrap();
         assert_eq!(preferred.input_asset_id, fixture.ocr_asset_id.to_string());
         assert_eq!((preferred.width_px, preferred.height_px), (13, 17));
         core.enqueue_ocr_job(crate::EnqueueOcrJobRequest {
@@ -515,7 +520,8 @@ mod tests {
         .unwrap();
         let claimed = core.claim_next_ocr_job().unwrap().unwrap();
         assert_eq!(
-            core.resolve_ocr_source_geometry_for_viewer(&scan_id).unwrap(),
+            core.resolve_ocr_source_geometry_for_viewer(&scan_id)
+                .unwrap(),
             preferred
         );
         let finalized = core
@@ -537,7 +543,8 @@ mod tests {
             .unwrap();
         let run_id = finalized.ocr_run_id.unwrap();
         assert_eq!(
-            core.resolve_ocr_source_geometry_for_viewer(&scan_id).unwrap(),
+            core.resolve_ocr_source_geometry_for_viewer(&scan_id)
+                .unwrap(),
             preferred
         );
         core.enqueue_ocr_job(crate::EnqueueOcrJobRequest {
@@ -547,16 +554,24 @@ mod tests {
             height_px: 43,
         })
         .unwrap();
-        let active = core.resolve_ocr_source_geometry_for_viewer(&scan_id).unwrap();
+        let active = core
+            .resolve_ocr_source_geometry_for_viewer(&scan_id)
+            .unwrap();
         assert_eq!(active.input_asset_id, fixture.original_asset_id.to_string());
         assert_eq!((active.width_px, active.height_px), (31, 43));
-        assert_eq!(core.resolve_ocr_run_source_geometry(&run_id).unwrap(), preferred);
+        assert_eq!(
+            core.resolve_ocr_run_source_geometry(&run_id).unwrap(),
+            preferred
+        );
         drop(core);
         let reopened = A2dCore::open(OpenLibraryRequest {
             library_path: root.to_string_lossy().into_owned(),
         })
         .unwrap();
-        assert_eq!(reopened.resolve_ocr_run_source_geometry(&run_id).unwrap(), preferred);
+        assert_eq!(
+            reopened.resolve_ocr_run_source_geometry(&run_id).unwrap(),
+            preferred
+        );
         drop(reopened);
         std::fs::remove_dir_all(root).ok();
     }
