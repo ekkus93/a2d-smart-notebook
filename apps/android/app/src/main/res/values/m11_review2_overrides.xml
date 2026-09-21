@@ -1,0 +1,3 @@
+<resources>
+    <!-- Intentionally empty. The effective stale-text corrections live in values-v26 so they apply across the app's supported minSdk range without duplicating default resources. -->
+</resources>
