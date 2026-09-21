@@ -1,6 +1,12 @@
 # M11 OCR Closeout TODO — 2026-09-14
 
-This file is the active tracking checklist for finishing Milestone 11 OCR work in `ekkus93/a2d-smart-notebook`.
+## Second post-closeout review addendum — 2026-09-21
+
+This file remains a historical record of the original M11 closeout. A second source review at baseline `ba6f87d7eab75730ce7c715f87ac1ae615d1c730` found that the first post-closeout remediation had passed its recorded CI while some shipped Android paths still called older compatibility APIs rather than the stronger Rust primitives that had been added and tested in isolation.
+
+The current source of truth is `docs/M11_OCR_POST_CLOSEOUT_REVIEW_2_REMEDIATION_TODO_2026-09-19.md`, with requirements in `docs/M11_OCR_POST_CLOSEOUT_REVIEW_2_REMEDIATION_SPEC_2026-09-19.md` and architecture/closeout context in `docs/M11_OCR_POST_CLOSEOUT_REVIEW_2_CLOSEOUT_2026-09-21.md`. Historical PR, merge, and CI evidence below remains valid for the exact slices it exercised, but it must not be interpreted as proof of the production-path invariants reopened by the second review.
+
+The second review requires production transactional OCR finalization, cancellation commit-point enforcement through the real executor, scanner/Page Viewer active-job identity agreement, Rust-owned manual retry, authoritative source geometry and polygon bounds, a shared source-image/overlay transform, explicit complete/partial region hydration, production-composition sentinels, cancellation propagation, and lifecycle documentation matching the intentionally process-lifetime active client. M11 must not be represented as fully remediated until the second-review TODO reaches zero unchecked implementation/testing/qualification/documentation/cleanup items and final post-merge `master` CI is green.
 
 ## Post-closeout review addendum — 2026-09-15
 
@@ -176,4 +182,4 @@ Merged: PR #60, exact green head `c861f91ffc10b8339eea4f6b56e39820063e8860`; squ
 
 ## Current stopping condition
 
-Historical closeout condition superseded by post-closeout remediation: this file records the original M11 closeout evidence, but M11 is not fully closed until `docs/M11_OCR_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-15.md` is fully implemented, reconciled, merged to `master`, and final post-merge `master` CI is green.
+Historical closeout conditions are superseded by the second post-closeout review. This file records original and first-remediation evidence, but current M11 status is governed by `docs/M11_OCR_POST_CLOSEOUT_REVIEW_2_REMEDIATION_TODO_2026-09-19.md`. M11 is not fully remediated until that tracker is fully implemented, reconciled, merged to `master`, and final post-merge `master` CI is green.
