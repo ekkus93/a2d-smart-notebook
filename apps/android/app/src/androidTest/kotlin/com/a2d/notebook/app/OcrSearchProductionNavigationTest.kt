@@ -184,9 +184,9 @@ class OcrSearchProductionNavigationTest {
                     ),
                 )
             assertEquals(pageId, registered.pageId)
-            val geometry = client.resolveOcrSourceGeometry(registered.scanId, OcrInputKind.ORIGINAL)
+            val geometry = client.resolveOcrSourceGeometry(registered.scanId, OcrInputKind.OCR_OPTIMIZED)
             val queue = FfiAndroidOcrQueueGateway(client)
-            val queued = queue.enqueue(registered.scanId, AndroidOcrInputKind.Original, geometry.widthPx, geometry.heightPx)
+            val queued = queue.enqueue(registered.scanId, AndroidOcrInputKind.OcrOptimized, geometry.widthPx, geometry.heightPx)
             val provider = object : AndroidOcrProvider {
                 override fun recognize(input: com.a2d.notebook.feature.ocr.PreparedAndroidOcrInput) =
                     AndroidOcrRecognitionOutcome.Detected(
@@ -243,7 +243,7 @@ class OcrSearchProductionNavigationTest {
             ).assertIsDisplayed()
 
             composeRule.onNodeWithTag(PageViewerTestTags.OCR_SOURCE_GEOMETRY).performScrollTo().assertIsDisplayed()
-            composeRule.onNodeWithText("OCR source: ${geometry.widthPx}×${geometry.heightPx} px (Original)").assertIsDisplayed()
+            composeRule.onNodeWithText("OCR source: ${geometry.widthPx}×${geometry.heightPx} px (OcrOptimized)").assertIsDisplayed()
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule.onAllNodesWithTag(OcrRegionOverlayTestTags.CANVAS).fetchSemanticsNodes().isNotEmpty()
             }
