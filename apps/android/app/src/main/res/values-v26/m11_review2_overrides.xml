@@ -1,0 +1,5 @@
+<resources>
+    <string name="page_viewer_api_boundary">This screen presents Rust-backed page, scan, version, and OCR records where implemented. Annotation, related-page, and skill-result rows remain separate roadmap work. The UI does not fabricate images, OCR text, annotations, related pages, or model output.</string>
+    <string name="page_viewer_text_unavailable">No OCR text is available for this page yet. Run OCR, wait for queued OCR to complete, or review the explicit no-text, unavailable, or cancelled OCR state.</string>
+    <string name="page_viewer_text_recording">Finalizing the terminal OCR outcome transactionally through Rust…</string>
+</resources>
