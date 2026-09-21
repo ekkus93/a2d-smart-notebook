@@ -123,10 +123,8 @@ class OcrBridgeIntegrationTest {
         try {
             val client = A2dClient.open(OpenLibraryRequest(libraryPath = root.absolutePath))
             val scan = registerRealScan(client, root)
-            // A freshly registered scan has an immutable Original asset. OcrOptimized is only
-            // valid after the scanner's optimization pipeline has materialized that derivative.
-            // This sentinel targets queue -> provider -> transactional finalizer -> search
-            // composition, while scanner OcrOptimized identity is covered by its own sentinel.
+            // Exercise an explicit Original-input queue job here. Scanner OcrOptimized identity
+            // and source selection are separately covered by production Page Viewer sentinels.
             val geometry = client.resolveOcrSourceGeometry(scan.scanId, OcrInputKind.ORIGINAL)
             val queueGateway = FfiAndroidOcrQueueGateway(client)
             val queued =
@@ -210,7 +208,7 @@ class OcrBridgeIntegrationTest {
             assertEquals(1_001, run.textRegions.size)
             val ids = run.textRegions.map { it.textRegionId }
             assertEquals(1_001, ids.toSet().size)
-            A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+            withClient(root) { reopened ->
                 val reloaded = requireNotNull(FfiAndroidOcrReadback(reopened).loadLatestOcrOutput(scan.scanId, regionLimit = 50u).latestRun)
                 assertEquals(run.ocrRunId, reloaded.ocrRunId)
                 assertEquals(ids, reloaded.textRegions.map { it.textRegionId })
@@ -240,7 +238,7 @@ class OcrBridgeIntegrationTest {
             assertTrue((step as AndroidOcrQueueStep.RecoverableFailure).message.contains("CORE_OCR_FINALIZE_STALE_ATTEMPT"))
             assertEquals(2u, queue.get(queued.jobId).attemptCount)
             assertNoAcceptedOutput(client, scan.scanId, queued.jobId)
-            A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+            withClient(root) { reopened ->
                 assertEquals(2u, FfiAndroidOcrQueueGateway(reopened).get(queued.jobId).attemptCount)
                 assertNoAcceptedOutput(reopened, scan.scanId, queued.jobId)
             }
@@ -276,7 +274,7 @@ class OcrBridgeIntegrationTest {
                 assertTrue(step is AndroidOcrQueueStep.Completed)
                 val completed = (step as AndroidOcrQueueStep.Completed).job
                 assertTrue(completed.status == AndroidOcrQueueJobStatus.Recognized || completed.status == AndroidOcrQueueJobStatus.Cancelled)
-                A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+                withClient(root) { reopened ->
                     val job = FfiAndroidOcrQueueGateway(reopened).get(queued.jobId)
                     assertEquals(completed.status, job.status)
                     if (job.status == AndroidOcrQueueJobStatus.Cancelled) {
@@ -318,7 +316,7 @@ class OcrBridgeIntegrationTest {
                     db.execSQL("DROP TRIGGER fail_ocr_region")
                 }
             }
-            A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+            withClient(root) { reopened ->
                 assertNoAcceptedOutput(reopened, scan.scanId, queued.jobId)
             }
         }
@@ -348,7 +346,7 @@ class OcrBridgeIntegrationTest {
                 assertEquals(unavailable, job.retryable)
                 if (unavailable) assertNotNull(job.nextRetryAtMs)
                 assertNotNull(job.lastOcrRunId)
-                A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+                withClient(root) { reopened ->
                     assertEquals(expected, FfiAndroidOcrQueueGateway(reopened).get(queued.jobId).status)
                     val run = requireNotNull(FfiAndroidOcrReadback(reopened).loadLatestOcrOutput(scan.scanId).latestRun)
                     assertEquals(job.lastOcrRunId, run.ocrRunId)
@@ -387,7 +385,7 @@ class OcrBridgeIntegrationTest {
                 assertTrue("boundary=$boundary", step is AndroidOcrQueueStep.Completed)
                 assertEquals(AndroidOcrQueueJobStatus.Cancelled, (step as AndroidOcrQueueStep.Completed).job.status)
                 assertNoAcceptedOutput(client, scan.scanId, queued.jobId)
-                A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+                withClient(root) { reopened ->
                     assertNoAcceptedOutput(reopened, scan.scanId, queued.jobId)
                     assertEquals(AndroidOcrQueueJobStatus.Cancelled, FfiAndroidOcrQueueGateway(reopened).get(queued.jobId).status)
                 }
@@ -405,7 +403,7 @@ class OcrBridgeIntegrationTest {
                 queue.requestCancellation(queued.jobId)
             }
             assertEquals("CORE_OCR_JOB_TERMINAL_TRANSITION_INVALID", error.v1.code)
-            A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { reopened ->
+            withClient(root) { reopened ->
                 val job = FfiAndroidOcrQueueGateway(reopened).get(queued.jobId)
                 assertEquals(AndroidOcrQueueJobStatus.Recognized, job.status)
                 assertEquals(completed.lastOcrRunId, job.lastOcrRunId)
@@ -450,12 +448,21 @@ class OcrBridgeIntegrationTest {
         assertNoSentinelSearchHit(client)
     }
 
+    private fun <T> withClient(root: File, action: (A2dClient) -> T): T {
+        val client = A2dClient.open(OpenLibraryRequest(root.absolutePath))
+        try {
+            return action(client)
+        } finally {
+            client.destroy()
+        }
+    }
+
     private fun withProductionFixture(
         test: (A2dClient, File, RegisteredScan, FfiAndroidOcrQueueGateway, com.a2d.notebook.feature.ocr.AndroidOcrQueueJob) -> Unit,
     ) {
         val root = context.filesDir.resolve("ocr-terminal-sentinel-${UUID.randomUUID()}")
         try {
-            A2dClient.open(OpenLibraryRequest(root.absolutePath)).use { client ->
+            withClient(root) { client ->
                 val scan = registerRealScan(client, root)
                 val geometry = client.resolveOcrSourceGeometry(scan.scanId, OcrInputKind.ORIGINAL)
                 val queue = FfiAndroidOcrQueueGateway(client)
