@@ -10,9 +10,16 @@ import uniffi.a2d_ffi.OpenLibraryRequest
  * MUST call typed Rust use cases"). Feature code calls through here rather than importing
  * `uniffi.a2d_ffi` directly, so the generated-binding package name stays in one place.
  *
- * A single [A2dClient] is opened lazily against a library directory under the app's private
- * files dir and reused -- `A2dClient.open` is cheap but not free (it touches the filesystem),
- * and TODO 2.4's `A2dClient` is meant to be a long-lived handle, not something reopened per call.
+ * Production currently supports exactly one app-private library for the lifetime of the Android
+ * process. A single [A2dClient] is opened lazily for that library and reused by the Activity,
+ * navigation, OCR search/readback/correction, and the OCR queue runtime. Recomposition therefore
+ * never opens a second native client.
+ *
+ * Runtime library switching is intentionally unsupported in this milestone. Consequently there is
+ * no mid-process close/reopen path: the process owns this handle until process teardown, when the
+ * OS releases the process and its native resources. If runtime library switching is introduced,
+ * this singleton must be replaced by an explicit owner that stops the queue runtime, disposes the
+ * old client/gateways, opens the new library, and recreates all client-bound controllers together.
  */
 object A2dBridge {
     fun libraryDirectory(context: Context): File = context.filesDir.resolve("library")
