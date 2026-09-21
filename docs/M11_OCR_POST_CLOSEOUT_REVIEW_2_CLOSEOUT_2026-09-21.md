@@ -4,6 +4,10 @@ Date: 2026-09-21
 
 This document records the second post-closeout remediation defined by `docs/M11_OCR_POST_CLOSEOUT_REVIEW_2_REMEDIATION_SPEC_2026-09-19.md` and tracked by `docs/M11_OCR_POST_CLOSEOUT_REVIEW_2_REMEDIATION_TODO_2026-09-19.md`.
 
+Supporting audit artifact:
+
+- `docs/M11_OCR_REVIEW2_R18_FINAL_AUDIT_2026-09-21.md`
+
 ## Why M11 was reopened
 
 The first post-closeout remediation passed its recorded CI gates, but a second source review found that several production Android paths still used older compatibility APIs even though stronger Rust primitives already existed and had isolated tests. In particular, prior green CI did not prove that normal queue execution used transactional OCR finalization, that Page Viewer used the scanner's durable OCR job identity and authoritative source geometry, or that all coroutine/lifecycle paths preserved the intended invariants.
@@ -26,6 +30,8 @@ The earlier PR and CI records remain valid historical evidence for the exact sli
 ## Production-path audit result
 
 The second-review remediation established production-path sentinels for the invariants that escaped the earlier closeout: queue/provider/finalizer composition, cancellation/commit races, active-job identity, manual retry, source geometry and overlay transform, complete region hydration, Search/Page Viewer/correction composition, and coroutine cancellation propagation. The final R17 work also reconciled lifecycle documentation with the intentionally process-lifetime client implementation.
+
+`docs/M11_OCR_REVIEW2_R18_FINAL_AUDIT_2026-09-21.md` records the first-parent PR chain observed on current `master`, source-audit findings, and evidence caveats that still need reconciliation in the active TODO before this closeout can be final.
 
 No completion claim in this closeout expands M11 into cloud OCR, accounts, server search, WorkManager/background-service guarantees, unified corrected+original search ranking, or Milestone 12 scale benchmarking. Queue execution remains app-lifetime and durable work resumes when the app can execute again.
 
